@@ -13,7 +13,4 @@
   <ItemGroup Label="Project References">
     <ProjectReference Include="..\Yuuki.Game.Resources\Yuuki.Game.Resources.csproj" />
   </ItemGroup>
-  <ItemGroup>
-    <Folder Include="Extensions\" />
-  </ItemGroup>
 </Project>
