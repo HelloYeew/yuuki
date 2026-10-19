@@ -931,7 +931,12 @@ public partial class SettingsOverlay : FocusedOverlayContainer
                             Spacing = new Vector2(18, 0),
                             Children = new Drawable[]
                             {
-                                logo("logo.png", new Vector2(348, 140) * 0.42f),
+                                new LogoLink(logo("logo.png", new Vector2(348, 140) * 0.42f, Anchor.Centre))
+                                {
+                                    Anchor = Anchor.CentreLeft,
+                                    Origin = Anchor.CentreLeft,
+                                    Action = () => host?.OpenUrlExternally(yuuki_url)
+                                },
                                 new FlowContainer
                                 {
                                     Anchor = Anchor.CentreLeft,
