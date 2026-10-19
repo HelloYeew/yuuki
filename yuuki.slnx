@@ -1,0 +1,6 @@
+<Solution>
+  <Project Path="Yuuki.Game.Desktop/Yuuki.Game.Desktop.csproj" />
+  <Project Path="Yuuki.Game.Resources/Yuuki.Game.Resources.csproj" />
+  <Project Path="Yuuki.Game.Tests/Yuuki.Game.Tests.csproj" />
+  <Project Path="Yuuki.Game/Yuuki.Game.csproj" />
+</Solution>
