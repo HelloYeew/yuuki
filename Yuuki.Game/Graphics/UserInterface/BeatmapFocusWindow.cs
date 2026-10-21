@@ -24,9 +24,14 @@ namespace Yuuki.Game.Graphics.UserInterface;
 /// </summary>
 public partial class BeatmapFocusWindow : CarouselFocusWindow<Beatmap>
 {
+    [Resolved(canBeNull: true)]
+    private WorkingBeatmap? workingBeatmap { get; set; }
+
     protected override CarouselFocusFace<Beatmap> CreateFace() => new Face();
 
-    protected override Color FillFor(Beatmap beatmap) => SetlistColors.TierFill(BeatmapUtility.ColorForDifficulty(beatmap.DifficultyRating));
+    protected override Color FillFor(Beatmap beatmap) => SetlistColors.TierFill(DifficultyColors.For(beatmap));
+
+    protected override bool FlashesOnBeat(Beatmap beatmap) => workingBeatmap?.Beatmap != null && Equals(workingBeatmap.Beatmap, beatmap);
 
     private partial class Face : CarouselFocusFace<Beatmap>
     {
@@ -190,7 +195,7 @@ public partial class BeatmapFocusWindow : CarouselFocusWindow<Beatmap>
 
         protected override void OnApply(Beatmap beatmap)
         {
-            var tier = BeatmapUtility.ColorForDifficulty(beatmap.DifficultyRating);
+            var tier = DifficultyColors.For(beatmap);
             var ink = SetlistColors.TierInk(tier);
             string tierName = BeatmapUtility.CalculateDifficultyLevel(beatmap).ToString();
             string level = BeatmapUtility.FormatLevel(beatmap.DifficultyRating);

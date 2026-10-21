@@ -249,8 +249,8 @@ public partial class BeatmapCard : CarouselCard<Beatmap>
     {
         Beatmap = beatmap;
 
-        var tier = BeatmapUtility.ColorForDifficulty(beatmap.DifficultyRating);
-        var tierInk = SetlistColors.TierInk(tier);
+        var tier = DifficultyColors.For(beatmap);
+        var tierInk = DifficultyColors.Ink(tier);
         string tierName = BeatmapUtility.CalculateDifficultyLevel(beatmap).ToString();
         string level = BeatmapUtility.FormatLevel(beatmap.DifficultyRating);
         string name = string.IsNullOrEmpty(beatmap.DifficultyName) ? "Difficulty" : beatmap.DifficultyName;

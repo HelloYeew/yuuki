@@ -3,14 +3,17 @@
 
 using System;
 using System.Collections.Generic;
+using Sakura.Framework.Audio;
 using Sakura.Framework.Extensions.ColorExtensions;
 using Sakura.Framework.Extensions.DrawableExtensions;
 using Sakura.Framework.Graphics.Colors;
 using Sakura.Framework.Graphics.Containers;
 using Sakura.Framework.Graphics.Drawables;
 using Sakura.Framework.Graphics.Primitives;
+using Sakura.Framework.Graphics.Rendering;
 using Sakura.Framework.Graphics.Transforms;
 using Sakura.Framework.Maths;
+using Yuuki.Game.Graphics.Containers;
 
 namespace Yuuki.Game.Graphics.UserInterface;
 
@@ -68,7 +71,8 @@ public abstract partial class CarouselFocusFace<TModel> : Container
 /// and it shows whichever item is at the scroll position in a large layout. Between two items it doesn't
 /// grow or slide continuously: it holds still for most of each step and then clicks over to the next one,
 /// so a fast scroll reads as a flip counter rather than two half-faded cards smeared across it. When the
-/// list comes to rest on an item, a streak of light crosses the window at the blade's angle: a wink.
+/// list comes to rest on an item, a streak of light crosses the window at the blade's angle: a wink. And
+/// while it shows what's playing, it flashes on the beat.
 /// </summary>
 public abstract partial class CarouselFocusWindow<TModel> : Container
     where TModel : class
@@ -79,6 +83,11 @@ public abstract partial class CarouselFocusWindow<TModel> : Container
     private const float swap_travel = 0.4f;
 
     private const double fill_fade_duration = 180;
+
+    /// <summary>
+    /// How bright the window flashes on each beat while it shows what's playing.
+    /// </summary>
+    private const float beat_flash_alpha = 0.3f;
 
     private const float sweep_width = 90;
 
@@ -98,6 +107,7 @@ public abstract partial class CarouselFocusWindow<TModel> : Container
     private readonly Container body;
     private readonly Box fill;
     private readonly Container faceLayer;
+    private readonly Box beatFlash;
     private readonly Container sweep;
 
     private readonly List<(int Index, CarouselFocusFace<TModel> Face)> live = new List<(int, CarouselFocusFace<TModel>)>();
@@ -139,6 +149,14 @@ public abstract partial class CarouselFocusWindow<TModel> : Container
                 {
                     RelativeSizeAxes = Axes.Both
                 },
+                // Washes over the face, cover and all, on each beat (see FlashesOnBeat).
+                beatFlash = new Box
+                {
+                    RelativeSizeAxes = Axes.Both,
+                    Color = Color.White,
+                    Alpha = 0,
+                    Blending = BlendingMode.Additive
+                },
                 // Taller than the window, so its slanted ends are cut off by the window's edges.
                 sweep = new Container
                 {
@@ -170,6 +188,16 @@ public abstract partial class CarouselFocusWindow<TModel> : Container
             }
         };
 
+        // Ticks off the song's BPM (or a steady default beat while nothing plays) and drives the flash.
+        var beatSync = new BeatSyncContainer
+        {
+            AlwaysPresent = true,
+            AllowBeatSyncWhenStopped = true,
+            UseDefaultTempoWhenStopped = true
+        };
+        beatSync.NewBeat += onNewBeat;
+        Add(beatSync);
+
         SetOrientation(orientation);
     }
 
@@ -187,6 +215,17 @@ public abstract partial class CarouselFocusWindow<TModel> : Container
     /// The window's fill behind <paramref name="model"/>. The face prints its text in a darker shade of it.
     /// </summary>
     protected abstract Color FillFor(TModel model);
+
+    /// <summary>
+    /// Whether the window flashes on the beat while it shows <paramref name="model"/>: when it's what's
+    /// playing, so the window is still while you scroll past others, and keeps time once you settle.
+    /// </summary>
+    protected abstract bool FlashesOnBeat(TModel model);
+
+    /// <summary>
+    /// How many times the window has flashed on the beat (diagnostics/tests).
+    /// </summary>
+    public int BeatFlashCount { get; private set; }
 
     /// <summary>
     /// The item the window shows (the one at the rounded scroll position), if any.
@@ -259,6 +298,18 @@ public abstract partial class CarouselFocusWindow<TModel> : Container
             sweptFor = current;
             wink();
         }
+    }
+
+    private void onNewBeat(int beat, double beatLength, ChannelAmplitudes amplitudes)
+    {
+        if (colouredFor == null || !FlashesOnBeat(colouredFor))
+            return;
+
+        BeatFlashCount++;
+
+        // The same flash every beat: the beat sets it, not how loud the song is there.
+        beatFlash.Alpha = beat_flash_alpha;
+        beatFlash.FadeTo(0, beatLength, Easing.OutQuint);
     }
 
     /// <summary>

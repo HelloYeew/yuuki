@@ -573,7 +573,7 @@ public partial class BeatmapFilterControl : Container
                     Child = new Box
                     {
                         RelativeSizeAxes = Axes.Both,
-                        Color = BeatmapUtility.ColorForDifficulty(level)
+                        Color = DifficultyColors.ForLevel(level)
                     }
                 });
             }
@@ -584,7 +584,8 @@ public partial class BeatmapFilterControl : Container
             for (int i = 0; i < tiers.Length; i++)
             {
                 int low = i * levels_per_tier, high = low + levels_per_tier - 1;
-                Add(tiers[i] = new TierTab(BeatmapUtility.CalculateDifficultyLevel(low).ToString().ToUpperInvariant(), BeatmapUtility.ColorForDifficulty(low), () => takeTier(low, high))
+                var tier = BeatmapUtility.CalculateDifficultyLevel(low);
+                Add(tiers[i] = new TierTab(tier.ToString().ToUpperInvariant(), DifficultyColors.ForTier(tier), () => takeTier(low, high))
                 {
                     Y = tiers_top,
                     Height = tiers_height

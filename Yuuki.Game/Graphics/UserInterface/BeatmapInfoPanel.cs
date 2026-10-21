@@ -638,8 +638,8 @@ public partial class BeatmapInfoPanel : FlowContainer
         // the fill, the text a deep shade of it.
         if (beatmap != null)
         {
-            Color difficultyColor = BeatmapUtility.ColorForDifficulty(beatmap.DifficultyRating);
-            beatmapRow.SetColors(difficultyColor, difficultyColor.Darken(0.6f));
+            Color difficultyColor = DifficultyColors.For(beatmap);
+            beatmapRow.SetColors(difficultyColor, DifficultyColors.Ink(difficultyColor));
         }
         else
             beatmapRow.SetColors(palette.Surface, palette.Text);

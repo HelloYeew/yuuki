@@ -35,9 +35,14 @@ public partial class BeatmapSetFocusWindow : CarouselFocusWindow<BeatmapSet>
     [Resolved(canBeNull: true)]
     private CoverColorStore? coverColors { get; set; }
 
+    [Resolved(canBeNull: true)]
+    private WorkingBeatmap? workingBeatmap { get; set; }
+
     private int seenColorVersion;
 
     protected override CarouselFocusFace<BeatmapSet> CreateFace() => new Face();
+
+    protected override bool FlashesOnBeat(BeatmapSet set) => workingBeatmap?.BeatmapSet != null && Equals(workingBeatmap.BeatmapSet, set);
 
     protected override Color FillFor(BeatmapSet set) => SetlistColors.ForSong(set, difficultiesOf(set, beatmapsCollection), coverColors).Fill;
 

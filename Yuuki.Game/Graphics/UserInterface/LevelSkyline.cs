@@ -9,7 +9,7 @@ using Sakura.Framework.Graphics.Drawables;
 using Sakura.Framework.Graphics.Primitives;
 using Sakura.Framework.Maths;
 using Yuuki.Game.Beatmaps;
-using Yuuki.Game.Utilities;
+using Yuuki.Game.Graphics.Colors;
 
 namespace Yuuki.Game.Graphics.UserInterface;
 
@@ -67,7 +67,7 @@ public partial class LevelSkyline : Container
                 Origin = Anchor.BottomLeft,
                 X = i * (barWidth + gap),
                 Size = new Vector2(barWidth, Height * Math.Clamp(level / (float)BeatmapFilter.MAX_LEVEL, 0.14f, 1f)),
-                Color = BeatmapUtility.ColorForDifficulty(difficulties[i].DifficultyRating)
+                Color = DifficultyColors.For(difficulties[i])
             };
 
             bars.Add((difficulties[i], bar));
