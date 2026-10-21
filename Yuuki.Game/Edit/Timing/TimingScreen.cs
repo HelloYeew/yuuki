@@ -19,6 +19,7 @@ using Yuuki.Game.Audio;
 using Yuuki.Game.Beatmaps;
 using Yuuki.Game.Beatmaps.ControlPoints;
 using Yuuki.Game.Edit.Components;
+using Yuuki.Game.Graphics;
 using Yuuki.Game.Graphics.Colors;
 using Yuuki.Game.Graphics.Containers;
 using Yuuki.Game.Graphics.Text;
@@ -32,6 +33,9 @@ public partial class TimingScreen : Container
 {
     private const float margin = 10;
     private const float panel_width = 380;
+
+    [Resolved(canBeNull: true)]
+    private GameLayout? gameLayout { get; set; }
 
     [Resolved]
     private EditorSession session { get; set; } = null!;
@@ -138,13 +142,15 @@ public partial class TimingScreen : Container
         settings.AddRow(row("Meter", meters.ToArray()));
         settings.AddRow(new Container { Height = 4 });
 
-        removeButton = button(IconUsage.Delete, "Remove", 150, removeSelected);
+        // 130 wide, so both fit after the labels' 82 in the panel's 360 (at 150, Remove was cut off).
+        removeButton = button(IconUsage.Delete, "Remove", 130, removeSelected);
 
         settings.AddRow(row(string.Empty,
-            button(IconUsage.Add, "Add here", 150, AddAtCurrentTime),
+            button(IconUsage.Add, "Add here", 130, AddAtCurrentTime),
             removeButton));
 
         metronomePanel = new MetronomePanel();
+        metronomePanel.SetCompact(gameLayout?.IsPhone == true);
 
         // The settings and the metronome down the right, scrolling when they outgrow the tab (a big UI
         // scale). The list on the left scrolls on its own.

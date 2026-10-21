@@ -11,6 +11,7 @@ using Sakura.Framework.Graphics.Primitives;
 using Sakura.Framework.Maths;
 using Yuuki.Game.Beatmaps;
 using Yuuki.Game.Edit.Components;
+using Yuuki.Game.Graphics;
 using Yuuki.Game.Graphics.Text;
 
 namespace Yuuki.Game.Edit.Compose;
@@ -43,13 +44,49 @@ public partial class ComposeScreen : Container
     /// </summary>
     public EditorPanelColumn ToolColumn { get; private set; } = null!;
 
+    [Resolved(canBeNull: true)]
+    private GameLayout? gameLayout { get; set; }
+
+    private EditorPanelColumn left = null!;
+    private EditorPanelColumn right = null!;
+    private EditorPanel tools = null!;
+    private EditorPanel hitsounds = null!;
+    private EditorPanel noteSettings = null!;
+    private bool noteSettingsOnRight;
+
+    protected override void LoadComplete()
+    {
+        base.LoadComplete();
+
+        if (gameLayout != null)
+            BindValueChanged(gameLayout.Current, _ => applyLayout(), true);
+    }
+
+    /// <summary>
+    /// On a phone the height left between the editor's bars (about 490) can't take all three panels down
+    /// the left, so "New notes" moves under Selection on the right and the tool rows tighten.
+    /// </summary>
+    private void applyLayout()
+    {
+        bool phone = gameLayout?.IsPhone == true;
+
+        if (phone != noteSettingsOnRight)
+        {
+            (phone ? left : right).RemovePanel(noteSettings);
+            (phone ? right : left).AddPanel(noteSettings);
+            noteSettingsOnRight = phone;
+        }
+
+        tools.SetCompact(phone);
+        hitsounds.SetCompact(phone);
+        noteSettings.SetCompact(phone);
+    }
+
     [BackgroundDependencyLoader]
     private void load()
     {
         RelativeSizeAxes = Axes.Both;
         Size = Vector2.One;
-
-        EditorPanelColumn left, right;
 
         Children = new Drawable[]
         {
@@ -72,7 +109,7 @@ public partial class ComposeScreen : Container
             }
         };
 
-        var tools = new EditorPanel("Tools");
+        tools = new EditorPanel("Tools");
         addTool(tools, ComposeTool.Select, IconUsage.NearMe, "Select", "1");
         addTool(tools, ComposeTool.Tap, IconUsage.CropSquare, "Tap", "2");
         addTool(tools, ComposeTool.Hold, IconUsage.Height, "Hold", "3");
@@ -82,13 +119,13 @@ public partial class ComposeScreen : Container
         addTool(tools, ComposeTool.Touch, IconUsage.HorizontalRule, "Touch", "7");
         left.AddPanel(tools);
 
-        var hitsounds = new EditorPanel("Hitsounds");
+        hitsounds = new EditorPanel("Hitsounds");
         addAddition(hitsounds, HitSampleAddition.Whistle, "Whistle", "W");
         addAddition(hitsounds, HitSampleAddition.Finish, "Finish", "E");
         addAddition(hitsounds, HitSampleAddition.Clap, "Clap", "R");
         left.AddPanel(hitsounds);
 
-        var noteSettings = new EditorPanel("New notes");
+        noteSettings = new EditorPanel("New notes");
         addSwipe(noteSettings, SwipeDirection.Any, IconUsage.SwapHoriz, "Swipe either side");
         addSwipe(noteSettings, SwipeDirection.Left, IconUsage.KeyboardDoubleArrowLeft, "Swipe left");
         addSwipe(noteSettings, SwipeDirection.Right, IconUsage.KeyboardDoubleArrowRight, "Swipe right");

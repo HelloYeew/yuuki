@@ -59,6 +59,25 @@ public partial class BeatmapFilterControl : Container
     /// </summary>
     public const float CARD_WIDTH = 640;
 
+    /// <summary>
+    /// The header's height on a phone: just the search bar; the rest is in a sheet it opens.
+    /// </summary>
+    public const float PHONE_BAR_HEIGHT = 84;
+
+    private const float phone_card_width = 600;
+
+    private bool phone;
+
+    /// <summary>
+    /// The header's height in the layout it's in now: what the vertical list is moved down by.
+    /// </summary>
+    public float HeaderHeight => phone ? PHONE_BAR_HEIGHT : HEIGHT;
+
+    /// <summary>
+    /// The card's width in the horizontal layout, in the layout it's in now.
+    /// </summary>
+    public float CardWidth => phone ? phone_card_width : CARD_WIDTH;
+
     public BeatmapFilter Filter { get; } = new BeatmapFilter();
 
     /// <summary>
@@ -73,7 +92,23 @@ public partial class BeatmapFilterControl : Container
     /// </summary>
     public Drawable LevelBarsArea => levels.Area;
 
+    /// <summary>
+    /// The phone's filter button (diagnostics/tests).
+    /// </summary>
+    public Drawable FilterButton => filterToggle;
+
+    /// <summary>
+    /// Whether the phone's filter button shows that a filter or sort is on (diagnostics/tests).
+    /// </summary>
+    public bool FilterDotShown => filterToggle.DotShown;
+
     private readonly Container card;
+    private readonly Container body;
+    private readonly Container searchRow;
+    private readonly FilterToggle filterToggle;
+    private readonly Container sheet;
+    private readonly Box sheetFill;
+    private readonly FlowContainer sheetFlow;
     private readonly Box rule;
     private readonly Container searchTab;
     private readonly Box searchTabFill;
@@ -119,13 +154,13 @@ public partial class BeatmapFilterControl : Container
                     RimEdge = Edges.None
                 }
             },
-            new Container
+            body = new Container
             {
                 RelativeSizeAxes = Axes.Both,
                 Padding = new MarginPadding { Top = pad_top, Left = pad_left, Right = pad_right },
                 Children = new Drawable[]
                 {
-                    new Container
+                    searchRow = new Container
                     {
                         RelativeSizeAxes = Axes.X,
                         Height = search_height,
@@ -194,6 +229,13 @@ public partial class BeatmapFilterControl : Container
                                 Origin = Anchor.BottomLeft,
                                 RelativeSizeAxes = Axes.X,
                                 Height = 1.5f
+                            },
+                            // Only on a phone, where the filters live in a sheet it opens.
+                            filterToggle = new FilterToggle(() => SetSheetOpen(!SheetOpen))
+                            {
+                                Anchor = Anchor.CentreRight,
+                                Origin = Anchor.CentreRight,
+                                Alpha = 0
                             }
                         }
                     },
@@ -247,6 +289,39 @@ public partial class BeatmapFilterControl : Container
                         }
                     }
                 }
+            },
+            // The phone's filter sheet: the level bars, lane chips and sort words, opened from the bar. It
+            // hangs below the bar, over the list.
+            sheet = new Container
+            {
+                X = sheet_inset,
+                Y = PHONE_BAR_HEIGHT,
+                AutoSizeAxes = Axes.Y,
+                Masking = true,
+                CornerRadius = 18,
+                Alpha = 0,
+                EdgeEffect = new EdgeEffectParameters
+                {
+                    Type = EdgeEffectType.Shadow,
+                    Color = Color.Black.WithAlpha(0.3f),
+                    Radius = 18,
+                    Offset = new Vector2(0, 10)
+                },
+                Children = new Drawable[]
+                {
+                    sheetFill = new Box
+                    {
+                        RelativeSizeAxes = Axes.Both
+                    },
+                    sheetFlow = new FlowContainer
+                    {
+                        RelativeSizeAxes = Axes.X,
+                        AutoSizeAxes = Axes.Y,
+                        Direction = FlowDirection.Vertical,
+                        Spacing = new Vector2(0, 12),
+                        Padding = new MarginPadding { Top = 18, Bottom = 20, Left = 24, Right = 24 }
+                    }
+                }
             }
         };
 
@@ -277,6 +352,8 @@ public partial class BeatmapFilterControl : Container
 
         searchTabFill.Color = accent;
         searchIcon.Color = accentInk;
+        filterToggle.SetColors(accent, accentInk, control, palette.Surface);
+        sheetFill.Color = palette.Surface.Lighten(0.2f).WithAlpha(0.97f);
         searchBox.SetColors(ink, control);
         countNumber.Color = ink;
         countRest.Color = secondary;
@@ -293,16 +370,157 @@ public partial class BeatmapFilterControl : Container
         base.Update();
 
         float countWidth = countFlow.DrawWidth;
-        searchBox.Width = Math.Max(0, searchBox.Parent!.DrawWidth - searchBox.X - countWidth - 16);
+        float toggleWidth = phone ? filterToggle.DrawWidth + 14 : 0;
+        searchBox.Width = Math.Max(0, searchBox.Parent!.DrawWidth - searchBox.X - countWidth - toggleWidth - 16);
+        countFlow.X = -toggleWidth;
 
-        // Lanes and sort share a row: on a narrow rail the sort words shrink to fit rather than run under
-        // the lanes.
-        float lanesWidth = lanesGroup.Alpha > 0 ? lanesGroup.DrawWidth + controls_spacing : 0;
-        float room = controlsRow.DrawWidth - lanesWidth;
+        // On a phone the sheet spans the bar, and its lane chips share the sheet's width.
+        if (phone)
+        {
+            sheet.Width = Math.Max(0, DrawWidth - 2 * sheet_inset);
+            layOutPhoneChips();
+        }
+
+        // Lanes and sort share a row on the desktop; on a phone the words have the sheet's row to
+        // themselves. Either way they shrink to fit rather than run off.
+        float lanesWidth = !phone && lanesGroup.Alpha > 0 ? lanesGroup.DrawWidth + controls_spacing : 0;
+        float room = (phone ? sheetFlow.DrawWidth - sheetFlow.Padding.Left - sheetFlow.Padding.Right : controlsRow.DrawWidth) - lanesWidth;
         float fit = sortWords.DrawWidth > 0 && room > 0 ? Math.Clamp(room / sortWords.DrawWidth, 0.7f, 1) : 1;
 
         if (Math.Abs(sortWords.Scale.X - fit) > 0.001f)
             sortWords.Scale = new Vector2(fit);
+    }
+
+    /// <summary>
+    /// The phone sheet's distance from the bar's sides.
+    /// </summary>
+    private const float sheet_inset = 12;
+
+    /// <summary>
+    /// Whether the phone's filter sheet is open.
+    /// </summary>
+    public bool SheetOpen { get; private set; }
+
+    /// <summary>
+    /// The open sheet hangs below the bar. Input only reaches children through a parent the pointer is
+    /// over, so the header claims the sheet's area while it's open, or its controls couldn't be tapped.
+    /// </summary>
+    public override bool ReceivePositionalInputAt(Vector2 screenSpacePos) =>
+        base.ReceivePositionalInputAt(screenSpacePos) || (SheetOpen && sheet.ReceivePositionalInputAt(screenSpacePos));
+
+    /// <summary>
+    /// Opens or closes the phone's filter sheet. On the desktop there's none.
+    /// </summary>
+    public void SetSheetOpen(bool open)
+    {
+        open &= phone;
+
+        if (SheetOpen == open)
+            return;
+
+        SheetOpen = open;
+
+        if (!IsLoaded)
+        {
+            sheet.Alpha = open ? 1 : 0;
+            return;
+        }
+
+        sheet.ClearTransforms();
+        sheet.FadeTo(open ? 1 : 0, open ? 200 : 150, Easing.OutQuint);
+        sheet.MoveToY(open ? PHONE_BAR_HEIGHT : PHONE_BAR_HEIGHT - 10, 200, Easing.OutQuint);
+    }
+
+    /// <summary>
+    /// Switches between the full header and the phone's bar. On a phone the header is only the search, a
+    /// count and a filter button; the level bars, lane chips and sort words move into the sheet that
+    /// button opens, at sizes for a thumb.
+    /// </summary>
+    public void SetPhone(bool value)
+    {
+        if (phone == value)
+            return;
+
+        phone = value;
+        SetSheetOpen(false);
+
+        body.Padding = phone
+            ? new MarginPadding { Top = 14, Left = 24, Right = 22 }
+            : new MarginPadding { Top = pad_top, Left = pad_left, Right = pad_right };
+        searchRow.Height = phone ? 56 : search_height;
+        rule.Alpha = phone ? 0 : 1;
+        filterToggle.Alpha = phone ? 1 : 0;
+        searchBox.SetFontSize(phone ? 32 : 36);
+        countNumber.Font = YuukiFontUsage.GetFontUsage(Typeface.Nunito, phone ? 19 : 18, FontWeight.ExtraBold);
+        countRest.Font = YuukiFontUsage.GetFontUsage(Typeface.Nunito, phone ? 19 : 18, FontWeight.Bold);
+
+        // The filters move house: into the sheet on a phone, back into the header on the desktop.
+        foreach (var drawable in new Drawable[] { levels, lanesGroup, sortWords })
+            drawable.Parent?.Remove(drawable, false);
+
+        if (phone)
+        {
+            levels.Y = 0;
+            levels.Height = LevelBars.PHONE_HEIGHT;
+            sortWords.Anchor = sortWords.Origin = Anchor.TopLeft;
+            lanesGroup.Anchor = lanesGroup.Origin = Anchor.TopLeft;
+            sheetFlow.AddRange(new Drawable[] { levels, lanesGroup, sortWords });
+        }
+        else
+        {
+            // Placed afresh: the sheet's flow moved each of them down its column.
+            levels.Position = new Vector2(0, search_height + level_gap);
+            levels.Height = level_height;
+            body.Add(levels);
+            lanesGroup.Position = sortWords.Position = Vector2.Zero;
+            lanesGroup.Anchor = lanesGroup.Origin = Anchor.CentreLeft;
+            sortWords.Anchor = sortWords.Origin = Anchor.CentreRight;
+            controlsRow.AddRange(new Drawable[] { lanesGroup, sortWords });
+        }
+
+        levels.SetPhone(phone);
+
+        // The lane chips fill the sheet's width on a phone, so the group stops sizing to them.
+        lanesGroup.AutoSizeAxes = phone ? Axes.None : Axes.Both;
+        lanesGroup.RelativeSizeAxes = phone ? Axes.X : Axes.None;
+
+        // Relative now, so the whole of the sheet's width (its old width, in pixels, would be read as a
+        // multiple of it).
+        if (phone)
+        {
+            lanesGroup.Width = 1;
+            lanesGroup.Height = 68;
+        }
+        lanesFlow.Padding = phone
+            ? new MarginPadding { Left = 14, Right = 6, Top = 4, Bottom = 4 }
+            : new MarginPadding { Left = 8, Right = 3, Top = 2, Bottom = 2 };
+        lanesFlow.Spacing = new Vector2(phone ? 6 : 2, 0);
+        lanesIcon.IconSize = phone ? 24 : 17;
+        lanesIcon.Margin = new MarginPadding { Right = phone ? 12 : 4 };
+
+        foreach (var chip in laneChips)
+            chip.SetPhone(phone);
+
+        foreach (var word in sortWords.Children.OfType<SortWord>())
+            word.SetPhone(phone);
+
+        updateCardSize();
+    }
+
+    /// <summary>
+    /// On a phone the lane chips share the sheet's row equally, each a thumb's width or more.
+    /// </summary>
+    private void layOutPhoneChips()
+    {
+        if (laneChips.Count == 0)
+            return;
+
+        float room = lanesGroup.DrawWidth - lanesFlow.Padding.Left - lanesFlow.Padding.Right - lanesIcon.DrawWidth - lanesIcon.Margin.Right
+                     - lanesFlow.Spacing.X * laneChips.Count;
+        float width = Math.Max(48, room / laneChips.Count);
+
+        foreach (var chip in laneChips)
+            chip.Width = width;
     }
 
     /// <summary>
@@ -311,9 +529,17 @@ public partial class BeatmapFilterControl : Container
     /// </summary>
     public void SetLayout(CarouselOrientation orientation, float width = CARD_WIDTH)
     {
-        bool vertical = orientation == CarouselOrientation.Vertical;
+        vertical = orientation == CarouselOrientation.Vertical;
+        layoutWidth = width;
+        updateCardSize();
+    }
 
-        Size = new Vector2(vertical ? width : CARD_WIDTH, HEIGHT);
+    private bool vertical;
+    private float layoutWidth = CARD_WIDTH;
+
+    private void updateCardSize()
+    {
+        Size = new Vector2(vertical ? layoutWidth : CardWidth, HeaderHeight);
         card.Alpha = vertical ? 0 : 1;
     }
 
@@ -359,6 +585,7 @@ public partial class BeatmapFilterControl : Container
         foreach (int lanes in available)
         {
             var chip = new LaneChip(lanes, () => toggleLanes(lanes));
+            chip.SetPhone(phone);
             laneChips.Add(chip);
             lanesFlow.Add(chip);
         }
@@ -449,6 +676,9 @@ public partial class BeatmapFilterControl : Container
 
     private void updateControls()
     {
+        // On a phone the filters are out of sight in the sheet, so the button says when any are on.
+        filterToggle.ShowDot(Filter.LevelRangeSet || Filter.Lanes.Count > 0 || Filter.Sort != BeatmapSort.Added);
+
         foreach (var chip in laneChips)
             chip.SetState(Filter.Lanes.Contains(chip.Lanes), accent, accentInk, ink);
 
@@ -465,14 +695,20 @@ public partial class BeatmapFilterControl : Container
     {
         public HeadlineSearchBox()
         {
-            var font = YuukiFontUsage.GetFontUsage(Typeface.Quicksand, 36, FontWeight.Bold);
+            SetFontSize(36);
+
+            SpriteText.Margin = new MarginPadding();
+            PlaceholderSprite.Margin = new MarginPadding();
+            ImeText.Margin = new MarginPadding();
+        }
+
+        public void SetFontSize(int size)
+        {
+            var font = YuukiFontUsage.GetFontUsage(Typeface.Quicksand, size, FontWeight.Bold);
 
             SpriteText.Font = font;
-            SpriteText.Margin = new MarginPadding();
             PlaceholderSprite.Font = font;
-            PlaceholderSprite.Margin = new MarginPadding();
             ImeText.Font = font;
-            ImeText.Margin = new MarginPadding();
         }
 
         public void SetColors(Color ink, Color caret)
@@ -497,11 +733,17 @@ public partial class BeatmapFilterControl : Container
         private const int levels_per_tier = 4;
         private const float gap = 4;
         private const float bars_top = 4;
-        private const float bars_height = 48;
-        private const float tiers_top = 60;
-        private const float tiers_height = 22;
+        /// <summary>
+        /// The bars' height on a phone, tier names included: taller bars, a bigger target.
+        /// </summary>
+        public const float PHONE_HEIGHT = 116;
+
+        // On a phone the bars, the tier names and the handles are all bigger (see SetPhone).
+        private float barsHeight = 48;
+        private float tiersTop = 60;
+        private float tiersHeight = 22;
         private const float off_alpha = 0.22f;
-        private const float handle_width = 6;
+        private float handleWidth = 6;
         private const float handle_lean = 0.2f;
 
         /// <summary>
@@ -539,15 +781,15 @@ public partial class BeatmapFilterControl : Container
             Add(area = new BarArea(this)
             {
                 RelativeSizeAxes = Axes.X,
-                Height = tiers_top - 2
+                Height = tiersTop - 2
             });
 
             // The column under the pointer, shaded behind its bar: the bars take a press.
             area.Add(hoverColumn = new Container
             {
                 Origin = Anchor.BottomLeft,
-                Y = bars_top + bars_height,
-                Height = bars_height,
+                Y = bars_top + barsHeight,
+                Height = barsHeight,
                 Masking = true,
                 CornerRadius = 4,
                 Alpha = 0,
@@ -565,7 +807,7 @@ public partial class BeatmapFilterControl : Container
                 {
                     Anchor = Anchor.TopLeft,
                     Origin = Anchor.BottomLeft,
-                    Y = bars_top + bars_height,
+                    Y = bars_top + barsHeight,
                     Masking = true,
                     CornerRadius = 3,
                     BorderThickness = 1,
@@ -587,8 +829,8 @@ public partial class BeatmapFilterControl : Container
                 var tier = BeatmapUtility.CalculateDifficultyLevel(low);
                 Add(tiers[i] = new TierTab(tier.ToString().ToUpperInvariant(), DifficultyColors.ForTier(tier), () => takeTier(low, high))
                 {
-                    Y = tiers_top,
-                    Height = tiers_height
+                    Y = tiersTop,
+                    Height = tiersHeight
                 });
             }
         }
@@ -597,19 +839,52 @@ public partial class BeatmapFilterControl : Container
         /// An end of the range: a grip a little taller than the bars, leaning with the blade about its middle
         /// so it stands in its gap. Leaning about its top, it tipped out past the bars like a stray stroke.
         /// </summary>
-        private static Container handle(out Box fill) => new Container
+        private Container handle(out Box fill) => new Container
         {
             Origin = Anchor.Centre,
-            Y = bars_top + bars_height / 2,
-            Size = new Vector2(handle_width, bars_height + 10),
+            Y = bars_top + barsHeight / 2,
+            Size = new Vector2(handleWidth, barsHeight + 10),
             Masking = true,
-            CornerRadius = handle_width / 2,
+            CornerRadius = handleWidth / 2,
             Shear = new Vector2(-handle_lean, 0),
             Child = fill = new Box
             {
                 RelativeSizeAxes = Axes.Both
             }
         };
+
+        /// <summary>
+        /// Sizes the bars, handles and tier names for a phone (taller, and bigger to tap) or the desktop.
+        /// </summary>
+        public void SetPhone(bool phone)
+        {
+            barsHeight = phone ? 66 : 48;
+            tiersTop = phone ? 82 : 60;
+            tiersHeight = phone ? 32 : 22;
+            handleWidth = phone ? 8 : 6;
+
+            area.Height = tiersTop - 2;
+
+            foreach (var bar in bars)
+                bar.Y = bars_top + barsHeight;
+
+            hoverColumn.Y = bars_top + barsHeight;
+            hoverColumn.Height = barsHeight;
+
+            foreach (var handle in new[] { minHandle, maxHandle })
+            {
+                handle.Y = bars_top + barsHeight / 2;
+                handle.Size = new Vector2(handleWidth, barsHeight + 10);
+                handle.CornerRadius = handleWidth / 2;
+            }
+
+            foreach (var tier in tiers)
+            {
+                tier.Y = tiersTop;
+                tier.Height = tiersHeight;
+                tier.SetFontSize(phone ? 15 : 12);
+            }
+        }
 
         public void SetColors(Color ink, Color secondary, Color handleColor)
         {
@@ -676,7 +951,7 @@ public partial class BeatmapFilterControl : Container
                 float height = shown[level] + (target[level] - shown[level]) * follow;
                 shown[level] = Math.Abs(target[level] - height) < 0.001f ? target[level] : height;
 
-                var size = new Vector2(barWidth, shown[level] * bars_height);
+                var size = new Vector2(barWidth, shown[level] * barsHeight);
                 var bar = bars[level];
 
                 if (bar.Size != size)
@@ -688,7 +963,7 @@ public partial class BeatmapFilterControl : Container
 
             // The handles stand in the gaps at the range's ends, their lean kept inside the bars. Not before
             // there's a width to stand in.
-            float inset = handle_width / 2 + handle_lean * minHandle.Height / 2;
+            float inset = handleWidth / 2 + handle_lean * minHandle.Height / 2;
             float edge = Math.Max(inset, width - inset);
             minHandle.X = Math.Clamp(min * column - gap / 2, inset, edge);
             maxHandle.X = Math.Clamp((max + 1) * column - gap / 2, inset, edge);
@@ -820,6 +1095,84 @@ public partial class BeatmapFilterControl : Container
     }
 
     /// <summary>
+    /// The phone's filter button: the accent blade the search tab is, with a dot while any filter or a sort
+    /// other than "added" is on, so a filtered list never looks complete by accident.
+    /// </summary>
+    private partial class FilterToggle : ClickableContainer
+    {
+        private readonly Box fill;
+        private readonly IconSprite icon;
+        private readonly Container dot;
+        private readonly Box dotFill;
+
+        public FilterToggle(Action action)
+        {
+            Action = action;
+            Size = new Vector2(60, 48);
+
+            Children = new Drawable[]
+            {
+                new Container
+                {
+                    Anchor = Anchor.Centre,
+                    Origin = Anchor.Centre,
+                    RelativeSizeAxes = Axes.Both,
+                    Masking = true,
+                    CornerRadius = 10,
+                    Shear = UserInterfaceConstant.Shear,
+                    Child = fill = new Box
+                    {
+                        RelativeSizeAxes = Axes.Both
+                    }
+                },
+                icon = new IconSprite
+                {
+                    Anchor = Anchor.Centre,
+                    Origin = Anchor.Centre,
+                    Icon = IconUsage.Tune,
+                    IconSize = 26
+                },
+                dot = new Container
+                {
+                    Anchor = Anchor.TopRight,
+                    Origin = Anchor.Centre,
+                    Position = new Vector2(2, 4),
+                    Size = new Vector2(14),
+                    Masking = true,
+                    CornerRadius = 7,
+                    BorderThickness = 3,
+                    Alpha = 0,
+                    Child = dotFill = new Box
+                    {
+                        RelativeSizeAxes = Axes.Both
+                    }
+                },
+                new HoverClickSounds()
+            };
+        }
+
+        public void SetColors(Color accent, Color accentInk, Color control, Color ring)
+        {
+            fill.Color = accent;
+            icon.Color = accentInk;
+            dotFill.Color = control;
+            dot.BorderColor = ring;
+        }
+
+        public bool DotShown { get; private set; }
+
+        public void ShowDot(bool show)
+        {
+            DotShown = show;
+
+            if (IsLoaded)
+                dot.FadeTo(show ? 1 : 0, 150, Easing.OutQuint);
+            else
+                dot.Alpha = show ? 1 : 0;
+        }
+    }
+
+    /// <summary>
     /// A tier's name under its four bars, with a line in its color over it. It fills with the tier's color
     /// under the pointer and while its levels are the range, so it reads as a button and not a caption.
     /// </summary>
@@ -878,6 +1231,8 @@ public partial class BeatmapFilterControl : Container
             secondary = newSecondary;
             updateState();
         }
+
+        public void SetFontSize(float size) => label.Font = YuukiFontUsage.GetFontUsage(Typeface.Nunito, (int)size, FontWeight.ExtraBold);
 
         private bool hovered;
 
@@ -964,6 +1319,19 @@ public partial class BeatmapFilterControl : Container
                 },
                 new HoverClickSounds()
             };
+        }
+
+        /// <summary>
+        /// On a phone a chip is a thumb's target, as wide as the sheet gives it (set by the header); on the
+        /// desktop it fits its label.
+        /// </summary>
+        public void SetPhone(bool phone)
+        {
+            AutoSizeAxes = phone ? Axes.None : Axes.X;
+            Height = phone ? 58 : 26;
+            CornerRadius = phone ? 9 : 6;
+            label.Font = YuukiFontUsage.GetFontUsage(Typeface.Nunito, phone ? 20 : 14, FontWeight.ExtraBold);
+            label.Anchor = label.Origin = phone ? Anchor.Centre : Anchor.CentreLeft;
         }
 
         public void SetState(bool picked, Color accent, Color newAccentInk, Color newInk)
@@ -1070,6 +1438,16 @@ public partial class BeatmapFilterControl : Container
                 },
                 new HoverClickSounds()
             };
+        }
+
+        public void SetPhone(bool phone)
+        {
+            label.Font = YuukiFontUsage.GetFontUsage(Typeface.Nunito, phone ? 20 : 15, FontWeight.Bold);
+            label.Margin = phone
+                ? new MarginPadding { Left = 12, Right = 12, Top = 16, Bottom = 16 }
+                : new MarginPadding { Left = 7, Right = 7, Top = 5, Bottom = 5 };
+            underline.Padding = new MarginPadding { Left = phone ? 12 : 7, Right = phone ? 12 : 7 };
+            underline.Y = phone ? -6 : 0;
         }
 
         public void SetState(bool inUse, Color newInk, Color newSecondary, Color control)

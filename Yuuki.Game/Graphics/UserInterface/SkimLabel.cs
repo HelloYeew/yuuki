@@ -59,6 +59,16 @@ public partial class SkimLabel : Container
         };
     }
 
+    /// <summary>
+    /// A little smaller on a phone, where the room beside the list is narrower.
+    /// </summary>
+    public void SetPhone(bool phone)
+    {
+        var font = YuukiFontUsage.GetFontUsage(Typeface.Quicksand, phone ? 80 : (int)font_size, FontWeight.Bold);
+        text.Font = font;
+        shadowText.Font = font;
+    }
+
     public string Text
     {
         get => text.Text;

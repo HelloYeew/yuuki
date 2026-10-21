@@ -29,6 +29,9 @@ public partial class NowPlayingToast : Container
     private const float padding_x = 24;
     private const float padding_y = 14;
 
+    private const float icon_size = 40;
+    private const float icon_spacing = 16;
+
     [Resolved(canBeNull: true)]
     private YuukiConfigManager? config { get; set; }
 
@@ -73,7 +76,7 @@ public partial class NowPlayingToast : Container
                 {
                     AutoSizeAxes = Axes.Both,
                     Direction = FlowDirection.Horizontal,
-                    Spacing = new Vector2(16, 0),
+                    Spacing = new Vector2(icon_spacing, 0),
                     Padding = new MarginPadding { Left = padding_x, Right = padding_x, Top = padding_y, Bottom = padding_y },
                     Children = new Drawable[]
                     {
@@ -89,14 +92,16 @@ public partial class NowPlayingToast : Container
                                     Anchor = Anchor.TopRight,
                                     Origin = Anchor.TopRight,
                                     Font = YuukiFontUsage.GetFontUsage(Typeface.Quicksand, 30, FontWeight.Bold),
-                                    Color = Color.White
+                                    Color = Color.White,
+                                    Truncate = true
                                 },
                                 artist = new SpriteText
                                 {
                                     Anchor = Anchor.TopRight,
                                     Origin = Anchor.TopRight,
                                     Font = YuukiFontUsage.GetFontUsage(Typeface.Quicksand, 22, FontWeight.Regular),
-                                    Color = Color.White.WithAlpha(0.85f)
+                                    Color = Color.White.WithAlpha(0.85f),
+                                    Truncate = true
                                 }
                             }
                         },
@@ -104,13 +109,26 @@ public partial class NowPlayingToast : Container
                         {
                             Margin = new MarginPadding { Top = 10 },
                             Icon = IconUsage.MusicNote,
-                            IconSize = 40,
+                            IconSize = icon_size,
                             Color = Color.White
                         }
                     }
                 }
             }
         };
+    }
+
+    /// <summary>
+    /// The widest the card may get; a longer title or artist is cut short with an ellipsis. Set after load.
+    /// </summary>
+    public float MaxCardWidth
+    {
+        set
+        {
+            float textWidth = System.Math.Max(0, value - 2 * padding_x - icon_spacing - icon_size);
+            title.MaxWidth = textWidth;
+            artist.MaxWidth = textWidth;
+        }
     }
 
     protected override void LoadComplete()

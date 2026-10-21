@@ -40,6 +40,11 @@ public partial class NotificationOverlay : FocusedOverlayContainer
     private const float toast_width = 340;
 
     /// <summary>
+    /// How much bigger the panel and the toasts are on a phone, so their text comes out big enough.
+    /// </summary>
+    private const float phone_scale = 1.2f;
+
+    /// <summary>
     /// How many notifications haven't been seen yet.
     /// </summary>
     public Reactive<int> UnreadCount { get; } = new Reactive<int>(0);
@@ -63,6 +68,9 @@ public partial class NotificationOverlay : FocusedOverlayContainer
 
     [Resolved(canBeNull: true)]
     private UISoundPlayer? uiSounds { get; set; }
+
+    [Resolved(canBeNull: true)]
+    private GameLayout? gameLayout { get; set; }
 
     [BackgroundDependencyLoader]
     private void load([CanBeNull] IYuukiColorProvider? colorProvider)
@@ -251,7 +259,7 @@ public partial class NotificationOverlay : FocusedOverlayContainer
 
     /// <summary>
     /// Stacks the two groups and sizes the panel to them, up to a height that leaves the screen visible
-    /// above it; past that the list scrolls.
+    /// above it; past that the list scrolls. Bigger on a phone.
     /// </summary>
     private void layOutCentre()
     {
@@ -265,7 +273,15 @@ public partial class NotificationOverlay : FocusedOverlayContainer
         emptyState.Alpha = empty ? 1 : 0;
         clearAllButton.Alpha = empty ? 0 : 1;
 
-        float maxHeight = Math.Min(panel_max_height, DrawHeight - footer_margin - edge_margin * 2);
+        float scale = gameLayout?.IsPhone == true ? phone_scale : 1;
+
+        if (panel.Scale.X != scale)
+        {
+            panel.Scale = new Vector2(scale);
+            toasts.Scale = new Vector2(scale);
+        }
+
+        float maxHeight = Math.Min(panel_max_height, (DrawHeight - footer_margin - edge_margin * 2) / scale);
         float wanted = header_height + (empty ? emptyState.Height : listContent.Height);
 
         panel.Height = Math.Clamp(wanted, header_height, Math.Max(header_height, maxHeight));

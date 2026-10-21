@@ -289,10 +289,12 @@ public partial class MetronomePanel : EditorPanel
 {
     public MetronomeDisplay Metronome { get; }
 
+    private readonly Container metronomeRow;
+
     public MetronomePanel()
         : base("Metronome")
     {
-        AddRow(new Container
+        AddRow(metronomeRow = new Container
         {
             Height = 160,
             Child = Metronome = new MetronomeDisplay
@@ -308,5 +310,14 @@ public partial class MetronomePanel : EditorPanel
             Font = YuukiFontUsage.GetFontUsage(Typeface.Nunito, 13, FontWeight.Bold),
             Color = Color.White.WithAlpha(0.5f)
         });
+    }
+
+    /// <summary>
+    /// A smaller metronome, for a short screen (a phone's), so the timing column fits under the bars.
+    /// </summary>
+    public void SetCompact(bool compact)
+    {
+        metronomeRow.Height = compact ? 132 : 160;
+        Metronome.Scale = new Vector2(compact ? 0.85f : 1);
     }
 }

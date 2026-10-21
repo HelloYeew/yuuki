@@ -23,6 +23,11 @@ namespace Yuuki.Game.Graphics.Screens;
 
 public partial class PlayScreen : YuukiScreen, IHaveScreenAction
 {
+    /// <summary>
+    /// The least room kept either side of the buttons; on a narrower canvas they shrink to keep it.
+    /// </summary>
+    private const float menu_side_margin = 24;
+
     private Box menuBox = null!;
     private FlowContainer buttonFlow = null!;
 
@@ -164,6 +169,16 @@ public partial class PlayScreen : YuukiScreen, IHaveScreenAction
             Action = onBackButtonClick,
             BackgroundColor = Palette.Surface,
         });
+    }
+
+    public override void Update()
+    {
+        base.Update();
+
+        // On a narrow canvas (a phone's, or a big UI scale) the buttons shrink to fit, the bar with them.
+        float menuScale = MenuShearButton.ScaleToFit(buttonFlow.DrawSize, DrawWidth - 2 * menu_side_margin);
+        buttonFlow.Scale = new Vector2(menuScale);
+        menuBox.Height = buttonFlow.DrawHeight * menuScale;
     }
 
     public override void OnEntering(Screen? last)

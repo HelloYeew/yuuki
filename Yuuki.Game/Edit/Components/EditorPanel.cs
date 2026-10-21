@@ -2,6 +2,7 @@
 // See the LICENSE file for full license text.
 
 using System;
+using System.Linq;
 using Sakura.Framework.Allocation;
 using Sakura.Framework.Extensions.ColorExtensions;
 using Sakura.Framework.Extensions.DrawableExtensions;
@@ -65,6 +66,18 @@ public partial class EditorPanel : Container
     private void load([CanBeNull] IYuukiColorProvider? colorProvider)
     {
         background.Color = EditorColors.From(colorProvider).Panel;
+    }
+
+    /// <summary>
+    /// Tighter rows, for a short screen (a phone's): tool buttons 32 tall rather than 36, 4 apart rather
+    /// than 5.
+    /// </summary>
+    public void SetCompact(bool compact)
+    {
+        rows.Spacing = new Vector2(0, compact ? 4 : 5);
+
+        foreach (var button in rows.Children.OfType<EditorToolButton>())
+            button.Height = compact ? 32 : 36;
     }
 
     public void AddRow(Drawable row)

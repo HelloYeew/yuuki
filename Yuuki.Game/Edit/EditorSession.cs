@@ -20,6 +20,12 @@ public class EditorSession
     public const double DEFAULT_TIMELINE_SPAN = 6000;
 
     public const double MIN_TIMELINE_SPAN = 500;
+
+    /// <summary>
+    /// What the editor opens at on a phone: its playfield is about half as tall as on the desktop, so the
+    /// desktop's span would crowd 1/4 snaps closer than a note is tall.
+    /// </summary>
+    public const double PHONE_TIMELINE_SPAN = 3500;
     public const double MAX_TIMELINE_SPAN = 10000;
 
     public EditorBeatmap Beatmap { get; }

@@ -56,6 +56,19 @@ public partial class FinalSetupScreen : YuukiScreen, IHaveScreenAction
     private const float panel_slide = 448;
 
     /// <summary>
+    /// Where the song panel sits, and its size at scale 1 showing the Detail tab (the Ranking tab fits
+    /// itself to the buttons below).
+    /// </summary>
+    private static readonly Vector2 info_panel_position = new Vector2(-30, 48);
+
+    private static readonly Vector2 info_panel_size = new Vector2(680, 498);
+
+    /// <summary>
+    /// Where a keycap row starts, right of its title, while the row has the room.
+    /// </summary>
+    private const float keycap_x = 160;
+
+    /// <summary>
     /// The lanes this beatmap is played on, which picks the key layout shown and rebound here.
     /// </summary>
     private int laneCount => LaneKeyLayouts.Clamp(workingBeatmap?.Beatmap?.LaneCount ?? LaneKeyLayouts.MIN_LANES);
@@ -86,6 +99,9 @@ public partial class FinalSetupScreen : YuukiScreen, IHaveScreenAction
     [Resolved(canBeNull: true)]
     private ScoreStore? scoreStore { get; set; }
 
+    [Resolved(canBeNull: true)]
+    private GameLayout? gameLayout { get; set; }
+
     // Set while a saved score opened from the Ranking tab is showing, so coming back from it doesn't
     // count as coming back from a play.
     private bool viewingScore;
@@ -97,6 +113,8 @@ public partial class FinalSetupScreen : YuukiScreen, IHaveScreenAction
     private Container settingsPanel = null!;
     private LeftBottomShearButton backButton = null!;
     private RightBottomShearButton startButton = null!;
+
+    private readonly List<KeycapStrip> keycapRows = new List<KeycapStrip>();
 
     public FinalSetupScreen()
     {
@@ -207,7 +225,7 @@ public partial class FinalSetupScreen : YuukiScreen, IHaveScreenAction
         {
             Anchor = Anchor.TopLeft,
             Origin = Anchor.TopLeft,
-            Position = new Vector2(-30, 48)
+            Position = info_panel_position
         };
 
         if (workingBeatmap?.Beatmap != null)
@@ -307,12 +325,7 @@ public partial class FinalSetupScreen : YuukiScreen, IHaveScreenAction
                         }
                     }
                 },
-                new SpriteText
-                {
-                    Text = description,
-                    Font = YuukiFontUsage.GetFontUsage(Typeface.Nunito, 15, FontWeight.Regular),
-                    Color = palette.TextMuted
-                },
+                descriptionText(description),
                 slider
             }
         };
@@ -380,12 +393,7 @@ public partial class FinalSetupScreen : YuukiScreen, IHaveScreenAction
                         toggle
                     }
                 },
-                new SpriteText
-                {
-                    Text = description,
-                    Font = YuukiFontUsage.GetFontUsage(Typeface.Nunito, 15, FontWeight.Regular),
-                    Color = palette.TextMuted
-                }
+                descriptionText(description)
             }
         };
 
@@ -446,12 +454,7 @@ public partial class FinalSetupScreen : YuukiScreen, IHaveScreenAction
                 sectionTitle($"Controls  ·  {laneCount} lanes"),
                 controlRow("Lanes", lanes),
                 controlRow("Swipe", swipes),
-                new SpriteText
-                {
-                    Text = "Click a key, then press the key you want for it. Every key is in Settings › Controls.",
-                    Font = YuukiFontUsage.GetFontUsage(Typeface.Nunito, 15, FontWeight.Regular),
-                    Color = palette.TextMuted
-                }
+                descriptionText("Click a key, then press the key you want for it. Every key is in Settings › Controls.")
             }
         };
     }
@@ -462,7 +465,8 @@ public partial class FinalSetupScreen : YuukiScreen, IHaveScreenAction
     {
         caps.Anchor = Anchor.CentreLeft;
         caps.Origin = Anchor.CentreLeft;
-        caps.X = 160;
+        caps.X = keycap_x;
+        keycapRows.Add(caps);
 
         return new Container
         {
@@ -492,6 +496,22 @@ public partial class FinalSetupScreen : YuukiScreen, IHaveScreenAction
 
     #endregion
 
+    /// <summary>
+    /// A setting's explanation, wrapping to the panel's width; bigger on a phone, where the desktop size
+    /// comes out too small to read.
+    /// </summary>
+    private TextFlowContainer descriptionText(string text) => new TextFlowContainer(t =>
+    {
+        t.Font = YuukiFontUsage.GetFontUsage(Typeface.Nunito, gameLayout?.IsPhone == true ? 19 : 15, FontWeight.Regular);
+        t.Color = palette.TextMuted;
+    })
+    {
+        RelativeSizeAxes = Axes.X,
+        Width = 1,
+        AutoSizeAxes = Axes.Y,
+        Text = text
+    };
+
     private SpriteText sectionTitle(string text) => new SpriteText
     {
         Text = text.ToUpperInvariant(),
@@ -513,6 +533,23 @@ public partial class FinalSetupScreen : YuukiScreen, IHaveScreenAction
             Top = panel_margin,
             Bottom = panel_bottom_margin
         };
+
+        // The song panel shrinks to what the settings and the buttons leave it (on a phone's canvas, or
+        // a big UI scale).
+        float roomRight = left - 16 - info_panel_position.X;
+        float roomDown = DrawSize.Y + LeftBottomShearButton.DEFAULT_POSITION.Y - backButton.DrawHeight - 12 - info_panel_position.Y;
+        float scale = Math.Clamp(Math.Min(roomRight / info_panel_size.X, roomDown / info_panel_size.Y), 0.5f, 1);
+
+        if (Math.Abs(infoPanel.Scale.X - scale) > 0.001f)
+            infoPanel.Scale = new Vector2(scale);
+
+        // A long keycap row (seven or eight lanes) in a narrow panel starts closer to its title, short
+        // of the revert button.
+        foreach (KeycapStrip caps in keycapRows)
+        {
+            float room = (caps.Parent?.DrawWidth ?? 0) - caps.DrawWidth - RevertToDefaultButton.SIZE - RevertToDefaultButton.SPACING;
+            caps.X = Math.Clamp(room, 96, keycap_x);
+        }
     }
 
     public override void OnEntering(Screen? last)

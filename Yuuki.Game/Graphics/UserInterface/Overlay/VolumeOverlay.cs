@@ -43,6 +43,9 @@ public partial class VolumeOverlay : VisibilityContainer
     [Resolved(canBeNull: true)]
     private InactiveVolumeFader? fader { get; set; }
 
+    [Resolved(canBeNull: true)]
+    private GameLayout? gameLayout { get; set; }
+
     /// <summary>
     /// Whether the game is muted (master let through at nothing, the setting kept as it is).
     /// </summary>
@@ -155,6 +158,10 @@ public partial class VolumeOverlay : VisibilityContainer
     protected override void LoadComplete()
     {
         base.LoadComplete();
+
+        // Bigger on a phone, so its text comes out big enough to read.
+        if (gameLayout != null)
+            BindValueChanged(gameLayout.Current, e => card.Scale = new Vector2(e.NewValue == DisplayLayout.Phone ? 1.2f : 1), true);
 
         BindValueChanged(Muted, e =>
         {

@@ -117,9 +117,25 @@ public partial class ScoreScreen : YuukiScreen, IHaveScreenAction
     private const float ring_area_x = 110;
 
     /// <summary>
-    /// The ring area's top: below the song header.
+    /// The ring area's top: below the song header. On a short canvas it moves up toward the header.
     /// </summary>
     private const float ring_area_y = 312;
+
+    /// <summary>
+    /// Where the song header sits, and how wide it is at scale 1.
+    /// </summary>
+    private static readonly Vector2 header_position = new Vector2(-30, 48);
+
+    private const float header_width = 680;
+
+    /// <summary>
+    /// The score summary's width below which max combo and accuracy go under the score instead of
+    /// beside it.
+    /// </summary>
+    private const float summary_one_line_width = 800;
+
+    private const float summary_height = 104;
+    private const float summary_stacked_height = 180;
 
     private const float details_top = 48;
     private const float details_max_width = 1080;
@@ -161,6 +177,11 @@ public partial class ScoreScreen : YuukiScreen, IHaveScreenAction
 
     [Resolved(canBeNull: true)]
     private YuukiScreenStack? screenStack { get; set; }
+
+    private Container scoreSummary = null!;
+    private Drawable scoreBlock = null!;
+    private Drawable statsBlock = null!;
+    private bool summaryStacked;
 
     private AccuracyCircle accuracyCircle = null!;
     private Container badge = null!;
@@ -373,7 +394,7 @@ public partial class ScoreScreen : YuukiScreen, IHaveScreenAction
         {
             Anchor = Anchor.TopLeft,
             Origin = Anchor.TopLeft,
-            Position = new Vector2(-30, 48)
+            Position = header_position
         };
 
         if (workingBeatmap?.Beatmap != null)
@@ -447,13 +468,13 @@ public partial class ScoreScreen : YuukiScreen, IHaveScreenAction
     /// <summary>
     /// Score, max combo and accuracy — the numbers that roll up with the ring.
     /// </summary>
-    private Drawable createScoreSummary() => new Container
+    private Drawable createScoreSummary() => scoreSummary = new Container
     {
         RelativeSizeAxes = Axes.X,
-        Height = 104,
+        Height = summary_height,
         Children = new Drawable[]
         {
-            new FlowContainer
+            scoreBlock = new FlowContainer
             {
                 Anchor = Anchor.CentreLeft,
                 Origin = Anchor.CentreLeft,
@@ -478,7 +499,7 @@ public partial class ScoreScreen : YuukiScreen, IHaveScreenAction
                     }
                 }
             },
-            new FlowContainer
+            statsBlock = new FlowContainer
             {
                 Anchor = Anchor.CentreRight,
                 Origin = Anchor.CentreRight,
@@ -511,14 +532,22 @@ public partial class ScoreScreen : YuukiScreen, IHaveScreenAction
             }
         };
 
-        string byType = describeNoteTypes();
-        if (!string.IsNullOrEmpty(byType))
+        IReadOnlyList<string> byType = describeNoteTypes();
+        if (byType.Count > 0)
         {
-            section.Add(new SpriteText
+            // Wraps between note types when the column is narrow.
+            section.Add(new FlowContainer
             {
-                Text = byType,
-                Font = YuukiFontUsage.GetFontUsage(Typeface.Nunito, 16, FontWeight.Regular),
-                Color = palette.TextMuted
+                RelativeSizeAxes = Axes.X,
+                AutoSizeAxes = Axes.Y,
+                Direction = FlowDirection.Horizontal,
+                Spacing = new Vector2(0, 2),
+                Children = byType.Select((part, i) => new SpriteText
+                {
+                    Text = i < byType.Count - 1 ? part + "   ·   " : part,
+                    Font = YuukiFontUsage.GetFontUsage(Typeface.Nunito, 16, FontWeight.Regular),
+                    Color = palette.TextMuted
+                }).ToArray()
             });
         }
 
@@ -604,7 +633,7 @@ public partial class ScoreScreen : YuukiScreen, IHaveScreenAction
     /// Hits per note type, e.g. "Tap 120/124 · Hold 30/32 · Release 27/32", for the types the chart
     /// used. A hold's release is its own judgement, so it's listed apart from the hold's press.
     /// </summary>
-    private string describeNoteTypes()
+    private IReadOnlyList<string> describeNoteTypes()
     {
         var parts = result.Judgements
                           .GroupBy(j => (j.Note.Type, j.IsHoldTail))
@@ -615,7 +644,7 @@ public partial class ScoreScreen : YuukiScreen, IHaveScreenAction
         if (result.HoldBreakCount > 0)
             parts.Add($"Hold breaks {result.HoldBreakCount}");
 
-        return string.Join("   ·   ", parts);
+        return parts;
     }
 
     private Container panel(Drawable content) => new Container
@@ -752,20 +781,53 @@ public partial class ScoreScreen : YuukiScreen, IHaveScreenAction
     }
 
     /// <summary>
-    /// Keeps the layout inside the canvas, which shrinks as the UI scale grows: the stats column takes
-    /// the width left beside the ring and scrolls if it's taller than the room above the buttons, and
-    /// the ring area shrinks only when it would otherwise reach down into them.
+    /// Keeps the layout inside the canvas, which is smaller on a phone and shrinks as the UI scale grows.
+    /// The song header and the ring share the left, giving up width before the stats column goes below
+    /// its narrowest; the ring moves up under the header only as far as it has to, then shrinks to fit
+    /// above the buttons. The stats column scrolls if it's taller than the room above the buttons.
     /// </summary>
     private void fitToCanvas()
     {
         float buttonsTop = DrawSize.Y + LeftBottomShearButton.DEFAULT_POSITION.Y - backButton.DrawSize.Y - 16;
-        float ringRight = ring_area_x + ringArea.DrawSize.X;
+        float leftRoom = DrawSize.X - 48 - 32 - details_min_width;
 
-        detailsScroll.Width = Math.Clamp(DrawSize.X - 48 - ringRight - 32, details_min_width, details_max_width);
+        float headerScale = Math.Clamp((leftRoom - header_position.X) / header_width, 0.5f, 1);
+        setScale(header, headerScale);
+        float headerBottom = header_position.Y + header.DrawSize.Y * headerScale;
+
+        Vector2 ringSize = ringArea.DrawSize;
+        float ringTop = Math.Clamp(buttonsTop - ringSize.Y, headerBottom + 12, ring_area_y);
+        float ringScale = Math.Clamp(Math.Min((buttonsTop - ringTop) / ringSize.Y, (leftRoom - ring_area_x) / ringSize.X), 0.35f, 1);
+        ringArea.Y = ringTop;
+        setScale(ringArea, ringScale);
+
+        float leftRight = Math.Max(header_position.X + header_width * headerScale, ring_area_x + ringSize.X * ringScale);
+        detailsScroll.Width = Math.Clamp(DrawSize.X - 48 - leftRight - 32, details_min_width, details_max_width);
         detailsScroll.Height = Math.Max(240, buttonsTop - details_top);
 
-        float ringRoom = buttonsTop - ring_area_y;
-        ringArea.Scale = new Vector2(Math.Clamp(ringRoom / ringArea.DrawSize.Y, 0.6f, 1f));
+        bool stacked = scoreSummary.DrawWidth < summary_one_line_width;
+
+        if (stacked != summaryStacked)
+        {
+            summaryStacked = stacked;
+            layOutSummary();
+        }
+    }
+
+    private static void setScale(Drawable drawable, float scale)
+    {
+        if (Math.Abs(drawable.Scale.X - scale) > 0.001f)
+            drawable.Scale = new Vector2(scale);
+    }
+
+    /// <summary>
+    /// Score with max combo and accuracy beside it, or (in a narrow column) under it.
+    /// </summary>
+    private void layOutSummary()
+    {
+        scoreSummary.Height = summaryStacked ? summary_stacked_height : summary_height;
+        scoreBlock.Anchor = scoreBlock.Origin = summaryStacked ? Anchor.TopLeft : Anchor.CentreLeft;
+        statsBlock.Anchor = statsBlock.Origin = summaryStacked ? Anchor.BottomLeft : Anchor.CentreRight;
     }
 
     /// <summary>

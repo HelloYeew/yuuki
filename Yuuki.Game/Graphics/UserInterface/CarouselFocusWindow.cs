@@ -73,6 +73,13 @@ public abstract partial class CarouselFocusFace<TModel> : Container
     public virtual void SetSkim(float amount)
     {
     }
+
+    /// <summary>
+    /// Sizes the face for a phone (bigger, for reading at arm's length) or the desktop.
+    /// </summary>
+    public virtual void SetPhone(bool phone)
+    {
+    }
 }
 
 /// <summary>
@@ -246,6 +253,21 @@ public abstract partial class CarouselFocusWindow<TModel> : Container
     /// </summary>
     public CarouselMotion? Motion { get; set; }
 
+    private bool phone;
+
+    /// <summary>
+    /// Sizes the faces for a phone or the desktop, the ones on show and the ones waiting to be.
+    /// </summary>
+    public void SetPhone(bool value)
+    {
+        phone = value;
+
+        foreach (var (_, face) in live)
+            face.SetPhone(value);
+        foreach (var face in spare)
+            face.SetPhone(value);
+    }
+
     /// <summary>
     /// The fill the window wears (or is fading to) for <see cref="ShownItem"/>.
     /// </summary>
@@ -400,6 +422,7 @@ public abstract partial class CarouselFocusWindow<TModel> : Container
     {
         var face = CreateFace();
         face.SetOrientation(orientation);
+        face.SetPhone(phone);
         faceLayer.Add(face);
         return face;
     }

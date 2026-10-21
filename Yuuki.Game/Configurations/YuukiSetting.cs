@@ -140,5 +140,11 @@ public enum YuukiSetting
     /// <summary>
     /// Whether the clock reads 15:30 rather than 3:30 PM. Defaults to the system's own preference
     /// </summary>
-    Prefer24HourTime
+    Prefer24HourTime,
+
+    /// <summary>
+    /// The layout to use: picked from the window's size, or forced to the desktop or phone one. Backed by
+    /// <see cref="Yuuki.Game.Graphics.LayoutPreference"/>.
+    /// </summary>
+    Layout
 }

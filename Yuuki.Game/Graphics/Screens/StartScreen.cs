@@ -35,11 +35,13 @@ public partial class StartScreen : YuukiScreen
     [Resolved(canBeNull: true)]
     private YuukiGame? game;
 
+    [Resolved(canBeNull: true)]
+    private GameLayout? gameLayout;
+
     [BackgroundDependencyLoader]
     private void load(ITextureManager textureManager)
     {
         ScreenName.Value = "Start Screen";
-        ScreenHelperText.Value = "Press any key to start";
 
         Add(frameworkLogo = new Sprite()
         {
@@ -63,10 +65,30 @@ public partial class StartScreen : YuukiScreen
         {
             Anchor = Anchor.BottomRight,
             Origin = Anchor.BottomRight,
-            Text = "Press any key to start",
             Font = YuukiFontUsage.GetFontUsage(Typeface.Quicksand, 32, FontWeight.Bold),
             Position = new Vector2(400, -48)
         });
+
+        setPrompt(phone: false);
+    }
+
+    protected override void LoadComplete()
+    {
+        base.LoadComplete();
+
+        // The layout is picked from the window once the game is running, which can be after this loads.
+        if (gameLayout != null)
+            BindValueChanged(gameLayout.Current, e => setPrompt(e.NewValue == DisplayLayout.Phone), true);
+    }
+
+    /// <summary>
+    /// A phone has no keys to press.
+    /// </summary>
+    private void setPrompt(bool phone)
+    {
+        string prompt = phone ? "Tap anywhere to start" : "Press any key to start";
+        ScreenHelperText.Value = prompt;
+        startText.Text = prompt;
     }
 
     public override void OnEntering(Screen? last)

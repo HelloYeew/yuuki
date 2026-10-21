@@ -76,6 +76,16 @@ public partial class BeatmapSetFocusWindow : CarouselFocusWindow<BeatmapSet>
         private const float hero_text_scale = 0.72f;
 
         private float skim;
+        private bool phone;
+
+        // A phone's window is a little shorter and its hero a little smaller (see BeatmapSetCarousel), and
+        // the text in them a little bigger. Its rail is narrower, so the extras move down beside the
+        // details line where they fit, leaving the title the whole width.
+        private float wideCoverSize => phone ? 104 : wide_cover_size;
+        private float heroCoverSize => phone ? 200 : hero_cover_size;
+        private float skimCoverSize => phone ? 64 : skim_wide_cover_size;
+        private float textGap => phone ? 28 : 32;
+        private float skimTextScale => phone ? 0.82f : skim_text_scale;
 
         private static readonly Vector2 cover_decode_size = new Vector2(256, 256);
 
@@ -181,12 +191,33 @@ public partial class BeatmapSetFocusWindow : CarouselFocusWindow<BeatmapSet>
         public override void SetOrientation(CarouselOrientation orientation)
         {
             vertical = orientation == CarouselOrientation.Vertical;
+            applyOrientation();
+        }
 
+        public override void SetPhone(bool value)
+        {
+            if (phone == value)
+                return;
+
+            phone = value;
+
+            title.Font = YuukiFontUsage.GetFontUsage(Typeface.Quicksand, phone ? 31 : 30, FontWeight.Bold);
+            artist.Font = YuukiFontUsage.GetFontUsage(Typeface.Nunito, phone ? 19 : 18, FontWeight.SemiBold);
+
+            // Sized when they were made, so scaled up as a whole: 16 for 15, as the phone's text is.
+            details.Scale = new Vector2(phone ? 16 / 15f : 1);
+            extras.Scale = new Vector2(phone ? 16 / 15f : 1);
+
+            applyOrientation();
+        }
+
+        private void applyOrientation()
+        {
             if (vertical)
             {
                 cover.Anchor = cover.Origin = Anchor.CentreLeft;
                 cover.Position = new Vector2(12, 0);
-                cover.Size = new Vector2(wide_cover_size);
+                cover.Size = new Vector2(wideCoverSize);
                 text.Alpha = 1;
                 extras.Anchor = extras.Origin = Anchor.CentreRight;
                 extras.Position = new Vector2(-18, 0);
@@ -196,11 +227,11 @@ public partial class BeatmapSetFocusWindow : CarouselFocusWindow<BeatmapSet>
                 // The hero: the cover, and under it only the skyline, best mark and lanes.
                 cover.Anchor = cover.Origin = Anchor.TopLeft;
                 cover.Position = new Vector2(14);
-                cover.Size = new Vector2(hero_cover_size);
+                cover.Size = new Vector2(heroCoverSize);
                 text.Alpha = 0;
                 extras.Anchor = Anchor.TopCentre;
                 extras.Origin = Anchor.Centre;
-                extras.Position = new Vector2(0, 14 + hero_cover_size + 26);
+                extras.Position = new Vector2(0, 14 + heroCoverSize + 26);
             }
 
             layOutForSkim();
@@ -279,18 +310,18 @@ public partial class BeatmapSetFocusWindow : CarouselFocusWindow<BeatmapSet>
 
             if (vertical)
             {
-                float coverSize = lerp(wide_cover_size, skim_wide_cover_size);
+                float coverSize = lerp(wideCoverSize, skimCoverSize);
 
                 cover.Size = new Vector2(coverSize);
                 text.Anchor = text.Origin = Anchor.CentreLeft;
-                text.Position = new Vector2(coverSize + 32, 0);
-                text.Scale = new Vector2(lerp(1, skim_text_scale));
+                text.Position = new Vector2(coverSize + textGap, 0);
+                text.Scale = new Vector2(lerp(1, skimTextScale));
                 text.Alpha = 1;
             }
             else
             {
                 text.Anchor = text.Origin = Anchor.TopLeft;
-                text.Position = new Vector2(14, 14 + hero_cover_size + 6);
+                text.Position = new Vector2(14, 14 + heroCoverSize + 6);
                 text.Scale = new Vector2(hero_text_scale);
                 text.Alpha = skim;
             }
@@ -300,11 +331,24 @@ public partial class BeatmapSetFocusWindow : CarouselFocusWindow<BeatmapSet>
         {
             base.Update();
 
-            float room = vertical
-                ? DrawWidth - text.X - extras.DrawWidth * (1 - skim) - 36
-                : DrawWidth - 28;
+            if (!vertical)
+            {
+                // Across the hero, under its cover.
+                text.Width = Math.Max(0, (DrawWidth - 28) / text.Scale.X);
+                return;
+            }
 
-            // The text column runs up to the extras (or across the hero), and long names scroll within it.
+            float extrasWidth = extras.DrawWidth * extras.Scale.X;
+            float fullRoom = DrawWidth - text.X - 18;
+
+            // On a phone the extras go beside the details line when both fit there, centred on it (the last
+            // line of the text column); otherwise beside the whole text, centred on the window.
+            bool onDetailsLine = phone && details.DrawWidth * details.Scale.X * text.Scale.X + 16 + extrasWidth <= fullRoom;
+            extras.Y = onDetailsLine ? (text.DrawHeight - details.DrawHeight * details.Scale.Y) / 2 * text.Scale.Y : 0;
+
+            float room = onDetailsLine ? fullRoom : fullRoom - extrasWidth * (1 - skim) - 18;
+
+            // The text column runs up to the extras (or across the window), and long names scroll within it.
             text.Width = Math.Max(0, room / text.Scale.X);
         }
     }

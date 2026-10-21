@@ -20,6 +20,7 @@ using Yuuki.Game.Beatmaps;
 using Yuuki.Game.Configurations;
 using Yuuki.Game.Database;
 using Yuuki.Game.Edit;
+using Yuuki.Game.Graphics;
 using Yuuki.Game.Graphics.Colors;
 using Yuuki.Game.Graphics.Cursor;
 using Yuuki.Game.Graphics.Containers;
@@ -37,10 +38,6 @@ public partial class YuukiGame : App
 {
     private DrawSizePreservingFillContainer mainContainer = null!;
 
-    /// <summary>
-    /// The canvas the interface is laid out on at UI scale 1.
-    /// </summary>
-    private static readonly Vector2 base_draw_size = new Vector2(1920, 1080);
 
     /// <summary>
     /// UI scale snaps to steps of this, so a dragged slider settles on round values.
@@ -48,7 +45,15 @@ public partial class YuukiGame : App
     private const double ui_scale_step = 0.05;
 
     private Reactive<double> uiScale = null!;
-    private double displayedUIScale = 1;
+
+    // The zoom shown: eased toward the target while the UI scale slider moves.
+    private double displayedZoom = 1;
+
+    // Whether the window is a phone's, kept between frames for the hysteresis.
+    private bool phoneWindow;
+
+    private readonly GameLayout layout = new GameLayout();
+    private Reactive<LayoutPreference> layoutPreference = null!;
     private YuukiScreenStack screenStack = null!;
     private YuukiBackground background = null!;
     private ScreenFooter footer = null!;
@@ -106,6 +111,7 @@ public partial class YuukiGame : App
 
         Cache<IYuukiColorProvider>(new DefaultYuukiColorProvider());
         Cache(new CoverColorStore());
+        Cache(layout);
 
         config = new YuukiConfigManager(Host.Storage);
         config.Load();
@@ -245,8 +251,10 @@ public partial class YuukiGame : App
         mainContainer.Add(cursor);
 
         uiScale = config.Get<double>(YuukiSetting.UIScale);
-        displayedUIScale = targetUIScale;
-        applyUIScale();
+        layoutPreference = config.Get<LayoutPreference>(YuukiSetting.Layout);
+        updateLayout();
+        displayedZoom = targetZoom;
+        applyZoom();
     }
 
     private BeatmapSet getInitialBeatmapSet()
@@ -265,24 +273,58 @@ public partial class YuukiGame : App
     {
         base.Update();
 
-        double target = targetUIScale;
-        if (displayedUIScale == target)
+        if (updateLayout())
+        {
+            // A new canvas, straight away: easing between two layouts would show neither properly.
+            displayedZoom = targetZoom;
+            applyZoom();
+        }
+
+        double target = targetZoom;
+        if (displayedZoom == target)
             return;
 
         // Eased, so dragging the slider glides the interface rather than stepping it.
-        displayedUIScale += (target - displayedUIScale) * (1 - Math.Exp(-Clock.ElapsedFrameTime / 80));
-        if (Math.Abs(target - displayedUIScale) < 0.001)
-            displayedUIScale = target;
+        displayedZoom += (target - displayedZoom) * (1 - Math.Exp(-Clock.ElapsedFrameTime / 80));
+        if (Math.Abs(target - displayedZoom) < 0.001)
+            displayedZoom = target;
 
-        applyUIScale();
+        applyZoom();
     }
 
-    private double targetUIScale => Math.Clamp(Math.Round(uiScale.Value / ui_scale_step) * ui_scale_step, YuukiConfigManager.MIN_UI_SCALE, YuukiConfigManager.MAX_UI_SCALE);
-
-    private void applyUIScale()
+    /// <summary>
+    /// How far the interface should be zoomed (see <see cref="GameLayout.Zoom"/>).
+    /// </summary>
+    private double targetZoom
     {
-        float scale = (float)displayedUIScale;
-        mainContainer.TargetDrawSize = new Vector2(base_draw_size.X / scale, base_draw_size.Y / scale);
+        get
+        {
+            double scale = Math.Clamp(Math.Round(uiScale.Value / ui_scale_step) * ui_scale_step, YuukiConfigManager.MIN_UI_SCALE, YuukiConfigManager.MAX_UI_SCALE);
+            return GameLayout.Zoom(layoutPreference.Value, phoneWindow, scale);
+        }
+    }
+
+    /// <summary>
+    /// Picks the layout for the window and UI scale as they are now (see <see cref="GameLayout.Choose"/>).
+    /// True when it changed.
+    /// </summary>
+    private bool updateLayout()
+    {
+        phoneWindow = GameLayout.IsPhoneWindow(Window?.Height ?? GameLayout.DESKTOP_ABOVE + 1, phoneWindow);
+
+        var chosen = GameLayout.Choose(layoutPreference.Value, phoneWindow, targetZoom);
+
+        if (chosen == layout.Current.Value)
+            return false;
+
+        layout.Current.Value = chosen;
+        return true;
+    }
+
+    private void applyZoom()
+    {
+        float zoom = (float)displayedZoom;
+        mainContainer.TargetDrawSize = new Vector2(GameLayout.DESKTOP_CANVAS.X / zoom, GameLayout.DESKTOP_CANVAS.Y / zoom);
     }
 
     public override void OnReady()

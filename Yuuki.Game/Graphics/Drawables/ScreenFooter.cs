@@ -24,6 +24,13 @@ namespace Yuuki.Game.Graphics.Drawables;
 
 public partial class ScreenFooter : Container
 {
+    /// <summary>
+    /// How much bigger the footer's buttons are on a phone, where they're tapped; still inside the bar.
+    /// </summary>
+    private const float phone_button_scale = 1.25f;
+
+    private static readonly Vector2 buttons_position = new Vector2(-16, -14);
+
     private SpriteText screenNameText = null!;
     private ScrollingText screenDescriptionText = null!;
     private Box footerBackgroundBoxLower = null!;
@@ -36,6 +43,10 @@ public partial class ScreenFooter : Container
     private FooterMusicButton settingsButton = null!;
     private FooterNotificationButton notificationButton = null!;
     private FooterClock clock = null!;
+    private FlowContainer buttons = null!;
+
+    [Resolved(canBeNull: true)]
+    private GameLayout? gameLayout { get; set; }
 
     public ScreenFooter()
     {
@@ -150,12 +161,12 @@ public partial class ScreenFooter : Container
             Direction = FlowDirection.Horizontal
         });
 
-        Add(new FlowContainer()
+        Add(buttons = new FlowContainer()
         {
             Size = new Vector2(400, 38),
             Anchor = Anchor.BottomRight,
             Origin = Anchor.BottomRight,
-            Position = new Vector2(-16, -14),
+            Position = buttons_position,
             Spacing = new Vector2(8, 0),
             Alignment = FlowAlignment.End,
             Children = new Drawable[]
@@ -208,6 +219,27 @@ public partial class ScreenFooter : Container
             notificationButton.SetAccent(e.NewValue.Text);
             clock.SetAccent(e.NewValue.Text, e.NewValue.TextMuted, e.NewValue.Surface);
         };
+    }
+
+    protected override void LoadComplete()
+    {
+        base.LoadComplete();
+
+        if (gameLayout != null)
+            BindValueChanged(gameLayout.Current, e => applyLayout(e.NewValue == DisplayLayout.Phone), true);
+    }
+
+    /// <summary>
+    /// Scales the action buttons and the right-hand buttons up on a phone, each about its bottom corner,
+    /// with the right-hand ones lowered to stay centred in the bar.
+    /// </summary>
+    private void applyLayout(bool phone)
+    {
+        float scale = phone ? phone_button_scale : 1;
+
+        footerKeybindContainer.Scale = new Vector2(scale);
+        buttons.Scale = new Vector2(scale);
+        buttons.Position = new Vector2(buttons_position.X, buttons_position.Y + (scale - 1) * buttons.Height / 2);
     }
 }
 

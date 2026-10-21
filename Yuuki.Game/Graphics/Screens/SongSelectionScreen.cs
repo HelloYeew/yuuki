@@ -43,6 +43,7 @@ public partial class SongSelectionScreen : YuukiScreen, IHaveScreenAction
     public bool EditMode { get; init; }
 
     private Container content = null!;
+    private Container detailsArea = null!;
 
     private BeatmapInfoPanel infoPanel = null!;
     private LeftBottomShearButton backButton = null!;
@@ -51,6 +52,9 @@ public partial class SongSelectionScreen : YuukiScreen, IHaveScreenAction
 
     /// <summary>The carousel cluster, with its search and filters.</summary>
     public BeatmapSelector Selector => selector;
+
+    /// <summary>The song and difficulty details on the left (diagnostics/tests).</summary>
+    public BeatmapInfoPanel InfoPanel => infoPanel;
     private RightBottomShearButton goButton = null!;
 
     // Edit mode only: makes a new set from a song, beside Go.
@@ -147,9 +151,10 @@ public partial class SongSelectionScreen : YuukiScreen, IHaveScreenAction
             Position = new Vector2(-30, 48)
         });
         infoPanel.ScoreSelected += score => screenStack?.Push(ScoreScreen.ForSavedScore(score, scoreStore));
-        // The Ranking tab reaches down to the back button, or to the strip when that's higher.
-        infoPanel.RankingBottom = () => Math.Min(backButton.DrawRectangle.Y, selector.StripTop);
-        infoPanel.RankingMaxRight = () => selector.SideAreaLeft;
+        // The Ranking tab reaches down to the back button or the strip, and right to the list or the edge,
+        // as laid out (see layOutInfoPanel).
+        infoPanel.RankingBottom = () => float.IsInfinity(rankingBottom) ? backButton.DrawRectangle.Y : rankingBottom;
+        infoPanel.RankingMaxRight = () => float.IsInfinity(rankingMaxRight) ? selector.SideAreaLeft : rankingMaxRight;
 
         content.Add(backButton = new LeftBottomShearButton()
         {
@@ -162,6 +167,17 @@ public partial class SongSelectionScreen : YuukiScreen, IHaveScreenAction
         });
 
         content.Add(selector = new BeatmapSelector());
+
+        // Where the info panel's tabs go when they don't fit under it: against the right edge, over the
+        // strip. Tucked a little past it, as the panel is past the left, so a row settling with a bounce
+        // doesn't show the slanted end of its fill.
+        content.Add(detailsArea = new Container
+        {
+            Anchor = Anchor.TopRight,
+            Origin = Anchor.TopRight,
+            Position = new Vector2(details_tuck, details_margin),
+            AutoSizeAxes = Axes.Both
+        });
 
         selector.SetChanged += onSelectorSetChanged;
         selector.BeatmapChanged += onSelectorBeatmapChanged;
@@ -297,6 +313,104 @@ public partial class SongSelectionScreen : YuukiScreen, IHaveScreenAction
 
         if (pressStartTime != null && !peeking && Clock.CurrentTime - pressStartTime >= peek_hold_duration)
             setPeek(true);
+
+        layOutInfoPanel();
+    }
+
+    [Resolved(canBeNull: true)]
+    private GameLayout? gameLayout { get; set; }
+
+    /// <summary>
+    /// The info panel's width, and the heights of its head (tag, title and the three rows) and of its tabs
+    /// showing the Detail tab, at scale 1, as laid out.
+    /// </summary>
+    private const float info_panel_width = 680;
+
+    private const float info_panel_head_height = 262;
+    private const float info_panel_details_height = 228;
+    private const float info_panel_gap = 8;
+
+    /// <summary>
+    /// The tabs' distance from the screen's top when they're at the top right, and how far past its right
+    /// edge they reach.
+    /// </summary>
+    private const float details_margin = 24;
+
+    private const float details_tuck = 40;
+
+    // How far the Ranking tab may reach, in screen space, as last laid out.
+    private float rankingBottom = float.PositiveInfinity;
+    private float rankingMaxRight = float.PositiveInfinity;
+
+    /// <summary>
+    /// Sizes the info panel to the room the list leaves it, and places its tabs.
+    /// </summary>
+    /// <remarks>
+    /// Beside the rail, it's as big as the room allows on a phone (up to 1.25×), 1× on a desktop. Over the
+    /// strip, its head goes above the hero tile or, where that leaves it bigger, beside it above the band;
+    /// the tabs stay under it while they fit, and otherwise move to the top right (the search card's
+    /// corner, which it leaves while a difficulty's picked: the only time there are tabs).
+    /// </remarks>
+    private void layOutInfoPanel()
+    {
+        bool phone = gameLayout?.IsPhone == true;
+        float largest = phone ? 1.25f : 1;
+        Vector2 at = infoPanel.Position;
+
+        if (selector.HeroRect is not RectangleF heroOnScreen)
+        {
+            float railLeft = local(selector.SideAreaLeft, 0).X;
+            setScale(infoPanel, phone ? Math.Clamp((railLeft - 24 - Math.Max(0, at.X)) / info_panel_width, 0.5f, largest) : 1);
+
+            infoPanel.DetailsHost = null;
+            rankingBottom = backButton.DrawRectangle.Y;
+            rankingMaxRight = selector.SideAreaLeft;
+            return;
+        }
+
+        Vector2 heroTopLeft = local(heroOnScreen.X, heroOnScreen.Y);
+        Vector2 heroBottomRight = local(heroOnScreen.X + heroOnScreen.Width, heroOnScreen.Y + heroOnScreen.Height);
+        float bandTop = local(0, selector.BandTop).Y;
+        float searchLeft = local(selector.SideAreaLeft, 0).X;
+
+        float aboveHero = Math.Min((heroTopLeft.Y - 12 - at.Y) / info_panel_head_height, (searchLeft - 24 - at.X) / info_panel_width);
+        float besideHero = Math.Min((bandTop - 12 - at.Y) / info_panel_head_height, (heroTopLeft.X - 24 - at.X) / info_panel_width);
+        float headScale = Math.Clamp(Math.Max(aboveHero, besideHero), 0.5f, largest);
+        setScale(infoPanel, headScale);
+
+        float headRight = at.X + info_panel_width * headScale;
+        bool headBesideHero = headRight <= heroTopLeft.X - 12;
+        float headLimit = (headBesideHero ? bandTop : heroTopLeft.Y) - 12;
+
+        if (at.Y + (info_panel_head_height + info_panel_gap + info_panel_details_height) * headScale <= headLimit)
+        {
+            infoPanel.DetailsHost = null;
+            rankingBottom = Math.Min(backButton.DrawRectangle.Y, screen(0, headLimit).Y);
+            rankingMaxRight = headBesideHero ? screen(heroTopLeft.X - 12, 0).X : selector.SideAreaLeft;
+            return;
+        }
+
+        // At the top right: above the hero, or beside it above the band, whichever leaves them bigger.
+        float right = content.DrawWidth + details_tuck;
+        float detailsAbove = Math.Min((heroTopLeft.Y - 12 - details_margin) / info_panel_details_height, (right - headRight - 24) / info_panel_width);
+        float detailsBeside = Math.Min((bandTop - 12 - details_margin) / info_panel_details_height, (right - heroBottomRight.X - 12) / info_panel_width);
+        float detailsScale = Math.Clamp(Math.Max(detailsAbove, detailsBeside), 0.4f, largest);
+        setScale(detailsArea, detailsScale);
+        infoPanel.DetailsHost = detailsArea;
+
+        bool detailsBesideHero = right - info_panel_width * detailsScale >= heroBottomRight.X + 12;
+        rankingBottom = screen(0, (detailsBesideHero ? bandTop : heroTopLeft.Y) - 12).Y;
+        rankingMaxRight = screen(content.DrawWidth, 0).X;
+    }
+
+    private Vector2 local(float screenX, float screenY) => content.ToLocalSpace(new Vector2(screenX, screenY));
+
+    private Vector2 screen(float x, float y) => content.ToScreenSpace(new Vector2(x, y));
+
+    private static void setScale(Drawable drawable, float scale)
+    {
+        if (Math.Abs(drawable.Scale.X - scale) > 0.001f)
+            drawable.Scale = new Vector2(scale);
     }
 
     public override bool OnMouseDown(MouseButtonEvent e)

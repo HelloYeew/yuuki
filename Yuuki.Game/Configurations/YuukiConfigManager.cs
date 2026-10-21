@@ -9,6 +9,8 @@ using Yuuki.Game.Beatmaps;
 using Yuuki.Game.Gameplay;
 using Yuuki.Game.Graphics.UserInterface;
 
+using Yuuki.Game.Graphics;
+
 namespace Yuuki.Game.Configurations;
 
 public class YuukiConfigManager : ConfigManager<YuukiSetting>
@@ -17,8 +19,8 @@ public class YuukiConfigManager : ConfigManager<YuukiSetting>
 
     public const int MAX_AUDIO_OFFSET = 300;
 
-    public const double MIN_UI_SCALE = 0.75;
-    public const double MAX_UI_SCALE = 1.25;
+    public const double MIN_UI_SCALE = 0.5;
+    public const double MAX_UI_SCALE = 1.75;
 
     public const double MIN_PLAYFIELD_SIZE = 0.5;
     public const double MAX_PLAYFIELD_SIZE = 1;
@@ -56,6 +58,7 @@ public class YuukiConfigManager : ConfigManager<YuukiSetting>
         Get(YuukiSetting.CursorRotate, true);
         Get(YuukiSetting.SongSelectSort, BeatmapSort.Added);
         Get(YuukiSetting.UIScale, 1.0);
+        Get(YuukiSetting.Layout, LayoutPreference.Auto);
         Get(YuukiSetting.HitsoundVolume, 1.0);
         Get(YuukiSetting.InactiveVolume, 0.25);
         Get(YuukiSetting.PlayfieldSize, MAX_PLAYFIELD_SIZE);

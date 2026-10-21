@@ -18,6 +18,8 @@ namespace Yuuki.Game.Graphics.UserInterface;
 
 public partial class MenuShearButton : ShearButton
 {
+    private const float shear = 0.67f;
+
     public IconUsage Icon { get; set; } = IconUsage.PlayArrow;
 
     public string Text { get; set; } = "Button";
@@ -38,6 +40,12 @@ public partial class MenuShearButton : ShearButton
 
     protected override bool IsLocked => Locked || base.IsLocked;
 
+    /// <summary>
+    /// The scale that fits a row of these buttons, <paramref name="rowSize"/> as laid out, into
+    /// <paramref name="room"/> across, the slant at either end included: 1 when it fits already.
+    /// </summary>
+    public static float ScaleToFit(Vector2 rowSize, float room) => Math.Min(1, room / (rowSize.X + rowSize.Y * shear));
+
     [BackgroundDependencyLoader]
     private void load()
     {
@@ -52,7 +60,7 @@ public partial class MenuShearButton : ShearButton
                 Origin = Anchor.Centre,
                 RelativeSizeAxes = Axes.Both,
                 Masking = true,
-                Shear = new Vector2(-0.67f, 0),
+                Shear = new Vector2(-shear, 0),
                 CornerRadius = 20 * scale,
                 Child = BackgroundBox = new Box()
                 {

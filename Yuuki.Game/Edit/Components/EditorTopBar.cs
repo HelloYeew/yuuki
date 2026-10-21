@@ -1,6 +1,7 @@
 // This code is part of yuuki. project. Licensed under the MIT License.
 // See the LICENSE file for full license text.
 
+using System;
 using System.Collections.Generic;
 using Sakura.Framework.Allocation;
 using Sakura.Framework.Extensions.ColorExtensions;
@@ -63,7 +64,8 @@ public partial class EditorTopBar : Container
                 Anchor = Anchor.Centre,
                 Origin = Anchor.Centre,
                 Font = YuukiFontUsage.GetFontUsage(Typeface.Nunito, 15, FontWeight.Bold),
-                Color = Color.White.WithAlpha(0.7f)
+                Color = Color.White.WithAlpha(0.7f),
+                Truncate = true
             },
             unsaved = new SpriteText
             {
@@ -133,6 +135,13 @@ public partial class EditorTopBar : Container
     public override void Update()
     {
         base.Update();
+
+        // Centred, so it can only be as wide as twice the room on its tighter side: the menu on the left,
+        // the tabs (and the unsaved dot) on the right. A long "Artist - Title [Difficulty]" is cut short
+        // rather than running into them, which on a phone's 1280-wide canvas it otherwise would.
+        float leftRoom = DrawWidth / 2 - (menu.X + menu.DrawWidth) - 20;
+        float rightRoom = DrawWidth / 2 - (tabs.DrawWidth - tabs.X) - 40;
+        title.MaxWidth = Math.Max(0, 2 * Math.Min(leftRoom, rightRoom));
 
         // A dot after the title while there's something unsaved.
         unsaved.X = title.DrawWidth / 2 + 6;

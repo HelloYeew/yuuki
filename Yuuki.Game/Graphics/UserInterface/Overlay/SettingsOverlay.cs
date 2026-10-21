@@ -26,6 +26,7 @@ using Yuuki.Game.Audio;
 using Yuuki.Game.Configurations;
 using Yuuki.Game.Database;
 using Yuuki.Game.Gameplay;
+using Yuuki.Game.Graphics;
 using Yuuki.Game.Graphics.Colors;
 using Yuuki.Game.Graphics.Containers;
 using Yuuki.Game.Graphics.Text;
@@ -45,6 +46,14 @@ public partial class SettingsOverlay : FocusedOverlayContainer
     private const float panel_margin = 48;
 
     /// <summary>
+    /// The phone's: a narrower sidebar and smaller margins, so the rows keep room for their text on a
+    /// canvas as small as 1097×617, and the sidebar ends above the back button.
+    /// </summary>
+    private const float phone_sidebar_width = 210;
+
+    private const float phone_panel_margin = 28;
+
+    /// <summary>
     /// The search over the panel, and the gap between them.
     /// </summary>
     private const float search_height = 52;
@@ -61,6 +70,8 @@ public partial class SettingsOverlay : FocusedOverlayContainer
     private Container settingsContent = null!;
     private Container settingsBanner = null!;
     private Container panel = null!;
+    private Container searchArea = null!;
+    private Container panelArea = null!;
     private Container searchRow = null!;
     private SearchBox searchBox = null!;
     private FlowContainer sidebar = null!;
@@ -88,6 +99,9 @@ public partial class SettingsOverlay : FocusedOverlayContainer
 
     [Resolved(canBeNull: true)]
     private BeatmapImportManager? importManager { get; set; }
+
+    [Resolved(canBeNull: true)]
+    private GameLayout? gameLayout { get; set; }
 
     private const string framework_url = "https://github.com/HelloYeew/sakura";
     private const string yuuki_url = "https://github.com/HelloYeew/yuuki";
@@ -130,7 +144,7 @@ public partial class SettingsOverlay : FocusedOverlayContainer
                         Spacing = new Vector2(0, 10)
                     },
                     // The search spans the panel's width, over it.
-                    new Container
+                    searchArea = new Container
                     {
                         RelativeSizeAxes = Axes.X,
                         Height = panel_margin + search_height,
@@ -153,7 +167,7 @@ public partial class SettingsOverlay : FocusedOverlayContainer
                     // The panel fills whatever the window leaves beside the sidebar and under the search. Sized
                     // relatively, it follows every window resize (and any aspect ratio) by itself, with no resize
                     // handling needed.
-                    new Container
+                    panelArea = new Container
                     {
                         RelativeSizeAxes = Axes.Both,
                         Padding = new MarginPadding
@@ -297,7 +311,10 @@ public partial class SettingsOverlay : FocusedOverlayContainer
             settingRow("Blur song select background", "Soften the background, and frost the glass the song list sits on. Off is lighter on slower machines.",
                 toggle(configManager.Get<bool>(YuukiSetting.BlurBackground)),
                 "carousel"),
-            settingRow("UI scale", "How big menus, buttons and text are. Gameplay keeps its own size.",
+            settingRow("Layout", "Desktop or phone. Auto picks the phone layout, with bigger text and buttons, for a short window or a large UI scale.",
+                dropdown(configManager.Get<LayoutPreference>(YuukiSetting.Layout), Enum.GetValues<LayoutPreference>()),
+                "phone", "mobile", "compact", "tablet", "touch", "responsive"),
+            settingRow("UI scale", "How big menus, buttons and text are. Gameplay keeps its own size. A phone starts bigger, so less goes further.",
                 multiplierSlider(configManager.Get<double>(YuukiSetting.UIScale), YuukiConfigManager.MIN_UI_SCALE, YuukiConfigManager.MAX_UI_SCALE),
                 "scaling", "zoom", "interface size"),
             settingRow("Cursor size", "How big the cursor is.",
@@ -348,6 +365,45 @@ public partial class SettingsOverlay : FocusedOverlayContainer
         searchBox.Text.BindValueChanged(e => applySearch(e.NewValue));
 
         content.Add(createAbout());
+
+        if (gameLayout != null)
+            BindValueChanged(gameLayout.Current, e => applyLayout(e.NewValue == DisplayLayout.Phone), true);
+    }
+
+    /// <summary>
+    /// On a phone: a smaller banner, a narrower and tighter sidebar, smaller margins and bigger row text.
+    /// </summary>
+    private void applyLayout(bool phone)
+    {
+        float sidebarWidth = phone ? phone_sidebar_width : sidebar_width;
+        float margin = phone ? phone_panel_margin : panel_margin;
+
+        settingsBanner.Scale = new Vector2(phone ? 0.75f : 1);
+        settingsBanner.Y = phone ? 28 : 48;
+
+        sidebar.Y = phone ? 124 : 190;
+        sidebar.Spacing = new Vector2(0, phone ? 6 : 10);
+
+        foreach (SidebarButton button in sidebar.Children.OfType<SidebarButton>())
+            button.Size = new Vector2(sidebarWidth, phone ? 46 : 52);
+
+        searchArea.Height = margin + search_height;
+        searchArea.Padding = new MarginPadding
+        {
+            Left = sidebar_x + sidebarWidth + margin,
+            Right = margin,
+            Top = margin
+        };
+        panelArea.Padding = new MarginPadding
+        {
+            Left = sidebar_x + sidebarWidth + margin,
+            Right = margin,
+            Top = margin + search_height + search_gap,
+            Bottom = margin
+        };
+
+        foreach (SettingRow row in sections.SelectMany(section => section.Rows))
+            row.SetPhone(phone);
     }
 
     #region Layout
@@ -486,6 +542,9 @@ public partial class SettingsOverlay : FocusedOverlayContainer
     /// <summary>The names of the sections the search leaves showing (tests).</summary>
     public IEnumerable<string> ShownSections => sections.Where(s => s.Body.Alpha > 0).Select(s => s.Title);
 
+    /// <summary>The section buttons down the left (tests).</summary>
+    public Drawable Sidebar => sidebar;
+
     /// <summary>Whether the search box has the keyboard (tests).</summary>
     public bool SearchFocused => searchBox.HasFocus;
 
@@ -592,38 +651,8 @@ public partial class SettingsOverlay : FocusedOverlayContainer
         control.Anchor = Anchor.TopRight;
         control.Origin = Anchor.TopRight;
 
-        var row = new SettingRow(title, new[] { title, description }.Concat(keywords).Concat(setting.Choices ?? Array.Empty<string>()).ToArray())
-        {
-            RelativeSizeAxes = Axes.X,
-            AutoSizeAxes = Axes.Y,
-            Children = new Drawable[]
-            {
-                new FlowContainer
-                {
-                    RelativeSizeAxes = Axes.X,
-                    Width = 0.55f,
-                    AutoSizeAxes = Axes.Y,
-                    Direction = FlowDirection.Vertical,
-                    Spacing = new Vector2(0, 4),
-                    Children = new Drawable[]
-                    {
-                        new SpriteText
-                        {
-                            Text = title,
-                            Font = YuukiFontUsage.GetFontUsage(Typeface.Quicksand, 22, FontWeight.Bold),
-                            Color = palette.Text
-                        },
-                        new SpriteText
-                        {
-                            Text = description,
-                            Font = YuukiFontUsage.GetFontUsage(Typeface.Nunito, 15, FontWeight.Regular),
-                            Color = palette.TextMuted
-                        }
-                    }
-                },
-                control
-            }
-        };
+        var row = new SettingRow(title, description, control, palette,
+            new[] { title, description }.Concat(keywords).Concat(setting.Choices ?? Array.Empty<string>()).ToArray());
 
         if (setting.Revert is RevertToDefaultButton revert)
         {
@@ -646,18 +675,82 @@ public partial class SettingsOverlay : FocusedOverlayContainer
         public static implicit operator SettingControl(Drawable control) => new SettingControl(control);
     }
 
-    /// <summary>A row of <see cref="settingRow"/>, and what a search finds it by.</summary>
+    /// <summary>
+    /// A row of <see cref="settingRow"/>, and what a search finds it by. Its explanation wraps in what the
+    /// control (and its revert button) leaves of the row.
+    /// </summary>
     private partial class SettingRow : Container
     {
+        /// <summary>
+        /// Kept clear between the explanation and the revert button left of the control.
+        /// </summary>
+        private const float text_gap = 32;
+
         public readonly string Title;
 
         /// <summary>Its title, explanation, keywords and any dropdown choices.</summary>
         public readonly IReadOnlyList<string> FilterTerms;
 
-        public SettingRow(string title, IReadOnlyList<string> filterTerms)
+        private readonly Drawable control;
+        private readonly FlowContainer text;
+        private readonly SpriteText titleText;
+        private readonly TextFlowContainer descriptionText;
+
+        public SettingRow(string title, string description, Drawable control, YuukiColorPalette palette, IReadOnlyList<string> filterTerms)
         {
             Title = title;
             FilterTerms = filterTerms;
+            this.control = control;
+
+            RelativeSizeAxes = Axes.X;
+            AutoSizeAxes = Axes.Y;
+
+            Children = new Drawable[]
+            {
+                text = new FlowContainer
+                {
+                    AutoSizeAxes = Axes.Y,
+                    Direction = FlowDirection.Vertical,
+                    Spacing = new Vector2(0, 4),
+                    Children = new Drawable[]
+                    {
+                        titleText = new SpriteText
+                        {
+                            Text = title,
+                            Color = palette.Text
+                        },
+                        descriptionText = new TextFlowContainer(t => t.Color = palette.TextMuted)
+                        {
+                            RelativeSizeAxes = Axes.X,
+                            Width = 1,
+                            AutoSizeAxes = Axes.Y,
+                            Text = description
+                        }
+                    }
+                },
+                control
+            };
+
+            SetPhone(false);
+        }
+
+        /// <summary>
+        /// Bigger text on a phone, where the desktop sizes come out too small to read.
+        /// </summary>
+        public void SetPhone(bool phone)
+        {
+            titleText.Font = YuukiFontUsage.GetFontUsage(Typeface.Quicksand, phone ? 24 : 22, FontWeight.Bold);
+
+            var descriptionFont = YuukiFontUsage.GetFontUsage(Typeface.Nunito, phone ? 19 : 15, FontWeight.Regular);
+
+            foreach (SpriteText word in descriptionText.Children.OfType<SpriteText>())
+                word.Font = descriptionFont;
+        }
+
+        public override void Update()
+        {
+            base.Update();
+            text.Width = Math.Max(0, DrawWidth - control.DrawWidth - RevertToDefaultButton.SIZE - RevertToDefaultButton.SPACING - text_gap);
         }
     }
 

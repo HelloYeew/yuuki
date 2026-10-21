@@ -191,6 +191,27 @@ public partial class BeatmapFocusWindow : CarouselFocusWindow<Beatmap>
             vertical = orientation == CarouselOrientation.Vertical;
             wide.Alpha = vertical ? 1 : 0;
             hero.Alpha = vertical ? 0 : 1;
+            applyScale();
+        }
+
+        private bool phone;
+
+        public override void SetPhone(bool value)
+        {
+            phone = value;
+            applyScale();
+        }
+
+        /// <summary>
+        /// On a phone the face is the desktop's scaled to the window as a whole: the rail's window is taller
+        /// (140 rather than 124), the hero a little smaller (228 wide rather than 248).
+        /// </summary>
+        private void applyScale()
+        {
+            float scale = !phone ? 1 : vertical ? 140f / 124f : 228f / 248f;
+
+            Scale = new Vector2(scale);
+            Size = new Vector2(1 / scale);
         }
 
         protected override void OnApply(Beatmap beatmap)

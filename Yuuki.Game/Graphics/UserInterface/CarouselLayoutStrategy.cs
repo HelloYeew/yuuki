@@ -28,11 +28,18 @@ public readonly struct CarouselMetrics
     /// </summary>
     public readonly float Lead;
 
-    public CarouselMetrics(Vector2 drawSize, float skim = 0, float lead = 0)
+    /// <summary>
+    /// Room kept clear at the start of the list (px): a strip's items fade out before it, as they do at
+    /// its ends. The docked song sits there.
+    /// </summary>
+    public readonly float StartInset;
+
+    public CarouselMetrics(Vector2 drawSize, float skim = 0, float lead = 0, float startInset = 0)
     {
         DrawSize = drawSize;
         Skim = skim;
         Lead = lead;
+        StartInset = startInset;
     }
 }
 
@@ -294,7 +301,10 @@ public class StripCarouselLayout : CarouselLayoutStrategy
         float half = m.DrawSize.X / 2f;
 
         if (half > 1f)
-            alpha = Math.Clamp((half - Math.Abs(x) - tile.X / 2f) / EdgeFade + 1f, 0f, 1f);
+        {
+            float edge = x < 0 ? half - m.StartInset : half;
+            alpha = Math.Clamp((edge - Math.Abs(x) - tile.X / 2f) / EdgeFade + 1f, 0f, 1f);
+        }
 
         return new SlotLayout(new Vector2(x, y), Vector2.One, alpha * UnderWindowAlpha(offset));
     }

@@ -29,6 +29,7 @@ using Yuuki.Game.Edit.Compose;
 using Yuuki.Game.Edit.Setup;
 using Yuuki.Game.Edit.Timeline;
 using Yuuki.Game.Edit.Timing;
+using Yuuki.Game.Graphics;
 using Yuuki.Game.Graphics.Colors;
 using Yuuki.Game.Graphics.Containers;
 using Yuuki.Game.Graphics.ScreenStacks;
@@ -202,6 +203,9 @@ public partial class EditorScreen : YuukiScreen
     private MenuItem deleteDifficultyItem = null!;
     private MenuItem? currentDifficultyItem;
 
+    [Resolved(canBeNull: true)]
+    private GameLayout? gameLayout { get; set; }
+
     [BackgroundDependencyLoader]
     private void load()
     {
@@ -236,6 +240,9 @@ public partial class EditorScreen : YuukiScreen
 
         Session = new EditorSession(beatmap, createClock);
         Cache(Session);
+
+        if (gameLayout?.IsPhone == true)
+            Session.TimelineSpan.Value = EditorSession.PHONE_TIMELINE_SPAN;
 
         Waveform? waveform = CurrentWaveform = createWaveform(beatmap.BeatmapSet);
 

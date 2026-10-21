@@ -117,8 +117,22 @@ public partial class DockedSong : ClickableContainer
     public void SetOrientation(CarouselOrientation orientation)
     {
         vertical = orientation == CarouselOrientation.Vertical;
+        applyLayout();
+    }
 
-        if (vertical)
+    private void applyLayout()
+    {
+        if (vertical && phone)
+        {
+            // A slim bar at the top of the rail: a 720-tall canvas can't spare the card's height.
+            CornerRadius = 14;
+            cover.Position = new Vector2(10);
+            cover.Size = new Vector2(48);
+            text.Alpha = 1;
+            text.Position = new Vector2(72, 8);
+            details.Alpha = 0;
+        }
+        else if (vertical)
         {
             // A card at the top of the rail, in the space the filters leave.
             CornerRadius = 16;
@@ -126,15 +140,19 @@ public partial class DockedSong : ClickableContainer
             cover.Size = new Vector2(card_cover_size);
             text.Alpha = 1;
             text.Position = new Vector2(card_cover_size + 36, 22);
+            details.Alpha = 1;
         }
         else
         {
             // A small cover at the strip's left end; the info panel above already names the song.
             CornerRadius = 14;
             cover.Position = new Vector2(15);
-            cover.Size = new Vector2(tile_cover_size);
+            cover.Size = new Vector2(phone ? 120 : tile_cover_size);
             text.Alpha = 0;
         }
+
+        title.Font = YuukiFontUsage.GetFontUsage(Typeface.Quicksand, phone ? 24 : 34, FontWeight.Bold);
+        artist.Font = YuukiFontUsage.GetFontUsage(Typeface.Nunito, phone ? 16 : 19, FontWeight.SemiBold);
     }
 
     /// <summary>
@@ -143,6 +161,27 @@ public partial class DockedSong : ClickableContainer
     public static Vector2 TileSize => new Vector2(tile_cover_size + 30);
 
     public const float CARD_HEIGHT = card_cover_size + 32;
+
+    private bool phone;
+
+    /// <summary>
+    /// The card's height across the rail, in the layout it's in now: on a phone, a slim bar.
+    /// </summary>
+    public float CardHeight => phone ? 68 : CARD_HEIGHT;
+
+    /// <summary>
+    /// The tile's size at the strip's end, in the layout it's in now.
+    /// </summary>
+    public Vector2 TileSizeNow => phone ? new Vector2(150) : TileSize;
+
+    /// <summary>
+    /// Switches between the desktop card and the phone's slim bar.
+    /// </summary>
+    public void SetPhone(bool value)
+    {
+        phone = value;
+        applyLayout();
+    }
 
     public void Show(BeatmapSet song)
     {

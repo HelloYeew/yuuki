@@ -44,6 +44,19 @@ public partial class BeatmapCard : CarouselCard<Beatmap>
     private ScoreStore? scoreStore { get; set; }
 
     [Resolved(canBeNull: true)]
+    private GameLayout? gameLayout { get; set; }
+
+    /// <summary>
+    /// On a phone the faces are the desktop's scaled up as a whole, rows (96 tall rather than 84) and tiles
+    /// alike, so the tab's lean and everything on it keep their proportions.
+    /// </summary>
+    private const float phone_row_scale = 96f / 84f;
+
+    private const float phone_tile_scale = 148f / 136f;
+
+    private bool phone;
+
+    [Resolved(canBeNull: true)]
     private ScreenPalette? screenPalette { get; set; }
 
     [Resolved(canBeNull: true)]
@@ -289,6 +302,15 @@ public partial class BeatmapCard : CarouselCard<Beatmap>
     {
         base.Update();
 
+        bool wantPhone = gameLayout?.IsPhone == true;
+
+        if (wantPhone != phone)
+        {
+            phone = wantPhone;
+            scaleFace(rowFace, phone ? phone_row_scale : 1);
+            scaleFace(tileFace, phone ? phone_tile_scale : 1);
+        }
+
         if (vertical)
         {
             // The text starts clear of the tab's top corner, which leans out past its middle by a third of
@@ -305,6 +327,16 @@ public partial class BeatmapCard : CarouselCard<Beatmap>
             rowName.MaxWidth = budget;
             rowSub.MaxWidth = budget;
         }
+    }
+
+    /// <summary>
+    /// Draws <paramref name="face"/> <paramref name="scale"/> times as big, at the same size on screen as
+    /// its slot: its own layout is the desktop's, in fewer, bigger units.
+    /// </summary>
+    private static void scaleFace(Container face, float scale)
+    {
+        face.Scale = new Vector2(scale);
+        face.Size = new Vector2(1 / scale);
     }
 
     public override bool OnHover(MouseEvent e)

@@ -3,6 +3,7 @@
 
 using System;
 using System.Collections.Generic;
+using Sakura.Framework.Allocation;
 using Sakura.Framework.Extensions.ColorExtensions;
 using Sakura.Framework.Extensions.DrawableExtensions;
 using Sakura.Framework.Graphics.Colors;
@@ -123,6 +124,12 @@ public abstract partial class Carousel<TModel, TCard> : Container
     /// Gap (px) between the scrollbar and the edge it hugs.
     /// </summary>
     public float ScrollbarEdgeGap { get; set; } = 8f;
+
+    /// <summary>
+    /// Room kept clear at the start of the list (px), for something placed over it there (see
+    /// <see cref="CarouselMetrics.StartInset"/>).
+    /// </summary>
+    public float StartInset { get; set; }
 
     /// <summary>
     /// Inset (px) at each end of the scrollbar track along its long axis.
@@ -246,13 +253,30 @@ public abstract partial class Carousel<TModel, TCard> : Container
         }
     }
 
+    [Resolved(canBeNull: true)]
+    private GameLayout? gameLayout { get; set; }
+
+    /// <summary>
+    /// Whether the game is in its phone layout, where the subclasses' rows, tiles and windows are bigger
+    /// (see <see cref="CreateLayout"/>).
+    /// </summary>
+    protected bool IsPhone => gameLayout?.IsPhone ?? false;
+
     protected Carousel()
     {
         RelativeSizeAxes = Axes.Both;
         layout = CreateLayout(Orientation.Value);
-        Orientation.BindValueChanged(onOrientationChanged);
+        Orientation.BindValueChanged(_ => rebuildLayout());
         createFocusWindow();
         createScrollbar();
+    }
+
+    [BackgroundDependencyLoader]
+    private void load()
+    {
+        // The geometry made in the constructor couldn't know the layout yet.
+        if (gameLayout != null)
+            BindValueChanged(gameLayout.Current, _ => rebuildLayout(), true);
     }
 
     /// <summary>
@@ -307,6 +331,7 @@ public abstract partial class Carousel<TModel, TCard> : Container
 
         focusWindow.Motion = Motion;
         focusWindow.SetOrientation(Orientation.Value);
+        focusWindow.SetPhone(IsPhone);
         focusHost.Add(focusWindow);
     }
 
@@ -423,7 +448,7 @@ public abstract partial class Carousel<TModel, TCard> : Container
 
     #endregion
 
-    private CarouselMetrics metrics() => new CarouselMetrics(DrawSize, Motion.Skim, Motion.Lead);
+    private CarouselMetrics metrics() => new CarouselMetrics(DrawSize, Motion.Skim, Motion.Lead, StartInset);
 
     /// <summary>
     /// The labels along the scrollbar (diagnostics/tests).
@@ -444,10 +469,14 @@ public abstract partial class Carousel<TModel, TCard> : Container
     /// Swaps the geometry strategy and reshapes every live slot to the new orientation, then relays out.
     /// The pool is untouched, so cards keep their loaded covers across the switch.
     /// </summary>
-    private void onOrientationChanged(ValueChangedEvent<CarouselOrientation> e)
+    /// <summary>
+    /// Remakes the geometry for the orientation and the game's layout, and reshapes every live slot to it.
+    /// </summary>
+    private void rebuildLayout()
     {
-        layout = CreateLayout(e.NewValue);
-        focusWindow?.SetOrientation(e.NewValue);
+        layout = CreateLayout(Orientation.Value);
+        focusWindow?.SetOrientation(Orientation.Value);
+        focusWindow?.SetPhone(IsPhone);
 
         var slotSize = layout.SlotSize(metrics());
         foreach (var w in wrappers)

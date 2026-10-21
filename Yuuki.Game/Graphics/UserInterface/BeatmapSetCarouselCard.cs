@@ -36,15 +36,31 @@ public partial class BeatmapSetCarouselCard : CarouselCard<BeatmapSet>
     // Covers ease in from a slight zoom as they finish loading, rather than a flat fade.
     private const float cover_load_in_scale = 1.06f;
 
-    private const float row_cover_size = 48;
-    private const float row_text_x = 74;
-    private const float tile_cover_size = 120;
+    /// <summary>
+    /// The sizes of a card's faces, at rest and (Skim…) while the list skims: smaller covers, the title and
+    /// artist a little smaller, the extras gone.
+    /// </summary>
+    private sealed record FaceSizes(
+        float RowCover, float SkimRowCover, float RowTextX, float SkimRowTextX, float SkimTextScale,
+        int TitleFont, int ArtistFont, float ExtrasText, float BestText, float SkylineHeight, float SkylineBar,
+        float TileCover, float SkimTileCover, int TileTitleFont, int TileArtistFont, float TileArtistOffset);
 
-    // Skimming: a smaller cover, the title and artist a little smaller, the extras gone.
-    private const float skim_row_cover_size = 34;
-    private const float skim_row_text_x = 60;
-    private const float skim_row_text_scale = 0.86f;
-    private const float skim_tile_cover_size = 84;
+    private static readonly FaceSizes desktop_sizes = new FaceSizes(
+        48, 34, 74, 60, 0.86f,
+        21, 15, 14, 12.5f, 26, 6,
+        120, 84, 15, 12, 28);
+
+    // A phone's: a little bigger in the rail (its rows are only a little taller than the desktop's), and
+    // bigger in the strip, for a thumb.
+    private static readonly FaceSizes phone_sizes = new FaceSizes(
+        54, 40, 80, 66, 0.85f,
+        23, 17, 15, 13.5f, 28, 7,
+        132, 100, 18, 14, 31);
+
+    [Resolved(canBeNull: true)]
+    private GameLayout? gameLayout { get; set; }
+
+    private FaceSizes sizes = desktop_sizes;
 
     /// <summary>
     /// The skim amount the faces are laid out for.
@@ -146,7 +162,7 @@ public partial class BeatmapSetCarouselCard : CarouselCard<BeatmapSet>
                     Anchor = Anchor.CentreLeft,
                     Origin = Anchor.CentreLeft,
                     X = 10,
-                    Size = new Vector2(row_cover_size),
+                    Size = new Vector2(sizes.RowCover),
                     Masking = true,
                     CornerRadius = 8,
                     DecodeTargetSize = row_decode_size,
@@ -157,7 +173,7 @@ public partial class BeatmapSetCarouselCard : CarouselCard<BeatmapSet>
                 {
                     Anchor = Anchor.CentreLeft,
                     Origin = Anchor.CentreLeft,
-                    X = row_text_x,
+                    X = sizes.RowTextX,
                     AutoSizeAxes = Axes.Y,
                     Direction = FlowDirection.Vertical,
                     Spacing = new Vector2(0, 1),
@@ -166,13 +182,13 @@ public partial class BeatmapSetCarouselCard : CarouselCard<BeatmapSet>
                         rowTitle = new ScrollingText
                         {
                             RelativeSizeAxes = Axes.X,
-                            Font = YuukiFontUsage.GetFontUsage(Typeface.Quicksand, 21, FontWeight.Bold),
+                            Font = YuukiFontUsage.GetFontUsage(Typeface.Quicksand, sizes.TitleFont, FontWeight.Bold),
                             Color = ink
                         },
                         rowArtist = new ScrollingText
                         {
                             RelativeSizeAxes = Axes.X,
-                            Font = YuukiFontUsage.GetFontUsage(Typeface.Nunito, 15, FontWeight.SemiBold),
+                            Font = YuukiFontUsage.GetFontUsage(Typeface.Nunito, sizes.ArtistFont, FontWeight.SemiBold),
                             Color = SetlistColors.Secondary(ink)
                         }
                     }
@@ -187,17 +203,17 @@ public partial class BeatmapSetCarouselCard : CarouselCard<BeatmapSet>
                     Spacing = new Vector2(12, 0),
                     Children = new Drawable[]
                     {
-                        rowBest = new BestMark
+                        rowBest = new BestMark(sizes.BestText)
                         {
                             Anchor = Anchor.CentreLeft,
                             Origin = Anchor.CentreLeft
                         },
-                        rowSkyline = new LevelSkyline
+                        rowSkyline = new LevelSkyline(sizes.SkylineHeight, sizes.SkylineBar)
                         {
                             Anchor = Anchor.CentreLeft,
                             Origin = Anchor.CentreLeft
                         },
-                        rowLanes = new LaneLabel
+                        rowLanes = new LaneLabel(sizes.ExtrasText)
                         {
                             Anchor = Anchor.CentreLeft,
                             Origin = Anchor.CentreLeft,
@@ -242,7 +258,7 @@ public partial class BeatmapSetCarouselCard : CarouselCard<BeatmapSet>
                 {
                     RelativeSizeAxes = Axes.None,
                     X = 6,
-                    Size = new Vector2(tile_cover_size),
+                    Size = new Vector2(sizes.TileCover),
                     Masking = true,
                     CornerRadius = 10,
                     BorderColor = ink.WithAlpha(0.3f),
@@ -259,17 +275,17 @@ public partial class BeatmapSetCarouselCard : CarouselCard<BeatmapSet>
                 tileTitle = new ScrollingText
                 {
                     X = 6,
-                    Y = tile_cover_size + 8,
-                    Width = tile_cover_size + 10,
-                    Font = YuukiFontUsage.GetFontUsage(Typeface.Quicksand, 15, FontWeight.Bold),
+                    Y = sizes.TileCover + 8,
+                    Width = sizes.TileCover + 10,
+                    Font = YuukiFontUsage.GetFontUsage(Typeface.Quicksand, sizes.TileTitleFont, FontWeight.Bold),
                     Color = ink
                 },
                 tileArtist = new ScrollingText
                 {
                     X = 6,
-                    Y = tile_cover_size + 28,
-                    Width = tile_cover_size + 10,
-                    Font = YuukiFontUsage.GetFontUsage(Typeface.Nunito, 12, FontWeight.SemiBold),
+                    Y = sizes.TileCover + sizes.TileArtistOffset,
+                    Width = sizes.TileCover + 10,
+                    Font = YuukiFontUsage.GetFontUsage(Typeface.Nunito, sizes.TileArtistFont, FontWeight.SemiBold),
                     Color = SetlistColors.Secondary(ink)
                 }
             }
@@ -321,6 +337,26 @@ public partial class BeatmapSetCarouselCard : CarouselCard<BeatmapSet>
         updateCoverSources();
     }
 
+    private void rebuildFaces(FaceSizes newSizes)
+    {
+        sizes = newSizes;
+
+        if (rowFace != null)
+            Remove(rowFace);
+
+        if (tileFace != null)
+            Remove(tileFace);
+
+        rowFace = null;
+        tileFace = null;
+
+        if (BeatmapSet != null)
+        {
+            ensureActiveFace();
+            populate();
+        }
+    }
+
     private void ensureActiveFace()
     {
         if (vertical)
@@ -366,6 +402,12 @@ public partial class BeatmapSetCarouselCard : CarouselCard<BeatmapSet>
     {
         base.Update();
 
+        // The faces are built for one layout's sizes; a change of layout builds them again.
+        var wanted = gameLayout?.IsPhone == true ? phone_sizes : desktop_sizes;
+
+        if (wanted != sizes)
+            rebuildFaces(wanted);
+
         float skim = Motion?.Skim ?? 0;
 
         if (skim != laidOutSkim)
@@ -392,20 +434,20 @@ public partial class BeatmapSetCarouselCard : CarouselCard<BeatmapSet>
 
         if (rowFace != null)
         {
-            rowCover!.Size = new Vector2(lerp(row_cover_size, skim_row_cover_size));
-            rowText!.X = lerp(row_text_x, skim_row_text_x);
-            rowText.Scale = new Vector2(lerp(1, skim_row_text_scale));
+            rowCover!.Size = new Vector2(lerp(sizes.RowCover, sizes.SkimRowCover));
+            rowText!.X = lerp(sizes.RowTextX, sizes.SkimRowTextX);
+            rowText.Scale = new Vector2(lerp(1, sizes.SkimTextScale));
             rowExtras!.Alpha = 1 - skim;
         }
 
         if (tileFace != null)
         {
-            float cover = lerp(tile_cover_size, skim_tile_cover_size);
+            float cover = lerp(sizes.TileCover, sizes.SkimTileCover);
 
             tileCover!.Size = new Vector2(cover);
             tileTitle!.Y = cover + 8;
             tileTitle.Width = cover + 10;
-            tileArtist!.Y = cover + 28;
+            tileArtist!.Y = cover + sizes.TileArtistOffset;
             tileArtist.Width = cover + 10;
         }
     }

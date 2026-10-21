@@ -34,6 +34,19 @@ public partial class MusicPlayerOverlay : OverlayContainer
     private const float list_height = 320;
     private const float footer_margin = 116;
 
+    /// <summary>
+    /// How much bigger the panel is on a phone, so its text and buttons come out big enough; its list
+    /// gets shorter to fit.
+    /// </summary>
+    private const float phone_scale = 1.2f;
+
+    /// <summary>
+    /// The least room kept above the panel, and the shortest its list gets.
+    /// </summary>
+    private const float top_margin = 24;
+
+    private const float min_list_height = 120;
+
     [Resolved(canBeNull: true)]
     private UISoundPlayer? uiSounds { get; set; }
 
@@ -58,6 +71,13 @@ public partial class MusicPlayerOverlay : OverlayContainer
     private MusicProgressBar progressBar = null!;
     private IconSprite playPauseIcon = null!;
     private YuukiScrollableContainer listScroll = null!;
+    private Container list = null!;
+
+    // The list's height as fitted to the canvas (list_height when there's room).
+    private float listHeight = list_height;
+
+    [Resolved(canBeNull: true)]
+    private GameLayout? gameLayout { get; set; }
 
     // The controls that switch the song, locked (dimmed, ignoring clicks) on screens tied to one song.
     private ControlButton[] trackButtons = Array.Empty<ControlButton>();
@@ -229,7 +249,7 @@ public partial class MusicPlayerOverlay : OverlayContainer
 
     private Drawable buildList()
     {
-        var container = new Container
+        var container = list = new Container
         {
             Anchor = Anchor.TopLeft,
             Origin = Anchor.TopLeft,
@@ -330,17 +350,17 @@ public partial class MusicPlayerOverlay : OverlayContainer
     {
         listExpanded = !listExpanded;
 
-        float targetHeight = listExpanded
-            ? header_height + controls_height + list_height
-            : header_height + controls_height;
-
-        panel.ResizeTo(new Vector2(panel_width, targetHeight), 300, Easing.OutQuint);
+        panel.ResizeTo(new Vector2(panel_width, panelHeight), 300, Easing.OutQuint);
         listScroll.FadeTo(listExpanded ? 1 : 0, 200, Easing.OutQuint);
     }
+
+    private float panelHeight => header_height + controls_height + (listExpanded ? listHeight : 0);
 
     public override void Update()
     {
         base.Update();
+
+        fitToCanvas();
 
         if (audioManager == null)
             return;
@@ -352,6 +372,28 @@ public partial class MusicPlayerOverlay : OverlayContainer
         double length = audioManager.TrackLength;
         progressBar.DisplayDurationMs = length;
         progressBar.SetProgressDisplay(length > 0 ? (float)(audioManager.CurrentTime / length) : 0);
+    }
+
+    /// <summary>
+    /// Bigger on a phone; the list shortens to keep the panel under the top of the canvas.
+    /// </summary>
+    private void fitToCanvas()
+    {
+        float scale = gameLayout?.IsPhone == true ? phone_scale : 1;
+
+        if (panel.Scale.X != scale)
+            panel.Scale = new Vector2(scale);
+
+        float fitted = Math.Clamp((DrawHeight - footer_margin - top_margin) / scale - header_height - controls_height, min_list_height, list_height);
+
+        if (Math.Abs(fitted - listHeight) < 0.5f)
+            return;
+
+        // Resized rather than set, so a resize already running (the list opening) heads for the new height
+        // and the open animation keeps going.
+        listHeight = fitted;
+        list.Height = fitted;
+        panel.ResizeTo(new Vector2(panel_width, panelHeight), 300, Easing.OutQuint);
     }
 
     protected override void PopIn()

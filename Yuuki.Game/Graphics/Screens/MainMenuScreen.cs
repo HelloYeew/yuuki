@@ -40,6 +40,11 @@ public partial class MainMenuScreen : YuukiScreen, IHaveScreenAction
     /// </summary>
     private const float menu_idle_y = 220;
 
+    /// <summary>
+    /// The least room kept either side of the buttons; on a narrower canvas they shrink to keep it.
+    /// </summary>
+    private const float menu_side_margin = 24;
+
     private const float logo_margin = 48;
     private static readonly Vector2 logo_size = new Vector2(340, 138);
 
@@ -66,6 +71,9 @@ public partial class MainMenuScreen : YuukiScreen, IHaveScreenAction
 
     [Resolved(canBeNull: true)]
     private HoldToExitGameOverlay? holdToExit { get; set; }
+
+    [Resolved(canBeNull: true)]
+    private GameLayout? gameLayout { get; set; }
 
     private NowPlayingToast nowPlaying = null!;
     private BeatSyncingLogo logo = null!;
@@ -346,6 +354,14 @@ public partial class MainMenuScreen : YuukiScreen, IHaveScreenAction
         float fullHeight = DrawSize.Y + (Parent?.Padding.Bottom ?? 0);
         idleLayer.Height = fullHeight;
 
+        // The song card keeps clear of the logo.
+        nowPlaying.MaxCardWidth = DrawWidth - (logo_margin + logo_size.X + logo_margin) - logo_margin;
+
+        // On a narrow canvas (a phone's, or a big UI scale) the buttons shrink to fit, the bar with them.
+        float menuScale = MenuShearButton.ScaleToFit(buttonFlow.DrawSize, DrawWidth - 2 * menu_side_margin);
+        buttonFlow.Scale = new Vector2(menuScale);
+        menuBox.Height = buttonFlow.DrawHeight * menuScale;
+
         // The logo glides from the top-left to the bottom-left corner.
         float idleLogoY = fullHeight - logo_size.Y - logo_margin;
         logo.Position = new Vector2(logo_margin, logo_margin + (idleLogoY - logo_margin) * idleAmount);
@@ -356,6 +372,11 @@ public partial class MainMenuScreen : YuukiScreen, IHaveScreenAction
         idleShade.Alpha = settled(idleAmount);
         idlePanel.Alpha = settled((idleAmount - panel_from) / (1 - panel_from));
         idlePanel.X = -logo_margin + (1 - idleAmount) * 60;
+
+        // Bigger on a phone, so its text comes out big enough to read.
+        float panelScale = gameLayout?.IsPhone == true ? 1.2f : 1;
+        if (idlePanel.Scale.X != panelScale)
+            idlePanel.Scale = new Vector2(panelScale);
         versionText.Alpha = settled(1 - idleAmount);
         exitButton.Alpha = versionText.Alpha;
     }
@@ -373,8 +394,8 @@ public partial class MainMenuScreen : YuukiScreen, IHaveScreenAction
         active = true;
         idleTracker.Wake();
         nowPlaying.Show(workingBeatmap?.BeatmapSet, force: true);
-        menuBox.MoveToY(-98, 500, Easing.OutBack);
-        buttonFlow.MoveToY(-98, 500, Easing.OutBack);
+        menuBox.MoveToY(menu_shown_y, 500, Easing.OutBack);
+        buttonFlow.MoveToY(menu_shown_y, 500, Easing.OutBack);
         this.FadeIn(500, Easing.OutQuint);
     }
 
