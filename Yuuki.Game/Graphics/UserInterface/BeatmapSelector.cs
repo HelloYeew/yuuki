@@ -20,12 +20,13 @@ using Yuuki.Game.Audio;
 using Yuuki.Game.Beatmaps;
 using Yuuki.Game.Configurations;
 using Yuuki.Game.Graphics.Colors;
+using Yuuki.Game.Graphics.Containers;
 
 namespace Yuuki.Game.Graphics.UserInterface;
 
 /// <summary>
 /// The reusable song-selection cluster: a beatmap-set carousel plus a difficulty carousel (with their
-/// navigation chevrons and backdrop), the two-stage set->difficulty selection state machine, the
+/// frosted band and the docked song), the two-stage set->difficulty selection state machine, the
 /// debounced commit to the working beatmap, and the show/hide of the whole region. Hosting screens
 /// (solo, and later multiplayer) supply their own chrome — song info panel, back/go buttons, screen
 /// transitions — and drive this via its small public API + <see cref="SetChanged"/> /
@@ -95,8 +96,19 @@ public partial class BeatmapSelector : Container
     /// </summary>
     public Beatmap? CurrentBeatmap => workingBeatmap?.Beatmap ?? difficultyCarousel?.CurrentItem.Value;
 
-    private const float bar_hidden_y = 200f;
-    private const float bar_shown_y = -98f;
+    /// <summary>
+    /// The lists end this far above the screen's bottom, leaving the back and go buttons below them.
+    /// </summary>
+    private const float region_bottom_gap = 98f;
+
+    /// <summary>
+    /// The horizontal strip's glass height, and how far above it the hero tile rises.
+    /// </summary>
+    private const float strip_height = 250f;
+
+    private const float strip_rise = 100f;
+
+    private const double region_slide_duration = 500;
 
     /// <summary>
     /// Fraction of the screen width the carousel region occupies in vertical mode.
@@ -110,26 +122,22 @@ public partial class BeatmapSelector : Container
 
     private const double selection_commit_delay = 300;
 
-    private static readonly Color cream_color = ColorExtensions.FromHex("#DFCFBC");
-
-    private Box menuBox = null!;
+    // The frosted glass both lists sit on: the rail (vertical) or the strip (horizontal).
+    private FrostedBand band = null!;
     private Container carouselContainer = null!;
     private BeatmapSetCarousel carousel = null!;
     private Container difficultyContainer = null!;
 
-    // Shown where the song list would be when the filter lets nothing through, with a shade behind it
-    // in the vertical layout, where the list floats over the background.
+    // The song being picked from, docked at the start of the difficulty list.
+    private DockedSong dock = null!;
+
+    // Shown where the song list would be when the filter lets nothing through.
     private NoResultsPlaceholder noResults = null!;
-    private Container noResultsShade = null!;
 
     // A song picked from outside (the music player) that the filter would hide: listed anyway
     // so the list holds what's playing and Go picks what's shown. Dropped when the filter changes.
     private BeatmapSet? forcedSet;
     private BeatmapCarousel difficultyCarousel = null!;
-
-    // Every navigation chevron, tagged with whether it steps to the previous item, so the layout can
-    // reposition/re-icon them (left/right vs. up/down) when the orientation flips.
-    private readonly List<(ClickableContainer Button, IconSprite Icon, bool Previous)> chevrons = new List<(ClickableContainer, IconSprite, bool)>();
 
     private CarouselOrientation currentOrientation = CarouselOrientation.Horizontal;
     private bool regionShown;
@@ -163,10 +171,13 @@ public partial class BeatmapSelector : Container
     public void FocusSearch() => filterControl.FocusSearch();
 
     /// <summary>
-    /// Where the horizontal strip begins, in screen space (its top edge) — what song select's info panel
-    /// has to stay above. Infinite in the vertical layout, where the list is off to the side.
+    /// Where the horizontal strip begins, in screen space (the top of the hero tile rising out of it) —
+    /// what song select's info panel has to stay above. Infinite in the vertical layout, where the list is
+    /// off to the side.
     /// </summary>
-    public float StripTop => currentOrientation == CarouselOrientation.Horizontal ? carouselContainer.DrawRectangle.Y : float.PositiveInfinity;
+    public float StripTop => currentOrientation == CarouselOrientation.Horizontal
+        ? carouselContainer.DrawRectangle.Y + carousel.FocusWindowRect.Y
+        : float.PositiveInfinity;
 
     /// <summary>
     /// Where the selector's side area begins, in screen space: the list's column (vertical) or the
@@ -205,40 +216,11 @@ public partial class BeatmapSelector : Container
         navigationSounds = new NavigationSoundPlayer(sampleStore?.Get("UI/scroll-previous.wav"), sampleStore?.Get("UI/scroll-next.wav"));
 
         var palette = ScreenPalette.Resolve(screenPalette, colorProvider);
-        var textColor = palette.Text;
-        var iconColor = textColor.Darken(0.2f);
 
-        Add(menuBox = new Box
-        {
-            Anchor = Anchor.BottomCentre,
-            Origin = Anchor.BottomCentre,
-            RelativeSizeAxes = Axes.X,
-            Position = new Vector2(0, bar_hidden_y),
-            Size = new Vector2(1, 150),
-            Alpha = 0,
-            Color = cream_color
-        });
+        Add(band = new FrostedBand { Alpha = 0 });
 
-        Add(noResultsShade = new Container
+        Add(carouselContainer = new Container
         {
-            Anchor = Anchor.CentreRight,
-            Origin = Anchor.CentreRight,
-            RelativeSizeAxes = Axes.Y,
-            Alpha = 0,
-            Child = new Box
-            {
-                RelativeSizeAxes = Axes.Both,
-                ColorInfo = ColorInfo.GradientHorizontal(Color.Black.WithAlpha(0), Color.Black.WithAlpha(0.6f))
-            }
-        });
-
-        Add(carouselContainer = new Container()
-        {
-            Anchor = Anchor.BottomCentre,
-            Origin = Anchor.BottomCentre,
-            RelativeSizeAxes = Axes.X,
-            Position = new Vector2(0, bar_hidden_y),
-            Size = new Vector2(1, 150),
             Alpha = 0,
             Children = new Drawable[]
             {
@@ -247,27 +229,29 @@ public partial class BeatmapSelector : Container
                 {
                     RequestClearSearch = () => filterControl.SetSearch(string.Empty),
                     RequestClearLevelRange = () => filterControl.ClearLevelRange()
-                },
-                createChevronButton(previous: true, NavigatePrevious, iconColor),
-                createChevronButton(previous: false, NavigateNext, iconColor)
+                }
             }
         });
 
-        Add(difficultyContainer = new Container()
+        Add(difficultyContainer = new Container
         {
-            Anchor = Anchor.BottomCentre,
-            Origin = Anchor.BottomCentre,
-            RelativeSizeAxes = Axes.X,
-            Position = new Vector2(0, bar_hidden_y),
-            Size = new Vector2(1, 150),
             Alpha = 0,
-            Children = new Drawable[]
+            Child = difficultyCarousel = new BeatmapCarousel()
+        });
+
+        Add(dock = new DockedSong
+        {
+            Alpha = 0,
+            Action = () =>
             {
-                difficultyCarousel = new BeatmapCarousel(),
-                createChevronButton(previous: true, NavigatePrevious, iconColor),
-                createChevronButton(previous: false, NavigateNext, iconColor)
+                if (State == SelectionState.SelectingBeatmap)
+                    ExitToSets();
             }
         });
+
+        // On the light glass the scrollbars are ink, not white.
+        carousel.ScrollbarTrackColor = difficultyCarousel.ScrollbarTrackColor = palette.Text.WithAlpha(0.07f);
+        carousel.ScrollbarThumbColor = difficultyCarousel.ScrollbarThumbColor = palette.Control.WithAlpha(0.5f);
 
         carousel.CurrentItem.BindValueChanged(onCarouselSetChanged);
         difficultyCarousel.CurrentItem.BindValueChanged(onCarouselBeatmapChanged);
@@ -346,67 +330,77 @@ public partial class BeatmapSelector : Container
     private void onOrientationSettingChanged(ValueChangedEvent<CarouselOrientation> e) => applyOrientation(e.NewValue);
 
     /// <summary>
-    /// Reshapes the whole region for a new orientation: forwards it to both carousels, swaps the region
-    /// between a bottom bar and a right-hand strip, and re-places the navigation chevrons. Keeps the
-    /// region's shown/hidden state so a live switch while on screen stays visible.
+    /// Reshapes the whole region for a new orientation: forwards it to both carousels and the dock, and
+    /// swaps the region between the rail (right) and the strip (bottom). Keeps the region's shown/hidden
+    /// state so a live switch while on screen stays visible.
     /// </summary>
     private void applyOrientation(CarouselOrientation orientation)
     {
         currentOrientation = orientation;
         carousel.Orientation.Value = orientation;
         difficultyCarousel.Orientation.Value = orientation;
+        dock.SetOrientation(orientation);
 
         bool vertical = orientation == CarouselOrientation.Vertical;
 
-        foreach (var region in new Drawable[] { menuBox, carouselContainer, difficultyContainer })
-        {
-            region.Anchor = region.Origin = vertical ? Anchor.CentreRight : Anchor.BottomCentre;
-            region.RelativeSizeAxes = vertical ? Axes.Y : Axes.X;
-            region.Size = vertical ? new Vector2(verticalRegionWidth, 1f) : new Vector2(1, 150);
-            region.Position = regionShown ? shownPosition : hiddenPosition;
-        }
+        band.RimEdge = vertical ? Edges.Left : Edges.Top;
+
+        foreach (var region in new Drawable[] { band, carouselContainer, difficultyContainer })
+            region.Anchor = region.Origin = vertical ? Anchor.TopRight : Anchor.BottomCentre;
+
+        dock.Anchor = dock.Origin = vertical ? Anchor.TopRight : Anchor.BottomLeft;
+
+        layoutRegions();
+
+        band.Position = carouselContainer.Position = difficultyContainer.Position = regionShown ? shownPosition : hiddenPosition;
+        dock.Position = regionShown ? dockShownPosition : dockHiddenPosition;
 
         noResults.SetLayout(orientation);
 
-        // The shade is for the vertical list only; the horizontal strip has its cream bar.
-        if (!vertical)
-            noResultsShade.FadeOut(200, Easing.OutQuint);
-        else if (noResults.IsPresented)
-            noResultsShade.FadeIn(400, Easing.OutQuint);
-
-        // The vertical song list starts below the filters rather than running under them. The
-        // difficulty list has the column to itself: the filters step aside while picking a difficulty.
+        // The vertical song list starts below the filters rather than running under them, and the
+        // difficulty list below the docked song. The strip's lists take the whole region: the hero tile
+        // rises into its top part.
         carouselContainer.Padding = new MarginPadding { Top = vertical ? BeatmapFilterControl.VERTICAL_HEIGHT + filter_gap : 0 };
-
-        // The cream backdrop is only the horizontal bottom bar. In vertical the list floats over the game
-        // background, so the backdrop is hidden entirely.
-        menuBox.Color = cream_color;
-        if (regionShown)
-            menuBox.Alpha = menuBoxShownAlpha;
+        difficultyContainer.Padding = new MarginPadding { Top = vertical ? DockedSong.CARD_HEIGHT + dock_margin * 2 : 0 };
 
         // The filters ride with the region: over the top of the vertical list, or above the strip's right end.
         filterControl.Anchor = filterControl.Origin = vertical ? Anchor.TopRight : Anchor.BottomRight;
         filterControl.SetLayout(orientation, filterWidth);
         filterControl.Position = regionShown ? filterShownPosition : filterHiddenPosition;
+    }
 
-        foreach (var (button, icon, previous) in chevrons)
+    /// <summary>
+    /// Sizes the band and both lists for the current orientation and window: the rail is a capped share of
+    /// the width, its glass full height and its lists down to the buttons; the strip spans the width, with
+    /// room above it for the hero.
+    /// </summary>
+    private void layoutRegions()
+    {
+        if (currentOrientation == CarouselOrientation.Vertical)
         {
-            if (vertical)
-            {
-                button.Anchor = button.Origin = previous ? Anchor.TopCentre : Anchor.BottomCentre;
-                button.RelativeSizeAxes = Axes.X;
-                button.Size = new Vector2(1f, 48);
-                icon.Icon = previous ? IconUsage.ExpandLess : IconUsage.ExpandMore;
-            }
-            else
-            {
-                button.Anchor = button.Origin = previous ? Anchor.CentreLeft : Anchor.CentreRight;
-                button.RelativeSizeAxes = Axes.None;
-                button.Size = new Vector2(48, 150);
-                icon.Icon = previous ? IconUsage.ChevronLeft : IconUsage.ChevronRight;
-            }
+            // The glass runs the screen's full height; the lists on it stop above the buttons.
+            band.Size = new Vector2(verticalRegionWidth, DrawHeight);
+            carouselContainer.Size = difficultyContainer.Size = new Vector2(verticalRegionWidth, Math.Max(0, DrawHeight - region_bottom_gap));
+            dock.Size = new Vector2(Math.Max(0, verticalRegionWidth - dock_margin * 2), DockedSong.CARD_HEIGHT);
+        }
+        else
+        {
+            band.Size = new Vector2(DrawWidth, strip_height);
+            carouselContainer.Size = difficultyContainer.Size = new Vector2(DrawWidth, strip_height + strip_rise);
+            dock.Size = DockedSong.TileSize;
         }
     }
+
+    /// <summary>The docked song's distance from the band's edges.</summary>
+    private const float dock_margin = 16;
+
+    private Vector2 dockShownPosition => currentOrientation == CarouselOrientation.Vertical
+        ? new Vector2(-dock_margin, dock_margin)
+        : new Vector2(24, -(region_bottom_gap + 40));
+
+    private Vector2 dockHiddenPosition => currentOrientation == CarouselOrientation.Vertical
+        ? dockShownPosition + new Vector2(verticalRegionWidth, 0)
+        : dockShownPosition + new Vector2(0, strip_height + region_bottom_gap);
 
     /// <summary>The space between the filters and the vertical list below them.</summary>
     private const float filter_gap = 8;
@@ -416,26 +410,23 @@ public partial class BeatmapSelector : Container
         : BeatmapFilterControl.HORIZONTAL_WIDTH;
 
     // Vertical: across the top of the list's column, flush with the screen's right edge.
-    // Horizontal: just above the strip's right end (the strip's top sits a strip's height above bar_shown_y).
+    // Horizontal: above the strip's right end, clear of the hero tile rising out of it.
     private Vector2 filterShownPosition => currentOrientation == CarouselOrientation.Vertical
         ? Vector2.Zero
-        : new Vector2(-24, bar_shown_y - 150 - 12);
+        : new Vector2(-24, -(region_bottom_gap + strip_height + strip_rise));
 
     private Vector2 filterHiddenPosition => currentOrientation == CarouselOrientation.Vertical
         ? filterShownPosition + new Vector2(verticalRegionWidth, 0)
-        : filterShownPosition + new Vector2(0, bar_hidden_y - bar_shown_y);
+        : filterShownPosition + new Vector2(0, strip_height + strip_rise + region_bottom_gap + BeatmapFilterControl.HORIZONTAL_HEIGHT);
 
-    private Vector2 shownPosition => currentOrientation == CarouselOrientation.Vertical ? Vector2.Zero : new Vector2(0, bar_shown_y);
+    private Vector2 shownPosition => currentOrientation == CarouselOrientation.Vertical ? Vector2.Zero : new Vector2(0, -region_bottom_gap);
 
     private Vector2 hiddenPosition => currentOrientation == CarouselOrientation.Vertical
         ? new Vector2(verticalRegionWidth, 0)
-        : new Vector2(0, bar_hidden_y);
+        : new Vector2(0, strip_height + strip_rise);
 
     /// <summary>Vertical region width: half the screen, capped so it never gets absurdly wide.</summary>
     private float verticalRegionWidth => Math.Min(DrawWidth * vertical_region_fraction, vertical_region_max_width);
-
-    // Cream backdrop: shown as the horizontal bottom bar, hidden entirely for the vertical list.
-    private float menuBoxShownAlpha => currentOrientation == CarouselOrientation.Vertical ? 0f : 1f;
 
     private List<BeatmapSet> getDisplayBeatmapSets()
     {
@@ -512,7 +503,6 @@ public partial class BeatmapSelector : Container
         if (carousel.Count > 0)
         {
             noResults.Dismiss();
-            noResultsShade.FadeOut(400, Easing.OutQuint);
             return;
         }
 
@@ -528,32 +518,6 @@ public partial class BeatmapSelector : Container
 
         bool libraryEmpty = beatmapsCollection == null || !beatmapsCollection.BeatmapSets.Any(s => !s.Hide);
         noResults.Present(Filter, libraryEmpty);
-
-        if (currentOrientation == CarouselOrientation.Vertical)
-            noResultsShade.FadeIn(1000, Easing.OutQuint);
-    }
-
-    private Drawable createChevronButton(bool previous, Action action, Color iconColor)
-    {
-        IconSprite icon;
-        var button = new ClickableContainer()
-        {
-            Anchor = previous ? Anchor.CentreLeft : Anchor.CentreRight,
-            Origin = previous ? Anchor.CentreLeft : Anchor.CentreRight,
-            Size = new Vector2(48, 150),
-            Action = action,
-            Child = icon = new IconSprite()
-            {
-                Anchor = Anchor.Centre,
-                Origin = Anchor.Centre,
-                Icon = previous ? IconUsage.ChevronLeft : IconUsage.ChevronRight,
-                IconSize = 32,
-                Color = iconColor.Darken(0.1f)
-            }
-        };
-
-        chevrons.Add((button, icon, previous));
-        return button;
     }
 
     private void onCarouselSetChanged(ValueChangedEvent<BeatmapSet?> e)
@@ -639,22 +603,12 @@ public partial class BeatmapSelector : Container
             commitSelection(pendingBeatmapSet);
         }
 
-        // The shade sits behind the list's column and reaches well past it, following it in and out.
-        noResultsShade.X = carouselContainer.X;
-        noResultsShade.Width = Math.Min(DrawSize.X, carouselContainer.DrawSize.X * 2);
+        // Keep the (screen-relative) region sizes in sync as the window resizes.
+        float railWidth = carouselContainer.Width;
+        layoutRegions();
 
-        // Keep the (capped, screen-relative) region width in sync as the window resizes.
-        if (currentOrientation == CarouselOrientation.Vertical)
-        {
-            float width = verticalRegionWidth;
-            if (Math.Abs(carouselContainer.Width - width) > 0.5f)
-            {
-                menuBox.Width = width;
-                carouselContainer.Width = width;
-                difficultyContainer.Width = width;
-                filterControl.SetLayout(CarouselOrientation.Vertical, filterWidth);
-            }
-        }
+        if (currentOrientation == CarouselOrientation.Vertical && Math.Abs(carouselContainer.Width - railWidth) > 0.5f)
+            filterControl.SetLayout(CarouselOrientation.Vertical, filterWidth);
     }
 
     private void commitSelection(BeatmapSet? set)
@@ -749,6 +703,7 @@ public partial class BeatmapSelector : Container
             return false;
 
         uiSounds?.Play(UISound.Select);
+        dockSong(workingBeatmap.BeatmapSet);
         carousel.AnimateExit();
         difficultyCarousel.AnimateEntrance();
         setState(SelectionState.SelectingBeatmap);
@@ -833,6 +788,7 @@ public partial class BeatmapSelector : Container
         {
             carouselContainer.FadeIn(duration, Easing.OutQuint);
             difficultyContainer.FadeOut(duration, Easing.OutQuint);
+            dock.FadeOut(duration, Easing.OutQuint);
 
             if (regionShown)
                 filterControl.FadeIn(duration, Easing.OutQuint);
@@ -842,10 +798,31 @@ public partial class BeatmapSelector : Container
             carouselContainer.FadeOut(duration, Easing.OutQuint);
             difficultyContainer.FadeIn(duration, Easing.OutQuint);
 
+            if (regionShown)
+                dock.FadeIn(duration, Easing.OutQuint);
+
             // The filters are for finding a song; with one picked they step aside (and let go of the keyboard).
             filterControl.FadeOut(duration, Easing.OutQuint);
             filterControl.ReleaseSearchFocus();
         }
+    }
+
+    /// <summary>
+    /// Docks the song being picked from at the start of the difficulty list, flying it there from the
+    /// song list's focus window so it reads as the same card moving.
+    /// </summary>
+    private void dockSong(BeatmapSet set)
+    {
+        dock.Show(set);
+
+        dock.ClearTransforms();
+        dock.Position = dockShownPosition;
+
+        var window = carousel.FocusWindowRect;
+        var from = ToLocalSpace(carousel.ToScreenSpace(window.Center)) - ToLocalSpace(dock.ToScreenSpace(dock.DrawSize / 2));
+
+        dock.MoveTo(dockShownPosition + from)
+            .MoveTo(dockShownPosition, 460, UserInterfaceConstant.SoftBounce);
     }
 
     /// <summary>
@@ -855,13 +832,15 @@ public partial class BeatmapSelector : Container
     {
         regionShown = true;
 
+        // No overshoot: the band is anchored to the screen's edge, and a bounce would open a gap there.
         var target = shownPosition;
-        menuBox.MoveTo(target, 500, Easing.OutBack)
-            .FadeTo(menuBoxShownAlpha, 500, Easing.OutQuint);
-        carouselContainer.MoveTo(target, 500, Easing.OutBack);
-        difficultyContainer.MoveTo(target, 500, Easing.OutBack);
+        band.MoveTo(target, region_slide_duration, Easing.OutQuint)
+            .FadeIn(region_slide_duration, Easing.OutQuint);
+        carouselContainer.MoveTo(target, region_slide_duration, Easing.OutQuint);
+        difficultyContainer.MoveTo(target, region_slide_duration, Easing.OutQuint);
+        dock.MoveTo(dockShownPosition, region_slide_duration, Easing.OutQuint);
         // Its fade follows the state (it stays hidden while picking a difficulty).
-        filterControl.MoveTo(filterShownPosition, 500, Easing.OutQuint);
+        filterControl.MoveTo(filterShownPosition, region_slide_duration, Easing.OutQuint);
 
         updateStateVisibility(true);
 
@@ -880,13 +859,15 @@ public partial class BeatmapSelector : Container
         regionShown = false;
 
         var target = hiddenPosition;
-        menuBox.MoveTo(target, 500, Easing.OutBack)
-            .FadeOut(500, Easing.OutQuint);
-        carouselContainer.MoveTo(target, 500, Easing.OutBack)
-            .FadeOut(500, Easing.OutQuint);
-        difficultyContainer.MoveTo(target, 500, Easing.OutBack)
-            .FadeOut(500, Easing.OutQuint);
-        filterControl.MoveTo(filterHiddenPosition, 500, Easing.OutQuint).FadeOut(300, Easing.OutQuint);
+        band.MoveTo(target, region_slide_duration, Easing.OutQuint)
+            .FadeOut(region_slide_duration, Easing.OutQuint);
+        carouselContainer.MoveTo(target, region_slide_duration, Easing.OutQuint)
+            .FadeOut(region_slide_duration, Easing.OutQuint);
+        difficultyContainer.MoveTo(target, region_slide_duration, Easing.OutQuint)
+            .FadeOut(region_slide_duration, Easing.OutQuint);
+        dock.MoveTo(dockHiddenPosition, region_slide_duration, Easing.OutQuint)
+            .FadeOut(region_slide_duration, Easing.OutQuint);
+        filterControl.MoveTo(filterHiddenPosition, region_slide_duration, Easing.OutQuint).FadeOut(300, Easing.OutQuint);
 
         // Cascade the cards out to match the entrance.
         carousel.AnimateExit();

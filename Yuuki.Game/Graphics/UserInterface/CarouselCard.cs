@@ -1,11 +1,7 @@
 // This code is part of yuuki. project. Licensed under the MIT License.
 // See the LICENSE file for full license text.
 
-using Sakura.Framework.Extensions.ColorExtensions;
-using Sakura.Framework.Graphics.Colors;
-using Sakura.Framework.Graphics.Containers;
 using Sakura.Framework.Graphics.Pooling;
-using Sakura.Framework.Maths;
 using Sakura.Framework.Reactive;
 
 namespace Yuuki.Game.Graphics.UserInterface;
@@ -18,30 +14,6 @@ public abstract partial class CarouselCard<TModel> : PoolableDrawable
     /// carousel is switched between horizontal and vertical.
     /// </summary>
     public Reactive<CarouselOrientation>? Orientation { get; set; }
-
-    /// <summary>
-    /// A card's edge in the list: a hollow (rim-only) drop shadow that separates stacked panels,
-    /// Hollow keeps the effect on the edge instead of washing the whole card.
-    /// </summary>
-    protected static readonly EdgeEffectParameters SHADOW_EDGE = new EdgeEffectParameters
-    {
-        Type = EdgeEffectType.Shadow,
-        Color = Color.Black.WithAlpha(0.35f),
-        Radius = 4f,
-        Offset = new Vector2(0f, 2f),
-        Hollow = true
-    };
-
-    /// <summary>
-    /// The selected card's edge: a white ring of glow in place of the shadow.
-    /// </summary>
-    protected static readonly EdgeEffectParameters SELECTED_EDGE = new EdgeEffectParameters
-    {
-        Type = EdgeEffectType.Glow,
-        Color = Color.White.WithAlpha(0.5f),
-        Radius = 7f,
-        Hollow = true
-    };
 
     protected CarouselCard()
     {
@@ -57,7 +29,7 @@ public abstract partial class CarouselCard<TModel> : PoolableDrawable
 
     /// <summary>
     /// Called when the owning carousel's orientation changes (and once on attach). Subclasses reshape
-    /// their internal layout here — e.g. swapping a square cover-flow face for a wide bar face.
+    /// their internal layout here — e.g. swapping a strip tile for a rail row.
     /// </summary>
     protected virtual void OnOrientationChanged(CarouselOrientation orientation)
     {

@@ -41,7 +41,7 @@ public enum YuukiSetting
     ScrollSpeed,
 
     /// <summary>
-    /// The direction the song-selection carousels lay out in (horizontal coverflow vs. a vertical list).
+    /// The direction the song-selection carousels lay out in (a horizontal strip vs. a vertical rail).
     /// Backed by <see cref="Yuuki.Game.Graphics.UserInterface.CarouselOrientation"/>.
     /// </summary>
     CarouselOrientation,

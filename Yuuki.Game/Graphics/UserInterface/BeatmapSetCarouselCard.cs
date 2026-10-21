@@ -3,48 +3,49 @@
 
 using System;
 using Sakura.Framework.Allocation;
-using Sakura.Framework.Audio;
 using Sakura.Framework.Extensions.ColorExtensions;
 using Sakura.Framework.Extensions.DrawableExtensions;
 using Sakura.Framework.Graphics.Colors;
 using Sakura.Framework.Graphics.Containers;
 using Sakura.Framework.Graphics.Drawables;
 using Sakura.Framework.Graphics.Primitives;
-using Sakura.Framework.Graphics.Rendering;
 using Sakura.Framework.Graphics.Transforms;
+using Sakura.Framework.Input;
 using Sakura.Framework.Maths;
 using Sakura.Framework.Platform;
 using Sakura.Framework.Reactive;
 using Yuuki.Game.Beatmaps;
 using Yuuki.Game.Configurations;
-using Yuuki.Game.Graphics.Containers;
+using Yuuki.Game.Database;
+using Yuuki.Game.Graphics.Colors;
 using Yuuki.Game.Graphics.Text;
 using Yuuki.Game.Utilities;
 
 namespace Yuuki.Game.Graphics.UserInterface;
 
+/// <summary>
+/// One song in the list: a row of the vertical rail or a tile of the horizontal strip. Rows and tiles keep
+/// one size and have no focused look of their own; the carousel's focus window shows the focused song.
+/// </summary>
 public partial class BeatmapSetCarouselCard : CarouselCard<BeatmapSet>
 {
-    /// <summary>
-    /// The edge length of a card at scale 1.
-    /// </summary>
-    public const float CARD_SIZE = 118f;
-
-    // Cover decode caps. A card only shows a small region, so we cap the decoded/uploaded texture to a
-    // little above its on-screen size (see DelayedLoadCover.DecodeTargetSize). The square face is ~118px
-    // (up to ~168 selected); the bar face is a wide, short strip that shows only a horizontal band.
-    private static readonly Vector2 album_decode_size = new Vector2(256, 256);
-    private static readonly Vector2 background_decode_size = new Vector2(768, 128);
+    // Cover decode caps: a little above the size each face shows the cover at (see DelayedLoadCover.DecodeTargetSize).
+    private static readonly Vector2 tile_decode_size = new Vector2(256, 256);
+    private static readonly Vector2 row_decode_size = new Vector2(128, 128);
 
     // Covers ease in from a slight zoom as they finish loading, rather than a flat fade.
     private const float cover_load_in_scale = 1.06f;
 
-    private static readonly string[] palette =
+    private const float row_cover_size = 48;
+    private const float row_text_x = 74;
+    private const float tile_cover_size = 120;
+
+    private static readonly string[] placeholder_palette =
     {
         "#F4A6C0", "#F6C177", "#9CCFD8", "#C4A7E7", "#A3BE8C", "#EBCB8B", "#88C0D0", "#D08770"
     };
 
-    public BeatmapSet BeatmapSet { get; private set; }
+    public BeatmapSet BeatmapSet { get; private set; } = null!;
 
     [Resolved(canBeNull: true)]
     private Storage? storage { get; set; }
@@ -53,244 +54,46 @@ public partial class BeatmapSetCarouselCard : CarouselCard<BeatmapSet>
     private YuukiConfigManager? config { get; set; }
 
     [Resolved(canBeNull: true)]
-    private WorkingBeatmap? workingBeatmap { get; set; }
+    private BeatmapsCollection? beatmapsCollection { get; set; }
 
     [Resolved(canBeNull: true)]
-    private BeatmapsCollection? beatmapsCollection { get; set; }
+    private ScoreStore? scoreStore { get; set; }
+
+    [Resolved(canBeNull: true)]
+    private ScreenPalette? screenPalette { get; set; }
+
+    [Resolved(canBeNull: true)]
+    private IYuukiColorProvider? colorProvider { get; set; }
 
     private Reactive<bool>? useUnicodeInfo;
 
-    // The square face shows the album cover; the bar face shows the beatmap background.
-    // Only the active face's cover is given a source, so we never decode both images at once.
-    // Both faces are built lazily (see ensureSquareFace/ensureBarFace) — a card in a horizontal carousel
-    // never allocates the bar face's drawable tree, and vice-versa.
-    private DelayedLoadCover? albumCover;
-    private DelayedLoadCover? backgroundCover;
-
-    // The two swappable faces. Only one face is visible at a time, and only built faces are non-null.
-    private Container? squareFace;
-    private Container? barFace;
-
-    private ScrollingText? titleText;
-    private ScrollingText? barTitleText;
-    private SpriteText? barArtistText;
-    private FlowContainer? difficultyDots;
-    private LaneCountBadge? squareLanes;
-    private LaneCountBadge? barLanes;
-
-    private Box? selectedOverlay;
+    private Color ink = Color.Black;
+    private Color placeholderColor = Color.Transparent;
     private bool vertical;
 
-    private Box flashBox = null!;
+    // Both faces are built lazily: a card in the strip never allocates the row's drawables, and vice versa.
+    // Only the active face's cover is given a source.
+    private Container? rowFace;
+    private Box? rowHover;
+    private DelayedLoadCover? rowCover;
+    private FlowContainer? rowText;
+    private ScrollingText? rowTitle;
+    private ScrollingText? rowArtist;
+    private FlowContainer? rowExtras;
+    private BestMark? rowBest;
+    private LevelSkyline? rowSkyline;
+    private LaneLabel? rowLanes;
 
-    /// <summary>
-    /// How bright the selected card flashes on each beat
-    /// </summary>
-    private const float beat_flash_alpha = 0.3f;
+    private Container? tileFace;
+    private DelayedLoadCover? tileCover;
+    private ScrollingText? tileTitle;
+    private ScrollingText? tileArtist;
 
     public BeatmapSetCarouselCard()
     {
         Anchor = Anchor.Centre;
         Origin = Anchor.Centre;
         RelativeSizeAxes = Axes.Both;
-        Masking = true;
-        CornerRadius = 12;
-        EdgeEffect = SHADOW_EDGE;
-
-        // Additive glow used to pulse the card on the beat while it is the selected set. A positive depth
-        // keeps it in front of the (lazily added, depth-0) faces — higher depth = front — so it always
-        // washes over the cover.
-        Add(flashBox = new Box
-        {
-            Anchor = Anchor.Centre,
-            Origin = Anchor.Centre,
-            RelativeSizeAxes = Axes.Both,
-            Color = Color.White,
-            Alpha = 0,
-            Depth = 1,
-            Blending = BlendingMode.Additive
-        });
-
-        // Invisible helper that ticks off the beatmap BPM (or a steady default beat while nothing plays)
-        // and drives the flash.
-        var beatSync = new BeatSyncContainer
-        {
-            AlwaysPresent = true,
-            AllowBeatSyncWhenStopped = true,
-            UseDefaultTempoWhenStopped = true
-        };
-        beatSync.NewBeat += onNewBeat;
-        Add(beatSync);
-    }
-
-    /// <summary>
-    /// Builds the coverflow (square) face on first use: album cover, bottom scrim, centred title along
-    /// the bottom edge, the lane counts in the corner.
-    /// </summary>
-    private void ensureSquareFace()
-    {
-        if (squareFace != null)
-            return;
-
-        Add(squareFace = new Container
-        {
-            Anchor = Anchor.Centre,
-            Origin = Anchor.Centre,
-            RelativeSizeAxes = Axes.Both,
-            Alpha = vertical ? 0f : 1f,
-            Children = new Drawable[]
-            {
-                albumCover = new DelayedLoadCover
-                {
-                    Anchor = Anchor.Centre,
-                    Origin = Anchor.Centre,
-                    RelativeSizeAxes = Axes.Both,
-                    DecodeTargetSize = album_decode_size,
-                    LoadInScale = cover_load_in_scale
-                },
-                new Box
-                {
-                    Anchor = Anchor.BottomCentre,
-                    Origin = Anchor.BottomCentre,
-                    RelativeSizeAxes = Axes.X,
-                    Height = 40,
-                    Color = Color.Black.WithAlpha(0.5f)
-                },
-                titleText = new ScrollingText()
-                {
-                    Anchor = Anchor.BottomCentre,
-                    Origin = Anchor.BottomCentre,
-                    ScrollSpeed = 60f,
-                    Size = new Vector2(0.9f, 20),
-                    RelativeSizeAxes = Axes.X,
-                    Position = new Vector2(0, -8),
-                    Font = YuukiFontUsage.GetFontUsage(Typeface.Quicksand, 14, FontWeight.Bold),
-                    Color = Color.White
-                },
-                squareLanes = new LaneCountBadge(11)
-                {
-                    Position = new Vector2(8)
-                }
-            }
-        });
-
-        populateFaces();
-    }
-
-    /// <summary>
-    /// Builds the bar (list) face on first use: background cover under a left-to-right dark
-    /// gradient so the left-aligned title/artist stay readable, plus the lane counts and difficulty dots.
-    /// </summary>
-    private void ensureBarFace()
-    {
-        if (barFace != null)
-            return;
-
-        Add(barFace = new Container
-        {
-            Anchor = Anchor.Centre,
-            Origin = Anchor.Centre,
-            RelativeSizeAxes = Axes.Both,
-            Alpha = vertical ? 1f : 0f,
-            Children = new Drawable[]
-            {
-                backgroundCover = new DelayedLoadCover
-                {
-                    Anchor = Anchor.Centre,
-                    Origin = Anchor.Centre,
-                    RelativeSizeAxes = Axes.Both,
-                    DecodeTargetSize = background_decode_size,
-                    LoadInScale = cover_load_in_scale
-                },
-                new Box
-                {
-                    Anchor = Anchor.CentreLeft,
-                    Origin = Anchor.CentreLeft,
-                    RelativeSizeAxes = Axes.Both,
-                    ColorInfo = ColorInfo.GradientHorizontal(Color.Black.WithAlpha(0.8f), Color.Black.WithAlpha(0f))
-                },
-                selectedOverlay = new Box
-                {
-                    Anchor = Anchor.Centre,
-                    Origin = Anchor.Centre,
-                    RelativeSizeAxes = Axes.Both,
-                    Color = Color.White,
-                    Alpha = 0
-                },
-                new FlowContainer
-                {
-                    // set panel: a vertical block centred on the left, title over artist over a
-                    // status/difficulty row, nudged slightly above centre with a snug left inset.
-                    Anchor = Anchor.CentreLeft,
-                    Origin = Anchor.CentreLeft,
-                    RelativeSizeAxes = Axes.X,
-                    AutoSizeAxes = Axes.Y,
-                    Direction = FlowDirection.Vertical,
-                    Spacing = new Vector2(0, 1),
-                    Padding = new MarginPadding { Left = 20, Right = 100, Top = 6, Bottom = 12 },
-                    Children = new Drawable[]
-                    {
-                        barTitleText = new ScrollingText()
-                        {
-                            Anchor = Anchor.TopLeft,
-                            Origin = Anchor.TopLeft,
-                            ScrollSpeed = 60f,
-                            RelativeSizeAxes = Axes.X,
-                            Size = new Vector2(1f, 30),
-                            Font = YuukiFontUsage.GetFontUsage(Typeface.Quicksand, 24, FontWeight.Bold),
-                            Color = Color.White
-                        },
-                        barArtistText = new SpriteText()
-                        {
-                            Anchor = Anchor.TopLeft,
-                            Origin = Anchor.TopLeft,
-                            Font = YuukiFontUsage.GetFontUsage(Typeface.Nunito, 14, FontWeight.Regular),
-                            Color = Color.White.WithAlpha(0.85f)
-                        },
-                        new FlowContainer
-                        {
-                            Anchor = Anchor.TopLeft,
-                            Origin = Anchor.TopLeft,
-                            AutoSizeAxes = Axes.Both,
-                            Direction = FlowDirection.Horizontal,
-                            Spacing = new Vector2(8, 0),
-                            // Less above than the dots alone had, and a slim badge, so the taller row
-                            // doesn't open a gap under the artist or push the block off centre.
-                            Padding = new MarginPadding { Top = 3 },
-                            Children = new Drawable[]
-                            {
-                                barLanes = new LaneCountBadge(11, verticalPadding: 1.5f)
-                                {
-                                    Anchor = Anchor.CentreLeft,
-                                    Origin = Anchor.CentreLeft
-                                },
-                                difficultyDots = new FlowContainer
-                                {
-                                    Anchor = Anchor.CentreLeft,
-                                    Origin = Anchor.CentreLeft,
-                                    AutoSizeAxes = Axes.Both,
-                                    Direction = FlowDirection.Horizontal,
-                                    Spacing = new Vector2(5, 0)
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        });
-
-        populateFaces();
-    }
-
-    private void onNewBeat(int beat, double beatLength, ChannelAmplitudes amplitudes)
-    {
-        // Only the currently selected (working) set pulses.
-        if (BeatmapSet == null || workingBeatmap?.BeatmapSet == null || !Equals(workingBeatmap.BeatmapSet, BeatmapSet))
-            return;
-
-        // The same flash every beat: the beat sets it, not how loud the song is there.
-        flashBox.Alpha = beat_flash_alpha;
-        flashBox.FadeTo(0f, beatLength, Easing.OutQuint);
     }
 
     [BackgroundDependencyLoader]
@@ -298,6 +101,171 @@ public partial class BeatmapSetCarouselCard : CarouselCard<BeatmapSet>
     {
         if (config != null)
             useUnicodeInfo = config.Get<bool>(YuukiSetting.UseUnicodeInfo);
+
+        ink = ScreenPalette.Resolve(screenPalette, colorProvider).Text;
+    }
+
+    /// <summary>
+    /// Builds the rail's row on first use: the cover, title over artist, and on the right your best mark, the
+    /// level skyline and the lanes. Ink straight on the glass, a hairline between rows.
+    /// </summary>
+    private void ensureRow()
+    {
+        if (rowFace != null)
+            return;
+
+        Add(rowFace = new Container
+        {
+            RelativeSizeAxes = Axes.Both,
+            Masking = true,
+            CornerRadius = 14,
+            Alpha = vertical ? 1 : 0,
+            Children = new Drawable[]
+            {
+                rowHover = new Box
+                {
+                    RelativeSizeAxes = Axes.Both,
+                    Color = ink,
+                    Alpha = 0
+                },
+                rowCover = new DelayedLoadCover
+                {
+                    // A cover fills its parent by default; this one has its own size.
+                    RelativeSizeAxes = Axes.None,
+                    Anchor = Anchor.CentreLeft,
+                    Origin = Anchor.CentreLeft,
+                    X = 10,
+                    Size = new Vector2(row_cover_size),
+                    Masking = true,
+                    CornerRadius = 8,
+                    DecodeTargetSize = row_decode_size,
+                    LoadInScale = cover_load_in_scale
+                },
+                // Its width is the room left of the extras, set every frame, so long names scroll within it.
+                rowText = new FlowContainer
+                {
+                    Anchor = Anchor.CentreLeft,
+                    Origin = Anchor.CentreLeft,
+                    X = row_text_x,
+                    AutoSizeAxes = Axes.Y,
+                    Direction = FlowDirection.Vertical,
+                    Spacing = new Vector2(0, 1),
+                    Children = new Drawable[]
+                    {
+                        rowTitle = new ScrollingText
+                        {
+                            RelativeSizeAxes = Axes.X,
+                            Font = YuukiFontUsage.GetFontUsage(Typeface.Quicksand, 21, FontWeight.Bold),
+                            Color = ink
+                        },
+                        rowArtist = new ScrollingText
+                        {
+                            RelativeSizeAxes = Axes.X,
+                            Font = YuukiFontUsage.GetFontUsage(Typeface.Nunito, 15, FontWeight.SemiBold),
+                            Color = SetlistColors.Secondary(ink)
+                        }
+                    }
+                },
+                rowExtras = new FlowContainer
+                {
+                    Anchor = Anchor.CentreRight,
+                    Origin = Anchor.CentreRight,
+                    X = -16,
+                    AutoSizeAxes = Axes.Both,
+                    Direction = FlowDirection.Horizontal,
+                    Spacing = new Vector2(12, 0),
+                    Children = new Drawable[]
+                    {
+                        rowBest = new BestMark
+                        {
+                            Anchor = Anchor.CentreLeft,
+                            Origin = Anchor.CentreLeft,
+                            Color = ink
+                        },
+                        rowSkyline = new LevelSkyline
+                        {
+                            Anchor = Anchor.CentreLeft,
+                            Origin = Anchor.CentreLeft
+                        },
+                        rowLanes = new LaneLabel
+                        {
+                            Anchor = Anchor.CentreLeft,
+                            Origin = Anchor.CentreLeft,
+                            Color = ink
+                        }
+                    }
+                },
+                new Container
+                {
+                    Anchor = Anchor.BottomCentre,
+                    Origin = Anchor.BottomCentre,
+                    RelativeSizeAxes = Axes.X,
+                    Height = 1,
+                    Padding = new MarginPadding { Left = 12, Right = 12 },
+                    Child = new Box
+                    {
+                        RelativeSizeAxes = Axes.Both,
+                        Color = ink.WithAlpha(0.1f)
+                    }
+                }
+            }
+        });
+
+        populate();
+    }
+
+    /// <summary>
+    /// Builds the strip's tile on first use: the cover, with the title and artist under it.
+    /// </summary>
+    private void ensureTile()
+    {
+        if (tileFace != null)
+            return;
+
+        Add(tileFace = new Container
+        {
+            RelativeSizeAxes = Axes.Both,
+            Alpha = vertical ? 0 : 1,
+            Children = new Drawable[]
+            {
+                tileCover = new DelayedLoadCover
+                {
+                    RelativeSizeAxes = Axes.None,
+                    X = 6,
+                    Size = new Vector2(tile_cover_size),
+                    Masking = true,
+                    CornerRadius = 10,
+                    BorderColor = ink.WithAlpha(0.3f),
+                    EdgeEffect = new EdgeEffectParameters
+                    {
+                        Type = EdgeEffectType.Shadow,
+                        Color = Color.Black.WithAlpha(0.2f),
+                        Radius = 6,
+                        Offset = new Vector2(0, 3)
+                    },
+                    DecodeTargetSize = tile_decode_size,
+                    LoadInScale = cover_load_in_scale
+                },
+                tileTitle = new ScrollingText
+                {
+                    X = 6,
+                    Y = tile_cover_size + 8,
+                    Width = tile_cover_size + 10,
+                    Font = YuukiFontUsage.GetFontUsage(Typeface.Quicksand, 15, FontWeight.Bold),
+                    Color = ink
+                },
+                tileArtist = new ScrollingText
+                {
+                    X = 6,
+                    Y = tile_cover_size + 28,
+                    Width = tile_cover_size + 10,
+                    Font = YuukiFontUsage.GetFontUsage(Typeface.Nunito, 12, FontWeight.SemiBold),
+                    Color = SetlistColors.Secondary(ink)
+                }
+            }
+        });
+
+        populate();
     }
 
     /// <summary>
@@ -307,47 +275,38 @@ public partial class BeatmapSetCarouselCard : CarouselCard<BeatmapSet>
     public override void Apply(BeatmapSet set, int index)
     {
         BeatmapSet = set;
-
-        placeholderColor = ColorExtensions.FromHex(palette[index % palette.Length]);
+        placeholderColor = ColorExtensions.FromHex(placeholder_palette[index % placeholder_palette.Length]);
 
         // Orientation is assigned by the pool right before Apply (but OnOrientationChanged, which sets
-        // `vertical`, only runs later on attach), so read it here to build the correct face straight away
-        // rather than building the square face now and the bar face moments later.
+        // `vertical`, only runs later on attach), so read it here to build the correct face straight away.
         vertical = Orientation?.Value == CarouselOrientation.Vertical;
 
         ensureActiveFace();
-        populateFaces();
+        populate();
     }
 
-    private Color placeholderColor = Color.Transparent;
-
     /// <summary>
-    /// Fills every built face with the current set's text, lane counts, difficulty dots, cover
-    /// placeholder Color, and cover source. Safe to call before either face exists (it only touches built
-    /// faces).
+    /// Fills every built face with the current set. Safe to call before either face exists.
     /// </summary>
-    private void populateFaces()
+    private void populate()
     {
         if (BeatmapSet == null)
             return;
 
         updateText();
 
-        // One look through the library for both the lanes and the dots.
         var beatmaps = beatmapsCollection?.GetBeatmapsFromBeatmapSet(BeatmapSet) ?? Array.Empty<Beatmap>();
 
-        string lanes = BeatmapUtility.FormatLaneRange(beatmaps);
-        if (squareLanes != null)
-            squareLanes.Text = lanes;
-        if (barLanes != null)
-            barLanes.Text = lanes;
+        if (rowFace != null)
+        {
+            rowLanes!.Text = BeatmapUtility.FormatLaneRange(beatmaps);
+            rowSkyline!.SetDifficulties(beatmaps);
+            rowBest!.SetBest(scoreStore?.GetBestMark(BeatmapSet));
+            rowCover!.PlaceholderColor = placeholderColor;
+        }
 
-        buildDifficultyDots(beatmaps);
-
-        if (albumCover != null)
-            albumCover.PlaceholderColor = placeholderColor;
-        if (backgroundCover != null)
-            backgroundCover.PlaceholderColor = placeholderColor;
+        if (tileCover != null)
+            tileCover.PlaceholderColor = placeholderColor;
 
         updateCoverSources();
     }
@@ -355,74 +314,37 @@ public partial class BeatmapSetCarouselCard : CarouselCard<BeatmapSet>
     private void ensureActiveFace()
     {
         if (vertical)
-            ensureBarFace();
+            ensureRow();
         else
-            ensureSquareFace();
+            ensureTile();
     }
 
     /// <summary>
-    /// Point only the active face's cover at its image — album art for the square (horizontal) face,
-    /// beatmap background for the bar (vertical) face — and clear the other so we never decode both.
+    /// Points only the active face's cover at the album cover, and clears the other so we never decode both.
     /// </summary>
     private void updateCoverSources()
     {
         if (BeatmapSet == null)
             return;
 
-        if (vertical)
-        {
-            albumCover?.SetSource(null);
-            backgroundCover?.SetSource(
-                string.IsNullOrEmpty(BeatmapSet.BackgroundStoragePath) && BeatmapSet.Background == null
-                    ? null
-                    : new BeatmapSetBackgroundSource(BeatmapSet, storage));
-        }
-        else
-        {
-            backgroundCover?.SetSource(null);
-            albumCover?.SetSource(
-                BeatmapSet.Cover == null && string.IsNullOrEmpty(BeatmapSet.CoverStoragePath)
-                    ? null
-                    : new BeatmapSetCoverSource(BeatmapSet, storage));
-        }
-    }
+        ICoverSource? source = BeatmapSet.Cover == null && string.IsNullOrEmpty(BeatmapSet.CoverStoragePath)
+            ? null
+            : new BeatmapSetCoverSource(BeatmapSet, storage);
 
-    /// <summary>
-    /// Rebuilds the little row of difficulty-Colored dots (one per beatmap in the set),
-    /// panel. No-op before the bar face (which owns the dots) is built.
-    /// </summary>
-    private void buildDifficultyDots(Beatmap[] beatmaps)
-    {
-        if (difficultyDots == null)
-            return;
-
-        difficultyDots.Clear();
-
-        int count = Math.Min(beatmaps.Length, 14);
-
-        for (int i = 0; i < count; i++)
-        {
-            difficultyDots.Add(new Circle
-            {
-                Anchor = Anchor.CentreLeft,
-                Origin = Anchor.CentreLeft,
-                Size = new Vector2(10),
-                Color = BeatmapUtility.ColorForDifficulty(beatmaps[i].DifficultyRating)
-            });
-        }
+        rowCover?.SetSource(vertical ? source : null);
+        tileCover?.SetSource(vertical ? null : source);
     }
 
     protected override void OnOrientationChanged(CarouselOrientation orientation)
     {
         vertical = orientation == CarouselOrientation.Vertical;
 
-        // Build the now-active face if this is the first time we've been shown in this orientation.
         ensureActiveFace();
 
-        if (squareFace != null)
-            squareFace.Alpha = vertical ? 0f : 1f;
-        if (barFace != null)
-            barFace.Alpha = vertical ? 1f : 0f;
+        if (rowFace != null)
+            rowFace.Alpha = vertical ? 1 : 0;
+        if (tileFace != null)
+            tileFace.Alpha = vertical ? 0 : 1;
 
         updateCoverSources();
     }
@@ -431,22 +353,35 @@ public partial class BeatmapSetCarouselCard : CarouselCard<BeatmapSet>
     {
         base.Update();
 
-        // Lighten the selected set's bar. Only meaningful on the vertical (bar) face.
-        bool selected = vertical
-                        && BeatmapSet != null
-                        && workingBeatmap?.BeatmapSet != null
-                        && Equals(workingBeatmap.BeatmapSet, BeatmapSet);
+        // The row's text runs up to the extras on the right, and scrolls when it's longer.
+        if (rowFace != null && vertical)
+            rowText!.Width = Math.Max(0, rowFace.DrawWidth - row_text_x - rowExtras!.DrawWidth - 32);
+    }
 
-        if (selectedOverlay != null)
-            selectedOverlay.Alpha = selected ? 0.2f : 0f;
+    public override bool OnHover(MouseEvent e)
+    {
+        rowHover?.FadeTo(0.06f, 150, Easing.OutQuint);
 
-        EdgeEffect = selected ? SELECTED_EDGE : SHADOW_EDGE;
+        if (tileCover != null)
+            tileCover.BorderThickness = 3;
+
+        return base.OnHover(e);
+    }
+
+    public override bool OnHoverLost(MouseEvent e)
+    {
+        rowHover?.FadeOut(300, Easing.OutQuint);
+
+        if (tileCover != null)
+            tileCover.BorderThickness = 0;
+
+        return base.OnHoverLost(e);
     }
 
     /// <summary>
     /// The lane counts on show ("4K", "4-7K"), from whichever face is built.
     /// </summary>
-    public string LaneText => (barLanes ?? squareLanes)?.Text ?? "";
+    public string LaneText => rowLanes?.Text ?? BeatmapUtility.FormatLaneRange(beatmapsCollection?.GetBeatmapsFromBeatmapSet(BeatmapSet) ?? Array.Empty<Beatmap>());
 
     private void updateText()
     {
@@ -456,13 +391,19 @@ public partial class BeatmapSetCarouselCard : CarouselCard<BeatmapSet>
         bool unicode = useUnicodeInfo?.Value ?? false;
         string title = BeatmapSet.GetDisplayTitle(unicode);
         title = string.IsNullOrEmpty(title) ? "Untitled" : title;
+        string artist = BeatmapSet.GetDisplayArtist(unicode);
 
-        if (titleText != null)
-            titleText.Text = title;
-        if (barTitleText != null)
-            barTitleText.Text = title;
-        if (barArtistText != null)
-            barArtistText.Text = BeatmapSet.GetDisplayArtist(unicode);
+        if (rowTitle != null)
+        {
+            rowTitle.Text = title;
+            rowArtist!.Text = artist;
+        }
+
+        if (tileTitle != null)
+        {
+            tileTitle.Text = title;
+            tileArtist!.Text = artist;
+        }
     }
 
     private void onUseUnicodeInfoChanged(ValueChangedEvent<bool> e) => updateText();
@@ -471,16 +412,14 @@ public partial class BeatmapSetCarouselCard : CarouselCard<BeatmapSet>
     {
         if (Parent == null)
         {
-            // This hook stays deliberately, and is not the OnParentChanged workaround the disposal cascade
-            // replaced. A pooled card is detached precisely so it can be reused, so it opts out of removal
-            // disposal — nothing releases its covers on the way out, and it would otherwise sit in the pool
-            // holding GPU textures for content that is not on screen. Cancelling the in-flight decode and
-            // clearing the covers here is the unload half of pooling, and the covers reload on reuse.
-            albumCover?.SetSource(null);
-            backgroundCover?.SetSource(null);
+            // A pooled card is detached precisely so it can be reused, so it opts out of removal disposal —
+            // nothing releases its covers on the way out, and it would otherwise sit in the pool holding GPU
+            // textures for content that is not on screen. Clearing the covers here is the unload half of
+            // pooling, and the covers reload on reuse.
+            rowCover?.SetSource(null);
+            tileCover?.SetSource(null);
 
             // Same reasoning for the setting: an idle pooled card should not be reshaping its text.
-
             if (useUnicodeInfo != null)
                 useUnicodeInfo.ValueChanged -= onUseUnicodeInfoChanged;
         }

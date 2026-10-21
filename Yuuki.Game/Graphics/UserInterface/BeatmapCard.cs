@@ -1,257 +1,303 @@
 // This code is part of yuuki. project. Licensed under the MIT License.
 // See the LICENSE file for full license text.
 
+using System;
 using Sakura.Framework.Allocation;
 using Sakura.Framework.Extensions.ColorExtensions;
+using Sakura.Framework.Extensions.DrawableExtensions;
 using Sakura.Framework.Graphics.Colors;
 using Sakura.Framework.Graphics.Containers;
 using Sakura.Framework.Graphics.Drawables;
 using Sakura.Framework.Graphics.Primitives;
+using Sakura.Framework.Graphics.Transforms;
+using Sakura.Framework.Input;
 using Sakura.Framework.Maths;
 using Yuuki.Game.Beatmaps;
+using Yuuki.Game.Database;
+using Yuuki.Game.Graphics.Colors;
 using Yuuki.Game.Graphics.Text;
 using Yuuki.Game.Utilities;
 
 namespace Yuuki.Game.Graphics.UserInterface;
 
+/// <summary>
+/// One difficulty in the list: a row of the rail (a steep tab in the tier colour carrying the level) or a
+/// tile of the strip (a tier-coloured square with the level in large type). As with songs, the focus window
+/// shows the focused one.
+/// </summary>
 public partial class BeatmapCard : CarouselCard<Beatmap>
 {
-    public const float CARD_SIZE = 118f;
+    private const float row_tab_width = 112;
+    private const float tile_square_size = 120;
 
-    public Beatmap Beatmap { get; private set; }
-
-    private Box backgroundBox;
-    private Box selectedOverlay;
-    private bool vertical;
+    public Beatmap Beatmap { get; private set; } = null!;
 
     [Resolved(canBeNull: true)]
-    private WorkingBeatmap? workingBeatmap { get; set; }
+    private ScoreStore? scoreStore { get; set; }
 
-    // Coverflow (square) face: name over rating, centred, the lane count in the corner.
-    private Container squareFace;
-    private SpriteText nameText;
-    private SpriteText ratingText;
-    private LaneCountBadge squareLanes;
+    [Resolved(canBeNull: true)]
+    private ScreenPalette? screenPalette { get; set; }
 
-    // Bar (list) face: dark star-rating and lane-count badges, then the difficulty name over the mapper credit.
-    private Container barFace;
-    private SpriteText barNameText;
-    private SpriteText barMapperText;
-    private SpriteText barRatingText;
-    private LaneCountBadge barLanes;
+    [Resolved(canBeNull: true)]
+    private IYuukiColorProvider? colorProvider { get; set; }
+
+    private readonly Container rowFace;
+    private readonly Box rowHover;
+    private readonly Box rowTab;
+    private readonly SpriteText rowLevel;
+    private readonly SpriteText rowName;
+    private readonly SpriteText rowSub;
+    private readonly FlowContainer rowExtras;
+    private readonly LaneLabel rowLanes;
+    private readonly BestMark rowBest;
+    private readonly Box rowRule;
+
+    private readonly Container tileFace;
+    private readonly Container tileSquare;
+    private readonly Box tileFill;
+    private readonly SpriteText tileTier;
+    private readonly SpriteText tileLevel;
+    private readonly SpriteText tileName;
+    private readonly SpriteText tileSub;
+
+    private bool vertical;
 
     public BeatmapCard()
     {
         Anchor = Anchor.Centre;
         Origin = Anchor.Centre;
         RelativeSizeAxes = Axes.Both;
-        Masking = true;
-        CornerRadius = 12;
-        EdgeEffect = SHADOW_EDGE;
 
-        Add(backgroundBox = new Box
+        Add(rowFace = new Container
         {
-            Anchor = Anchor.Centre,
-            Origin = Anchor.Centre,
-            RelativeSizeAxes = Axes.Both
-        });
-
-        // Lightens the selected difficulty's bar, as the selected set's is (see BeatmapSetCarouselCard).
-        Add(selectedOverlay = new Box
-        {
-            Anchor = Anchor.Centre,
-            Origin = Anchor.Centre,
             RelativeSizeAxes = Axes.Both,
-            Color = Color.White,
-            Alpha = 0
-        });
-
-        Add(squareFace = new Container
-        {
-            Anchor = Anchor.Centre,
-            Origin = Anchor.Centre,
-            RelativeSizeAxes = Axes.Both,
+            Masking = true,
+            CornerRadius = 14,
+            Alpha = 0,
             Children = new Drawable[]
             {
+                rowHover = new Box
+                {
+                    RelativeSizeAxes = Axes.Both,
+                    Alpha = 0
+                },
+                // The tab leans at the game's steep angle; the row's rounded mask cuts its left end flat.
+                rowTab = new Box
+                {
+                    // Shear pivots on the origin, so a centre-left origin leans it about its middle.
+                    Anchor = Anchor.CentreLeft,
+                    Origin = Anchor.CentreLeft,
+                    RelativeSizeAxes = Axes.Y,
+                    X = -60,
+                    Width = row_tab_width + 80,
+                    Shear = UserInterfaceConstant.Shear
+                },
+                new Container
+                {
+                    RelativeSizeAxes = Axes.Y,
+                    Width = row_tab_width,
+                    Child = rowLevel = new SpriteText
+                    {
+                        Anchor = Anchor.Centre,
+                        Origin = Anchor.Centre,
+                        X = -14,
+                        Font = YuukiFontUsage.GetFontUsage(Typeface.Nunito, 38, FontWeight.ExtraBold)
+                    }
+                },
                 new FlowContainer
                 {
-                    Anchor = Anchor.Centre,
-                    Origin = Anchor.Centre,
+                    Anchor = Anchor.CentreLeft,
+                    Origin = Anchor.CentreLeft,
+                    X = row_tab_width + 22,
                     AutoSizeAxes = Axes.Both,
                     Direction = FlowDirection.Vertical,
-                    Spacing = new Vector2(0, 4),
+                    Spacing = new Vector2(0, 2),
                     Children = new Drawable[]
                     {
-                        nameText = new SpriteText
+                        rowName = new SpriteText
                         {
-                            Anchor = Anchor.Centre,
-                            Origin = Anchor.Centre,
-                            Font = YuukiFontUsage.GetFontUsage(Typeface.Quicksand, 16, FontWeight.Bold)
+                            Font = YuukiFontUsage.GetFontUsage(Typeface.Quicksand, 23, FontWeight.Bold),
+                            Truncate = true
                         },
-                        ratingText = new SpriteText
+                        rowSub = new SpriteText
                         {
-                            Anchor = Anchor.Centre,
-                            Origin = Anchor.Centre,
-                            Font = YuukiFontUsage.GetFontUsage(Typeface.Nunito, 14, FontWeight.Regular)
+                            Font = YuukiFontUsage.GetFontUsage(Typeface.Nunito, 15, FontWeight.SemiBold),
+                            Truncate = true
                         }
                     }
                 },
-                squareLanes = new LaneCountBadge(11)
+                rowExtras = new FlowContainer
                 {
-                    Position = new Vector2(8)
+                    Anchor = Anchor.CentreRight,
+                    Origin = Anchor.CentreRight,
+                    X = -16,
+                    AutoSizeAxes = Axes.Both,
+                    Direction = FlowDirection.Horizontal,
+                    Spacing = new Vector2(12, 0),
+                    Children = new Drawable[]
+                    {
+                        rowLanes = new LaneLabel
+                        {
+                            Anchor = Anchor.CentreLeft,
+                            Origin = Anchor.CentreLeft
+                        },
+                        rowBest = new BestMark
+                        {
+                            Anchor = Anchor.CentreLeft,
+                            Origin = Anchor.CentreLeft
+                        }
+                    }
+                },
+                new Container
+                {
+                    Anchor = Anchor.BottomCentre,
+                    Origin = Anchor.BottomCentre,
+                    RelativeSizeAxes = Axes.X,
+                    Height = 1,
+                    Padding = new MarginPadding { Left = row_tab_width + 12, Right = 12 },
+                    Child = rowRule = new Box { RelativeSizeAxes = Axes.Both }
                 }
             }
         });
 
-        Add(barFace = new Container
+        Add(tileFace = new Container
         {
-            Anchor = Anchor.Centre,
-            Origin = Anchor.Centre,
             RelativeSizeAxes = Axes.Both,
-            Alpha = 0,
-            Padding = new MarginPadding { Left = 14, Right = 18 },
-            Child = new FlowContainer
+            Children = new Drawable[]
             {
-                Anchor = Anchor.CentreLeft,
-                Origin = Anchor.CentreLeft,
-                RelativeSizeAxes = Axes.X,
-                AutoSizeAxes = Axes.Y,
-                Direction = FlowDirection.Horizontal,
-                Spacing = new Vector2(12, 0),
-                Children = new Drawable[]
+                tileSquare = new Container
                 {
-                    // Dark rounded star-rating badge
-                    new Container
+                    X = 6,
+                    Size = new Vector2(tile_square_size),
+                    Masking = true,
+                    CornerRadius = 10,
+                    Children = new Drawable[]
                     {
-                        Anchor = Anchor.CentreLeft,
-                        Origin = Anchor.CentreLeft,
-                        AutoSizeAxes = Axes.Both,
-                        Masking = true,
-                        CornerRadius = 8,
-                        Children = new Drawable[]
+                        tileFill = new Box { RelativeSizeAxes = Axes.Both },
+                        // A light stripe at the blade angle across the square's right edge.
+                        new Box
                         {
-                            new Box
-                            {
-                                RelativeSizeAxes = Axes.Both,
-                                Color = Color.Black.WithAlpha(0.55f)
-                            },
-                            new FlowContainer
-                            {
-                                Anchor = Anchor.Centre,
-                                Origin = Anchor.Centre,
-                                AutoSizeAxes = Axes.Both,
-                                Direction = FlowDirection.Horizontal,
-                                Spacing = new Vector2(4, 0),
-                                Padding = new MarginPadding { Left = 10, Right = 12, Top = 5, Bottom = 5 },
-                                Children = new Drawable[]
-                                {
-                                    new IconSprite
-                                    {
-                                        Anchor = Anchor.CentreLeft,
-                                        Origin = Anchor.CentreLeft,
-                                        Icon = IconUsage.Star,
-                                        IconSize = 14,
-                                        Color = Color.White
-                                    },
-                                    barRatingText = new SpriteText
-                                    {
-                                        Anchor = Anchor.CentreLeft,
-                                        Origin = Anchor.CentreLeft,
-                                        Font = YuukiFontUsage.GetFontUsage(Typeface.Nunito, 15, FontWeight.Bold),
-                                        Color = Color.White
-                                    }
-                                }
-                            }
-                        }
-                    },
-                    barLanes = new LaneCountBadge(14)
-                    {
-                        Anchor = Anchor.CentreLeft,
-                        Origin = Anchor.CentreLeft,
-                        Margin = new MarginPadding { Left = -6 }
-                    },
-                    new FlowContainer
-                    {
-                        Anchor = Anchor.CentreLeft,
-                        Origin = Anchor.CentreLeft,
-                        AutoSizeAxes = Axes.Both,
-                        Direction = FlowDirection.Vertical,
-                        Spacing = new Vector2(0, 1),
-                        Children = new Drawable[]
+                            Anchor = Anchor.CentreRight,
+                            Origin = Anchor.CentreRight,
+                            RelativeSizeAxes = Axes.Y,
+                            X = 26,
+                            Width = 34,
+                            Shear = UserInterfaceConstant.Shear,
+                            Color = Color.White.WithAlpha(0.28f)
+                        },
+                        tileTier = new SpriteText
                         {
-                            barNameText = new SpriteText
-                            {
-                                Anchor = Anchor.TopLeft,
-                                Origin = Anchor.TopLeft,
-                                Font = YuukiFontUsage.GetFontUsage(Typeface.Quicksand, 18, FontWeight.Bold)
-                            },
-                            barMapperText = new SpriteText
-                            {
-                                Anchor = Anchor.TopLeft,
-                                Origin = Anchor.TopLeft,
-                                Font = YuukiFontUsage.GetFontUsage(Typeface.Nunito, 12, FontWeight.Regular)
-                            }
+                            Position = new Vector2(10, 9),
+                            Font = YuukiFontUsage.GetFontUsage(Typeface.Nunito, 11, FontWeight.ExtraBold)
+                        },
+                        tileLevel = new SpriteText
+                        {
+                            Anchor = Anchor.Centre,
+                            Origin = Anchor.Centre,
+                            Y = 6,
+                            Font = YuukiFontUsage.GetFontUsage(Typeface.Nunito, 52, FontWeight.ExtraBold)
                         }
                     }
+                },
+                tileName = new SpriteText
+                {
+                    X = 6,
+                    Y = tile_square_size + 8,
+                    Font = YuukiFontUsage.GetFontUsage(Typeface.Quicksand, 15, FontWeight.Bold),
+                    Truncate = true,
+                    MaxWidth = tile_square_size + 10
+                },
+                tileSub = new SpriteText
+                {
+                    X = 6,
+                    Y = tile_square_size + 28,
+                    Font = YuukiFontUsage.GetFontUsage(Typeface.Nunito, 12, FontWeight.SemiBold),
+                    Truncate = true,
+                    MaxWidth = tile_square_size + 10
                 }
             }
         });
+    }
+
+    [BackgroundDependencyLoader]
+    private void load()
+    {
+        var ink = ScreenPalette.Resolve(screenPalette, colorProvider).Text;
+
+        rowHover.Color = ink;
+        rowName.Color = ink;
+        rowSub.Color = SetlistColors.Secondary(ink);
+        rowLanes.Color = ink;
+        rowBest.Color = ink;
+        rowRule.Color = ink.WithAlpha(0.1f);
+        tileName.Color = ink;
+        tileSub.Color = SetlistColors.Secondary(ink);
     }
 
     public override void Apply(Beatmap beatmap, int index)
     {
         Beatmap = beatmap;
 
-        Color color = BeatmapUtility.ColorForDifficulty(beatmap.DifficultyRating);
-        Color textColor = color.Darken(0.6f);
-
-        backgroundBox.Color = color;
-
+        var tier = BeatmapUtility.ColorForDifficulty(beatmap.DifficultyRating);
+        var tierInk = SetlistColors.TierInk(tier);
+        string tierName = BeatmapUtility.CalculateDifficultyLevel(beatmap).ToString();
+        string level = BeatmapFilter.LevelOf(beatmap).ToString();
         string name = string.IsNullOrEmpty(beatmap.DifficultyName) ? "Difficulty" : beatmap.DifficultyName;
-        string rating = $"{beatmap.DifficultyRating:0.0}";
-
-        nameText.Text = name;
-        nameText.Color = textColor;
-        ratingText.Text = rating;
-        ratingText.Color = textColor;
-
-        barNameText.Text = name;
-        barNameText.Color = textColor;
-        barMapperText.Text = string.IsNullOrEmpty(beatmap.Creator) ? "" : $"mapped by {beatmap.Creator}";
-        barMapperText.Color = textColor.WithAlpha(0.85f);
-        barRatingText.Text = rating;
-
         string lanes = beatmap.LaneCount > 0 ? BeatmapUtility.FormatLanes(beatmap.LaneCount) : "";
-        squareLanes.Text = lanes;
-        barLanes.Text = lanes;
+
+        rowTab.Color = tier;
+        rowLevel.Color = tierInk;
+        rowLevel.Text = level;
+        rowName.Text = name;
+        rowSub.Text = string.IsNullOrEmpty(beatmap.Creator) ? tierName : $"{tierName} · mapped by {beatmap.Creator}";
+        rowLanes.Text = lanes;
+        rowBest.SetBest(scoreStore?.GetBestMark(beatmap));
+
+        tileFill.Color = tier;
+        tileTier.Color = tierInk;
+        tileTier.Text = tierName.ToUpperInvariant();
+        tileLevel.Color = tierInk;
+        tileLevel.Text = level;
+        tileName.Text = name;
+        tileSub.Text = string.IsNullOrEmpty(beatmap.Creator) ? lanes : $"{lanes} · {beatmap.Creator}";
     }
 
     /// <summary>
     /// The lane count on show ("4K"), empty when the difficulty has none.
     /// </summary>
-    public string LaneText => barLanes.Text;
+    public string LaneText => rowLanes.Text;
 
     protected override void OnOrientationChanged(CarouselOrientation orientation)
     {
         vertical = orientation == CarouselOrientation.Vertical;
-        squareFace.Alpha = vertical ? 0f : 1f;
-        barFace.Alpha = vertical ? 1f : 0f;
+        rowFace.Alpha = vertical ? 1 : 0;
+        tileFace.Alpha = vertical ? 0 : 1;
     }
-
-    /// <summary>
-    /// Whether this is the picked difficulty (wearing the selection ring, in the list).
-    /// </summary>
-    public bool IsSelectedDifficulty => vertical && Beatmap != null && workingBeatmap?.Beatmap != null && Equals(workingBeatmap.Beatmap, Beatmap);
 
     public override void Update()
     {
         base.Update();
 
-        // The picked difficulty wears the same ring and lift as the picked set. In the cover flow the
-        // middle card is the selection, so there's none there, as for sets.
-        bool selected = IsSelectedDifficulty;
+        if (vertical)
+        {
+            float budget = Math.Max(0, rowFace.DrawWidth - row_tab_width - 22 - rowExtras.DrawWidth - 32);
+            rowName.MaxWidth = budget;
+            rowSub.MaxWidth = budget;
+        }
+    }
 
-        selectedOverlay.Alpha = selected ? 0.2f : 0f;
-        EdgeEffect = selected ? SELECTED_EDGE : SHADOW_EDGE;
+    public override bool OnHover(MouseEvent e)
+    {
+        rowHover.FadeTo(0.06f, 150, Easing.OutQuint);
+        tileSquare.BorderThickness = 3;
+        tileSquare.BorderColor = rowName.Color.WithAlpha(0.3f);
+        return base.OnHover(e);
+    }
+
+    public override bool OnHoverLost(MouseEvent e)
+    {
+        rowHover.FadeOut(300, Easing.OutQuint);
+        tileSquare.BorderThickness = 0;
+        return base.OnHoverLost(e);
     }
 }

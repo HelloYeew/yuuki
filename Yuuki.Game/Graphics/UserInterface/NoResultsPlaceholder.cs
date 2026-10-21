@@ -29,7 +29,6 @@ public partial class NoResultsPlaceholder : Container
 
     private const double bob_duration = 4000;
 
-    private static readonly Color light_text = ColorExtensions.FromHex("#F7F1F5");
 
     /// <summary>
     /// Clears the search text (the "clearing" link).
@@ -115,7 +114,7 @@ public partial class NoResultsPlaceholder : Container
     public override bool HandleNonPositionalInput => false;
 
     /// <summary>
-    /// Stacked and light for the vertical list; a dark row for the horizontal strip's cream bar.
+    /// Stacked for the vertical list; a row for the horizontal strip. Ink either way, on the glass band.
     /// </summary>
     public void SetLayout(CarouselOrientation orientation)
     {
@@ -126,9 +125,10 @@ public partial class NoResultsPlaceholder : Container
             ((SuggestionRow)row).SetColors(textColor, linkColor);
     }
 
-    private Color textColor => vertical ? light_text : palette.Text;
+    // Both lists sit on the light glass band, so it's ink either way.
+    private Color textColor => palette.Text;
 
-    private Color linkColor => vertical ? palette.AccentLight : palette.Control;
+    private Color linkColor => palette.Control;
 
     private void applyColors()
     {

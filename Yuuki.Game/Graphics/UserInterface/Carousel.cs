@@ -4,11 +4,13 @@
 using System;
 using System.Collections.Generic;
 using Sakura.Framework.Extensions.ColorExtensions;
+using Sakura.Framework.Extensions.DrawableExtensions;
 using Sakura.Framework.Graphics.Colors;
 using Sakura.Framework.Graphics.Containers;
 using Sakura.Framework.Graphics.Drawables;
 using Sakura.Framework.Graphics.Pooling;
 using Sakura.Framework.Graphics.Primitives;
+using Sakura.Framework.Graphics.Transforms;
 using Sakura.Framework.Input;
 using Sakura.Framework.Maths;
 using Sakura.Framework.Reactive;
@@ -19,37 +21,6 @@ public abstract partial class Carousel<TModel, TCard> : Container
     where TModel : class
     where TCard : CarouselCard<TModel>, new()
 {
-    /// <summary>
-    /// The edge length of a card (square). Also the size given to each slot placeholder.
-    /// </summary>
-    public float CardSize { get; set; } = 118f;
-
-    /// <summary>
-    /// The horizontal distance in pixels between the centres of two adjacent cards.
-    /// </summary>
-    public float CardSpacing { get; set; } = 168f;
-
-    /// <summary>
-    /// Scale applied to non-selected cards.
-    /// </summary>
-    public float SideScale { get; set; } = 1f;
-
-    /// <summary>
-    /// Scale applied to the centred (selected) card. Larger than 1 so it grows past the bar.
-    /// </summary>
-    public float SelectedScale { get; set; } = 1.42f;
-
-    /// <summary>
-    /// How far (in pixels) the selected card rises above its resting position, so it pops out of
-    /// the top of the bar.
-    /// </summary>
-    public float PopHeight { get; set; } = 24f;
-
-    /// <summary>
-    /// The horizontal distance (px) over which cards fade in/out near the left and right edges.
-    /// </summary>
-    public float EdgeFadeWidth { get; set; } = 160f;
-
     /// <summary>
     /// How quickly the carousel eases toward its snap target. Higher is snappier.
     /// </summary>
@@ -163,20 +134,35 @@ public abstract partial class Carousel<TModel, TCard> : Container
     public float ScrollbarMinThumb { get; set; } = 30f;
 
     /// <summary>
+    /// The scrollbar's track colour. White by default; a carousel on a light surface sets ink instead.
+    /// </summary>
+    public Color ScrollbarTrackColor { get; set; } = Color.White.WithAlpha(0.12f);
+
+    /// <summary>
+    /// The scrollbar thumb's colour at rest; it's drawn fully opaque while hovered or dragged.
+    /// </summary>
+    public Color ScrollbarThumbColor { get; set; } = Color.White.WithAlpha(0.55f);
+
+    /// <summary>
     /// Fires (with old and new value) whenever the committed/selected item changes.
     /// </summary>
     public readonly Reactive<TModel?> CurrentItem = new Reactive<TModel?>(null);
 
     /// <summary>
     /// The direction cards are laid out in. Changing this value live re-lays-out and reshapes every card
-    /// (square coverflow vs wide bars) without rebuilding the pool.
+    /// (strip tiles vs rail rows) without rebuilding the pool.
     /// </summary>
     public readonly Reactive<CarouselOrientation> Orientation = new Reactive<CarouselOrientation>(CarouselOrientation.Horizontal);
 
     /// <summary>
     /// The current orientation-dependent geometry, kept in sync with <see cref="Orientation"/>.
     /// </summary>
-    private CarouselLayoutStrategy layout = new HorizontalCarouselLayout();
+    private CarouselLayoutStrategy layout;
+
+    // The focus window sits in a host the carousel moves to the strategy's window rectangle every frame;
+    // the window itself is free to animate inside it (entrance and exit).
+    private Container focusHost = null!;
+    private CarouselFocusWindow<TModel>? focusWindow;
 
     private readonly List<CarouselCardWrapper> wrappers = new List<CarouselCardWrapper>();
     private readonly List<TModel> items = new List<TModel>();
@@ -224,8 +210,64 @@ public abstract partial class Carousel<TModel, TCard> : Container
     protected Carousel()
     {
         RelativeSizeAxes = Axes.Both;
+        layout = CreateLayout(Orientation.Value);
         Orientation.BindValueChanged(onOrientationChanged);
+        createFocusWindow();
         createScrollbar();
+    }
+
+    /// <summary>
+    /// The geometry for <paramref name="orientation"/>. Subclasses override it to size their rows, tiles
+    /// and focus window.
+    /// </summary>
+    protected virtual CarouselLayoutStrategy CreateLayout(CarouselOrientation orientation) => orientation switch
+    {
+        CarouselOrientation.Vertical => new RailCarouselLayout(),
+        _ => new StripCarouselLayout()
+    };
+
+    /// <summary>
+    /// The window that shows the item at the scroll position in its large layout, or null for none.
+    /// </summary>
+    protected virtual CarouselFocusWindow<TModel>? CreateFocusWindow() => null;
+
+    /// <summary>
+    /// The focus window, if this carousel has one.
+    /// </summary>
+    public CarouselFocusWindow<TModel>? FocusWindow => focusWindow;
+
+    /// <summary>
+    /// Where the focus window sits, in local space.
+    /// </summary>
+    public RectangleF FocusWindowRect => layout.FocusWindow(metrics());
+
+    /// <summary>
+    /// The continuous scroll position, in index units: <see cref="CurrentIndex"/> once the snap settles.
+    /// </summary>
+    public double ScrollPosition => position;
+
+    /// <summary>
+    /// Where the item at <paramref name="index"/> is drawn right now, in local space (its resting slot,
+    /// without entrance animation).
+    /// </summary>
+    public Vector2 SlotCentre(int index) => DrawSize / 2f + layout.Compute((float)(index - position), metrics()).Position;
+
+    /// <summary>
+    /// Builds the focus window (if any) in front of the cards. Recreated by <see cref="SetItems"/>
+    /// because <c>Clear()</c> tears down all children.
+    /// </summary>
+    private void createFocusWindow()
+    {
+        focusWindow = CreateFocusWindow();
+
+        // In front of every card (the nearest is depth 0) and behind the scrollbar.
+        Add(focusHost = new Container { Depth = 500f });
+
+        if (focusWindow == null)
+            return;
+
+        focusWindow.SetOrientation(Orientation.Value);
+        focusHost.Add(focusWindow);
     }
 
     /// <summary>
@@ -340,13 +382,7 @@ public abstract partial class Carousel<TModel, TCard> : Container
 
     #endregion
 
-    private CarouselMetrics metrics() => new CarouselMetrics(DrawSize, CardSize, CardSpacing, SideScale, SelectedScale, PopHeight, EdgeFadeWidth);
-
-    private static CarouselLayoutStrategy createLayout(CarouselOrientation orientation) => orientation switch
-    {
-        CarouselOrientation.Vertical => new VerticalCarouselLayout(),
-        _ => new HorizontalCarouselLayout()
-    };
+    private CarouselMetrics metrics() => new CarouselMetrics(DrawSize);
 
     /// <summary>
     /// Swaps the geometry strategy and reshapes every live slot to the new orientation, then relays out.
@@ -354,7 +390,8 @@ public abstract partial class Carousel<TModel, TCard> : Container
     /// </summary>
     private void onOrientationChanged(ValueChangedEvent<CarouselOrientation> e)
     {
-        layout = createLayout(e.NewValue);
+        layout = CreateLayout(e.NewValue);
+        focusWindow?.SetOrientation(e.NewValue);
 
         var slotSize = layout.SlotSize(metrics());
         foreach (var w in wrappers)
@@ -377,7 +414,8 @@ public abstract partial class Carousel<TModel, TCard> : Container
         pool = new DrawablePool<TCard>(12, 48);
         Add(pool);
 
-        // Clear() above tore down the previous scrollbar, so rebuild it.
+        // Clear() above tore down the previous focus window and scrollbar, so rebuild them.
+        createFocusWindow();
         createScrollbar();
 
         for (int i = 0; i < newItems.Count; i++)
@@ -607,7 +645,7 @@ public abstract partial class Carousel<TModel, TCard> : Container
     }
 
     /// <summary>
-    /// Plays a staggered entrance for the currently-loaded cards: each rises (coverflow) or slides in
+    /// Plays a staggered entrance for the currently-loaded cards: each rises (strip) or slides in
     /// (list) from <see cref="CarouselLayoutStrategy.EntranceOffset"/> and fades up, delayed by its
     /// distance from the selection so the cascade emanates from the centre. Also arms
     /// <see cref="PlayLoadEntrance"/> so cards that finish loading afterwards ease in the same way. Call
@@ -650,6 +688,24 @@ public abstract partial class Carousel<TModel, TCard> : Container
                 playEntrance(w, at, offset);
             else
                 w.AnimateTo(offset.X, offset.Y, 0f, EntranceDuration, at);
+        }
+
+        // The window is the centre of the cascade, so it moves with no delay.
+        if (focusWindow == null)
+            return;
+
+        focusWindow.ClearTransforms();
+
+        if (entering)
+        {
+            focusWindow.MoveTo(offset).FadeOut()
+                       .MoveTo(Vector2.Zero, EntranceDuration, Easing.OutQuint)
+                       .FadeIn(EntranceDuration, Easing.OutQuint);
+        }
+        else
+        {
+            focusWindow.MoveTo(offset, EntranceDuration, Easing.OutQuint)
+                       .FadeOut(EntranceDuration, Easing.OutQuint);
         }
     }
 
@@ -861,6 +917,11 @@ public abstract partial class Carousel<TModel, TCard> : Container
             w.Depth = -Math.Abs((float)(i - position));
         }
 
+        var window = layout.FocusWindow(m);
+        focusHost.Position = window.Location;
+        focusHost.Size = window.Size;
+        focusWindow?.Display(items, position);
+
         updateScrollbar();
     }
 
@@ -903,11 +964,11 @@ public abstract partial class Carousel<TModel, TCard> : Container
                 track = new Box
                 {
                     RelativeSizeAxes = Axes.Both,
-                    Color = Color.White.WithAlpha(0.12f)
+                    Color = carousel.ScrollbarTrackColor
                 },
                 thumb = new Box
                 {
-                    Color = Color.White.WithAlpha(0.55f)
+                    Color = carousel.ScrollbarThumbColor
                 }
             };
         }
@@ -956,7 +1017,8 @@ public abstract partial class Carousel<TModel, TCard> : Container
                 thumb.Position = new Vector2(thumbPos, 0);
             }
 
-            thumb.Color = Color.White.WithAlpha(active ? 0.85f : 0.55f);
+            track.Color = carousel.ScrollbarTrackColor;
+            thumb.Color = active ? carousel.ScrollbarThumbColor.WithAlpha(1f) : carousel.ScrollbarThumbColor;
         }
 
         // Thumb spans its share of the track, floored at the minimum but never longer than the track.

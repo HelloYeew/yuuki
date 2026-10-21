@@ -7,8 +7,5 @@ namespace Yuuki.Game.Graphics.UserInterface;
 
 public partial class BeatmapSetCarousel : Carousel<BeatmapSet, BeatmapSetCarouselCard>
 {
-    public BeatmapSetCarousel()
-    {
-        CardSize = BeatmapSetCarouselCard.CARD_SIZE;
-    }
+    protected override CarouselFocusWindow<BeatmapSet> CreateFocusWindow() => new BeatmapSetFocusWindow();
 }

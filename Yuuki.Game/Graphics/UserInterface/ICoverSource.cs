@@ -29,6 +29,13 @@ public interface ICoverSource
     string? CacheKey { get; }
 
     /// <summary>
+    /// Whether to pick this image's colour into the <see cref="Yuuki.Game.Graphics.Colors.CoverColorStore"/>
+    /// (under <see cref="CacheKey"/>) while decoding it. Off by default; a song's cover turns it on, so the
+    /// first display of a cover anywhere colours its song everywhere.
+    /// </summary>
+    bool PickColor => false;
+
+    /// <summary>
     /// Opens a stream to the encoded image bytes. Called on a background thread. Returns <c>null</c>
     /// when the image is unavailable (e.g. missing file / failed request), in which case the cover
     /// simply stays on its placeholder.

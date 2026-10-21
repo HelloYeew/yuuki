@@ -105,6 +105,7 @@ public partial class YuukiGame : App
         Cache(this);
 
         Cache<IYuukiColorProvider>(new DefaultYuukiColorProvider());
+        Cache(new CoverColorStore());
 
         config = new YuukiConfigManager(Host.Storage);
         config.Load();

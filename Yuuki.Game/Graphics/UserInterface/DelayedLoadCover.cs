@@ -12,6 +12,7 @@ using Sakura.Framework.Graphics.Textures;
 using Sakura.Framework.Graphics.Transforms;
 using Sakura.Framework.Maths;
 using Sakura.Framework.Platform;
+using Yuuki.Game.Graphics.Colors;
 
 namespace Yuuki.Game.Graphics.UserInterface;
 
@@ -73,6 +74,9 @@ public partial class DelayedLoadCover : Container
 
     [Resolved(canBeNull: true)]
     private ITextureManager? textureManager { get; set; }
+
+    [Resolved(canBeNull: true)]
+    private CoverColorStore? coverColors { get; set; }
 
     private readonly Box placeholder;
     private readonly Container coverLayer;
@@ -142,7 +146,7 @@ public partial class DelayedLoadCover : Container
         // letting it be collected is cheaper than risking an ObjectDisposedException in the TPL.
         cancellation = new CancellationTokenSource();
 
-        var loader = new CoverLoader(source, textureManager, CoverFillMode, DecodeTargetSize);
+        var loader = new CoverLoader(source, textureManager, CoverFillMode, DecodeTargetSize, coverColors);
 
         // No discard handler: the framework disposes a load it had to throw away, and CoverLoader releases
         // its texture on disposal. That covers cancellation, a load that faults part-built, and this cover
@@ -229,6 +233,7 @@ public partial class DelayedLoadCover : Container
         private readonly ITextureManager textureManager;
         private readonly TextureFillMode fillMode;
         private readonly Vector2? decodeTargetSize;
+        private readonly CoverColorStore? coverColors;
 
         /// <summary>
         /// The share key this cover's texture was acquired under, or null if it is unshared and owned
@@ -239,12 +244,13 @@ public partial class DelayedLoadCover : Container
         [Resolved(canBeNull: true)]
         private AppHost? host { get; set; }
 
-        public CoverLoader(ICoverSource source, ITextureManager textureManager, TextureFillMode fillMode, Vector2? decodeTargetSize)
+        public CoverLoader(ICoverSource source, ITextureManager textureManager, TextureFillMode fillMode, Vector2? decodeTargetSize, CoverColorStore? coverColors)
         {
             this.source = source;
             this.textureManager = textureManager;
             this.fillMode = fillMode;
             this.decodeTargetSize = decodeTargetSize;
+            this.coverColors = coverColors;
 
             Anchor = Anchor.Centre;
             Origin = Anchor.Centre;
@@ -284,11 +290,25 @@ public partial class DelayedLoadCover : Container
                 // The size and fill mode are part of the key because they change the decoded pixels: a
                 // card face and a full-screen background of the same image are genuinely different
                 // textures.
-                ShareKey = shareKey
+                ShareKey = shareKey,
+
+                // The cover's colour, read from the pixels this decode makes anyway. Only on the first
+                // decode of a cover: after that the colour is known, and a share hit decodes nothing.
+                InspectPixels = colorKeyToPick() is { } colorKey
+                    ? (rgba, width, height) => coverColors!.Pick(colorKey, rgba, width, height)
+                    : null
             });
 
             if (Texture != null)
                 ShareKey = shareKey;
+        }
+
+        private string? colorKeyToPick()
+        {
+            if (coverColors == null || !source.PickColor || source.CacheKey is not { } key || coverColors.Contains(key))
+                return null;
+
+            return key;
         }
 
         /// <summary>

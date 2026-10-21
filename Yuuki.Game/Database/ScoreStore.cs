@@ -132,6 +132,24 @@ public class ScoreStore
     public ScoreInfo? GetPersonalBest(Beatmap beatmap) => GetRanking(beatmap, 1).FirstOrDefault();
 
     /// <summary>
+    /// The play that earned the best mark on a difficulty (all perfect, then rank, then full combo), if any.
+    /// </summary>
+    public ScoreInfo? GetBestMark(Beatmap beatmap) => bestMark(scores.Where(s => s.BeatmapId == beatmap.ID));
+
+    /// <summary>
+    /// The play that earned the best mark across a song's difficulties, if any.
+    /// </summary>
+    public ScoreInfo? GetBestMark(BeatmapSet set) => bestMark(scores.Where(s => s.BeatmapSetId == set.ID));
+
+    private static ScoreInfo? bestMark(IEnumerable<ScoreInfo> plays) =>
+        plays.Where(s => s.IsRanked)
+             .OrderByDescending(s => s.IsAllPerfect)
+             .ThenByDescending(s => s.Rank)
+             .ThenByDescending(s => s.IsFullCombo)
+             .ThenByDescending(s => s.Score)
+             .FirstOrDefault();
+
+    /// <summary>
     /// The best <paramref name="count"/> unfailed plays of a difficulty, best first (all of them by default).
     /// </summary>
     public IReadOnlyList<ScoreInfo> GetRanking(Beatmap beatmap, int count = int.MaxValue) =>

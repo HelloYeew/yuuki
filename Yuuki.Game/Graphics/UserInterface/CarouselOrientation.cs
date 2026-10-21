@@ -9,12 +9,12 @@ namespace Yuuki.Game.Graphics.UserInterface;
 public enum CarouselOrientation
 {
     /// <summary>
-    /// Square cards laid out left-to-right; the centred card pops up and scales (coverflow).
+    /// The strip: tiles left-to-right along the bottom, behind a hero tile fixed in the middle.
     /// </summary>
     Horizontal,
 
     /// <summary>
-    /// Wide bars stacked top-to-bottom; the centred bar shifts out sideways.
+    /// The rail: rows top-to-bottom down the right side, behind a focus window fixed in the middle.
     /// </summary>
     Vertical
 }
