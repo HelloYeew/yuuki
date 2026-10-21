@@ -158,6 +158,10 @@ public partial class BeatmapSelector : Container
     private BeatmapFilterControl filterControl = null!;
     private Reactive<BeatmapSort>? sortSetting;
 
+    // The filter, shared with what's listed: a song's level bars dim the difficulties it leaves out.
+    [Cached]
+    private readonly SongListFilter listFilter = new SongListFilter();
+
     /// <summary>The search and filters in effect.</summary>
     public BeatmapFilter Filter => filterControl.Filter;
 
@@ -228,7 +232,8 @@ public partial class BeatmapSelector : Container
                 noResults = new NoResultsPlaceholder(palette)
                 {
                     RequestClearSearch = () => filterControl.SetSearch(string.Empty),
-                    RequestClearLevelRange = () => filterControl.ClearLevelRange()
+                    RequestClearLevelRange = () => filterControl.ClearLevelRange(),
+                    RequestClearLanes = () => filterControl.ClearLanes()
                 }
             }
         });
@@ -285,11 +290,15 @@ public partial class BeatmapSelector : Container
             filterControl.SetSort(sortSetting.Value);
         }
 
+        listFilter.Set(filterControl.Filter);
         filterControl.FilterChanged += _ => applyFilter();
 
-        var sets = filteredBeatmapSets();
+        var library = getDisplayBeatmapSets();
+        refreshLanes(library);
+
+        var sets = Filter.Apply(library, difficultiesOf, forcedSet);
         carousel.SetItems(sets);
-        updateMatchCount(sets.Count);
+        updateMatchCount(sets.Count, library);
 
         if (workingBeatmap != null)
         {
@@ -360,11 +369,11 @@ public partial class BeatmapSelector : Container
         // The vertical song list starts below the filters rather than running under them, and the
         // difficulty list below the docked song. The strip's lists take the whole region: the hero tile
         // rises into its top part.
-        carouselContainer.Padding = new MarginPadding { Top = vertical ? BeatmapFilterControl.VERTICAL_HEIGHT + filter_gap : 0 };
+        carouselContainer.Padding = new MarginPadding { Top = vertical ? BeatmapFilterControl.HEIGHT + filter_gap : 0 };
         difficultyContainer.Padding = new MarginPadding { Top = vertical ? DockedSong.CARD_HEIGHT + dock_margin * 2 : 0 };
 
-        // The filters ride with the region: over the top of the vertical list, or above the strip's right end.
-        filterControl.Anchor = filterControl.Origin = vertical ? Anchor.TopRight : Anchor.BottomRight;
+        // The filters head the vertical rail, on its glass, or sit in a card in the top-right corner.
+        filterControl.Anchor = filterControl.Origin = Anchor.TopRight;
         filterControl.SetLayout(orientation, filterWidth);
         filterControl.Position = regionShown ? filterShownPosition : filterHiddenPosition;
     }
@@ -406,18 +415,21 @@ public partial class BeatmapSelector : Container
     private const float filter_gap = 8;
 
     private float filterWidth => currentOrientation == CarouselOrientation.Vertical
-        ? Math.Max(400, verticalRegionWidth)
-        : BeatmapFilterControl.HORIZONTAL_WIDTH;
+        ? verticalRegionWidth
+        : BeatmapFilterControl.CARD_WIDTH;
 
-    // Vertical: across the top of the list's column, flush with the screen's right edge.
-    // Horizontal: above the strip's right end, clear of the hero tile rising out of it.
+    /// <summary>The horizontal card's distance from the screen's top and right edges.</summary>
+    private const float card_margin = 24;
+
+    // Vertical: across the top of the rail. Horizontal: the top-right corner, framing the screen with the
+    // info panel (top left) and the strip (bottom).
     private Vector2 filterShownPosition => currentOrientation == CarouselOrientation.Vertical
         ? Vector2.Zero
-        : new Vector2(-24, -(region_bottom_gap + strip_height + strip_rise));
+        : new Vector2(-card_margin, card_margin);
 
     private Vector2 filterHiddenPosition => currentOrientation == CarouselOrientation.Vertical
         ? filterShownPosition + new Vector2(verticalRegionWidth, 0)
-        : filterShownPosition + new Vector2(0, strip_height + strip_rise + region_bottom_gap + BeatmapFilterControl.HORIZONTAL_HEIGHT);
+        : filterShownPosition - new Vector2(0, BeatmapFilterControl.HEIGHT + card_margin);
 
     private Vector2 shownPosition => currentOrientation == CarouselOrientation.Vertical ? Vector2.Zero : new Vector2(0, -region_bottom_gap);
 
@@ -445,8 +457,6 @@ public partial class BeatmapSelector : Container
     /// </summary>
     public void SetBeatmapSets(IReadOnlyList<BeatmapSet> sets) => carousel.SetItems(sets);
 
-    private List<BeatmapSet> filteredBeatmapSets() => Filter.Apply(getDisplayBeatmapSets(), difficultiesOf, forcedSet);
-
     /// <summary>How many of <paramref name="sets"/> actually pass: all but a forced song that doesn't.</summary>
     private int countMatches(List<BeatmapSet> sets) =>
         forcedSet != null && sets.Contains(forcedSet) && !Filter.Passes(forcedSet, difficultiesOf(forcedSet))
@@ -468,6 +478,7 @@ public partial class BeatmapSelector : Container
         // A new search or range is the player choosing what to see: a song only listed because the
         // music player picked it goes back to being judged like the rest.
         forcedSet = null;
+        listFilter.Changed();
 
         showSets();
     }
@@ -475,24 +486,36 @@ public partial class BeatmapSelector : Container
     /// <summary>Lists what passes (plus a forced song), keeping the current song selected if it's listed.</summary>
     private void showSets()
     {
-        List<BeatmapSet> sets = filteredBeatmapSets();
+        List<BeatmapSet> library = getDisplayBeatmapSets();
+        List<BeatmapSet> sets = Filter.Apply(library, difficultiesOf, forcedSet);
         BeatmapSet? current = workingBeatmap?.BeatmapSet ?? carousel.CurrentItem.Value;
 
         carousel.SetItems(sets);
-        updateMatchCount(countMatches(sets));
+        updateMatchCount(countMatches(sets), library);
 
         int index = current == null ? -1 : sets.FindIndex(s => s.ID == current.ID);
         if (index >= 0)
             carousel.SetIndex(index, animate: false);
     }
 
-    private void updateMatchCount(int count)
+    /// <summary>
+    /// Updates everything that counts what's listed: the header's count and level histogram, and the
+    /// placeholder for an empty list. <paramref name="library"/> is every song that could be listed.
+    /// </summary>
+    private void updateMatchCount(int count, List<BeatmapSet> library)
     {
         MatchCount = count;
-        filterControl.SetMatchCount(count);
+        filterControl.SetCounts(count, library.Count);
+        filterControl.SetLevelCounts(Filter.LevelCounts(library, difficultiesOf));
         updateNoResults();
         ListChanged?.Invoke();
     }
+
+    /// <summary>
+    /// Gives the header a chip for each lane count in <paramref name="library"/>.
+    /// </summary>
+    private void refreshLanes(List<BeatmapSet> library) =>
+        filterControl.SetLanes(library.SelectMany(difficultiesOf).Select(b => b.LaneCount));
 
     /// <summary>
     /// Shows the placeholder when nothing is listed: the music muffles for a moment as it
@@ -740,6 +763,7 @@ public partial class BeatmapSelector : Container
     /// </summary>
     public void RefreshFromLibrary()
     {
+        refreshLanes(getDisplayBeatmapSets());
         showSets();
 
         if (State != SelectionState.SelectingBeatmap || workingBeatmap?.BeatmapSet is not BeatmapSet set || !populateDifficulties(set))

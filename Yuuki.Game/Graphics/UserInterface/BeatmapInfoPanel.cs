@@ -628,7 +628,7 @@ public partial class BeatmapInfoPanel : FlowContainer
         beatmapRow.SetItems(
             (IconUsage.Person, beatmap?.Creator ?? ""),
             (IconUsage.Label, beatmap?.DifficultyName ?? ""),
-            (IconUsage.Rocket, beatmap == null ? "" : $"{(int)beatmap.DifficultyRating}"),
+            (IconUsage.Rocket, beatmap == null ? "" : BeatmapUtility.FormatLevel(beatmap.DifficultyRating)),
             (IconUsage.ViewColumn, beatmap == null ? "" : BeatmapUtility.FormatLanes(beatmap.LaneCount)),
             (IconUsage.Timer, full ? length : ""),
             (IconUsage.Metro, full ? bpm : ""),
@@ -660,17 +660,10 @@ public partial class BeatmapInfoPanel : FlowContainer
         ? ""
         : BeatmapUtility.FormatLaneRange(beatmapsCollection.GetBeatmapsFromBeatmapSet(set, false));
 
-    private string levelRange()
-    {
-        if (set == null || beatmapsCollection == null)
-            return "";
-
-        var range = beatmapsCollection.GetMinMaxDifficultyLevel(set);
-        if (range["max"] <= 0)
-            return "";
-
-        return range["min"] == range["max"] ? $"{range["max"]}" : $"{range["min"]}-{range["max"]}";
-    }
+    /// <summary>The levels across the song's difficulties, to one decimal: "2.0–13.4".</summary>
+    private string levelRange() => set == null || beatmapsCollection == null
+        ? ""
+        : BeatmapUtility.FormatLevelRange(beatmapsCollection.GetBeatmapsFromBeatmapSet(set));
 
     /// <summary>
     /// Fills the Detail tab from the chart's summary — cached, or read on a background thread the first

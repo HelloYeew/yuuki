@@ -80,7 +80,7 @@ public partial class FrostedBand : Container
     private Reactive<bool>? blurBackground;
 
     /// <summary>
-    /// The edge facing the screen, which gets a thin light rim where the glass ends.
+    /// The edge facing the screen, which gets a thin light rim where the glass ends. None for no rim.
     /// </summary>
     public Edges RimEdge
     {
@@ -179,6 +179,9 @@ public partial class FrostedBand : Container
 
     private void updateRim()
     {
+        // A card draws its own outline around all four sides.
+        rim.Alpha = rimEdge == Edges.None ? 0 : 1;
+
         bool side = rimEdge is Edges.Left or Edges.Right;
 
         rim.RelativeSizeAxes = side ? Axes.Y : Axes.X;

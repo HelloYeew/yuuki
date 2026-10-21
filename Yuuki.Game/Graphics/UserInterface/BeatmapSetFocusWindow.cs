@@ -84,7 +84,7 @@ public partial class BeatmapSetFocusWindow : CarouselFocusWindow<BeatmapSet>
         private readonly FlowContainer text;
         private readonly ScrollingText title;
         private readonly ScrollingText artist;
-        private readonly SpriteText details;
+        private readonly IconStats details;
         private readonly FlowContainer extras;
         private readonly BestMark best;
         private readonly LevelSkyline skyline;
@@ -133,10 +133,9 @@ public partial class BeatmapSetFocusWindow : CarouselFocusWindow<BeatmapSet>
                             RelativeSizeAxes = Axes.X,
                             Font = YuukiFontUsage.GetFontUsage(Typeface.Nunito, 18, FontWeight.SemiBold)
                         },
-                        details = new SpriteText
+                        details = new IconStats(15)
                         {
-                            Margin = new MarginPadding { Top = 6 },
-                            Font = YuukiFontUsage.GetFontUsage(Typeface.Nunito, 15, FontWeight.Bold)
+                            Margin = new MarginPadding { Top = 6 }
                         }
                     }
                 },
@@ -198,7 +197,7 @@ public partial class BeatmapSetFocusWindow : CarouselFocusWindow<BeatmapSet>
             RefreshColors();
 
             updateText();
-            details.Text = detailsOf(set, difficulties);
+            details.SetItems(detailsOf(set, difficulties));
             skyline.SetDifficulties(difficulties);
             lanes.Text = BeatmapUtility.FormatLaneRange(difficulties);
             best.SetBest(scoreStore?.GetBestMark(set));
@@ -221,28 +220,15 @@ public partial class BeatmapSetFocusWindow : CarouselFocusWindow<BeatmapSet>
             cover.PlaceholderColor = fill.Darken(0.15f);
         }
 
-        private static string detailsOf(BeatmapSet set, IReadOnlyList<Beatmap> difficulties)
+        /// <summary>
+        /// The level range, length and BPM. Not the lanes: the lane label beside the skyline has them.
+        /// </summary>
+        private static (IconUsage, string)[] detailsOf(BeatmapSet set, IReadOnlyList<Beatmap> difficulties) => new[]
         {
-            var parts = new List<string>();
-
-            if (difficulties.Count > 0)
-            {
-                int low = difficulties.Min(BeatmapFilter.LevelOf), high = difficulties.Max(BeatmapFilter.LevelOf);
-                parts.Add(low == high ? $"Lv {low}" : $"Lv {low}–{high}");
-
-                string lanes = BeatmapUtility.FormatLaneRange(difficulties);
-                if (!string.IsNullOrEmpty(lanes))
-                    parts.Add(lanes);
-            }
-
-            if (set.TotalLength > 0)
-                parts.Add(TimeSpan.FromMilliseconds(set.TotalLength).ToString(@"m\:ss"));
-
-            if (set.BPM > 0)
-                parts.Add($"{Math.Round(set.BPM)} BPM");
-
-            return string.Join(" · ", parts);
-        }
+            (IconUsage.Rocket, BeatmapUtility.FormatLevelRange(difficulties)),
+            (IconUsage.Timer, set.TotalLength > 0 ? TimeSpan.FromMilliseconds(set.TotalLength).ToString(@"m\:ss") : ""),
+            (IconUsage.Metro, set.BPM > 0 ? $"{Math.Round(set.BPM)}" : "")
+        };
 
         private void updateText()
         {

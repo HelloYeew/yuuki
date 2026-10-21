@@ -3,6 +3,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Text.Encodings.Web;
 using System.Text.Json;
@@ -55,6 +56,34 @@ public static class BeatmapUtility
     /// How many lanes a difficulty has, as rhythm games write it: "4K".
     /// </summary>
     public static string FormatLanes(int laneCount) => $"{laneCount}K";
+
+    /// <summary>
+    /// A difficulty's level as it's shown, to one decimal place: "13.4". Rounded down, so it never reads as
+    /// the level above the one it's filtered and sorted at (13.96 is 13.9, a level 13).
+    /// </summary>
+    public static string FormatLevel(double rating) =>
+        (Math.Floor(rating * 10 + 1e-9) / 10).ToString("0.0", CultureInfo.InvariantCulture);
+
+    /// <summary>
+    /// The levels across a song's difficulties: "13.4", or "2.0–13.4" when they differ; empty when there
+    /// are none. Shown after the level icon, so with no "Lv".
+    /// </summary>
+    public static string FormatLevelRange(IEnumerable<Beatmap> beatmaps)
+    {
+        double min = double.MaxValue, max = double.MinValue;
+
+        foreach (var beatmap in beatmaps)
+        {
+            min = Math.Min(min, beatmap.DifficultyRating);
+            max = Math.Max(max, beatmap.DifficultyRating);
+        }
+
+        if (min > max)
+            return "";
+
+        string low = FormatLevel(min), high = FormatLevel(max);
+        return low == high ? low : $"{low}–{high}";
+    }
 
     /// <summary>
     /// The lane counts across a song's difficulties: "4K", or "4-7K" when they differ; empty when there

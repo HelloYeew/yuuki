@@ -3,6 +3,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using Sakura.Framework.Extensions.ColorExtensions;
 using Sakura.Framework.Extensions.DrawableExtensions;
 using Sakura.Framework.Graphics.Colors;
@@ -15,6 +16,7 @@ using Sakura.Framework.Maths;
 using Yuuki.Game.Beatmaps;
 using Yuuki.Game.Graphics.Colors;
 using Yuuki.Game.Graphics.Text;
+using Yuuki.Game.Utilities;
 
 namespace Yuuki.Game.Graphics.UserInterface;
 
@@ -39,6 +41,11 @@ public partial class NoResultsPlaceholder : Container
     /// Opens the level range back up (the "removing" link).
     /// </summary>
     public Action? RequestClearLevelRange { get; init; }
+
+    /// <summary>
+    /// Lets every lane count through again (the lanes' "removing" link).
+    /// </summary>
+    public Action? RequestClearLanes { get; init; }
 
     /// <summary>
     /// Whether it's showing (or on its way in).
@@ -223,10 +230,16 @@ public partial class NoResultsPlaceholder : Container
             if (!string.IsNullOrWhiteSpace(filter.Search))
                 rows.Add(new SuggestionRow("Try ", "clearing", " your current search.", RequestClearSearch));
 
-            if (filter.MinLevel > 0 || filter.MaxLevel < BeatmapFilter.MAX_LEVEL)
+            if (filter.LevelRangeSet)
             {
                 string upper = filter.MaxLevel >= BeatmapFilter.MAX_LEVEL ? "∞" : filter.MaxLevel.ToString();
                 rows.Add(new SuggestionRow("Try ", "removing", $" the Lv {filter.MinLevel} – {upper} level filter.", RequestClearLevelRange));
+            }
+
+            if (filter.Lanes.Count > 0)
+            {
+                string lanes = string.Join(", ", filter.Lanes.Order().Select(BeatmapUtility.FormatLanes));
+                rows.Add(new SuggestionRow("Try ", "removing", $" the {lanes} lane filter.", RequestClearLanes));
             }
         }
 

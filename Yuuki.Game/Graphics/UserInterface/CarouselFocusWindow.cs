@@ -67,7 +67,8 @@ public abstract partial class CarouselFocusFace<TModel> : Container
 /// The fixed window on a carousel's cue, and the only solid thing in the list. The cards slide behind it,
 /// and it shows whichever item is at the scroll position in a large layout. Between two items it doesn't
 /// grow or slide continuously: it holds still for most of each step and then clicks over to the next one,
-/// so a fast scroll reads as a flip counter rather than two half-faded cards smeared across it.
+/// so a fast scroll reads as a flip counter rather than two half-faded cards smeared across it. When the
+/// list comes to rest on an item, a streak of light crosses the window at the blade's angle: a wink.
 /// </summary>
 public abstract partial class CarouselFocusWindow<TModel> : Container
     where TModel : class
@@ -79,11 +80,25 @@ public abstract partial class CarouselFocusWindow<TModel> : Container
 
     private const double fill_fade_duration = 180;
 
+    private const float sweep_width = 90;
+
+    /// <summary>
+    /// How white the streak is at its brightest, down the middle.
+    /// </summary>
+    private const float sweep_peak = 0.5f;
+    private const double sweep_duration = 420;
+
+    /// <summary>
+    /// Quick to cross and slow to leave, so the streak lands on the item and then lingers off its far edge.
+    /// </summary>
+    private static readonly EasingFunction sweep_easing = new EasingFunction(new CubicBezierEasing(0.2, 0.6, 0.2, 1));
+
     // The visible card. The window itself carries the entrance and exit transforms, so the per-frame
     // work below never touches its alpha.
     private readonly Container body;
     private readonly Box fill;
     private readonly Container faceLayer;
+    private readonly Container sweep;
 
     private readonly List<(int Index, CarouselFocusFace<TModel> Face)> live = new List<(int, CarouselFocusFace<TModel>)>();
     private readonly Stack<CarouselFocusFace<TModel>> spare = new Stack<CarouselFocusFace<TModel>>();
@@ -92,6 +107,11 @@ public abstract partial class CarouselFocusWindow<TModel> : Container
     private CarouselOrientation orientation = CarouselOrientation.Horizontal;
     private TModel? colouredFor;
     private Color fillColor = Color.Gray;
+
+    // The scroll position last frame, to tell a list at rest from one passing through an item, and the
+    // item the window last winked at.
+    private double lastPosition = double.NaN;
+    private TModel? sweptFor;
 
     protected CarouselFocusWindow()
     {
@@ -118,6 +138,34 @@ public abstract partial class CarouselFocusWindow<TModel> : Container
                 faceLayer = new Container
                 {
                     RelativeSizeAxes = Axes.Both
+                },
+                // Taller than the window, so its slanted ends are cut off by the window's edges.
+                sweep = new Container
+                {
+                    Anchor = Anchor.CentreLeft,
+                    Origin = Anchor.Centre,
+                    RelativeSizeAxes = Axes.Y,
+                    Height = 1.2f,
+                    Width = sweep_width,
+                    Shear = UserInterfaceConstant.Shear,
+                    Alpha = 0,
+                    Children = new Drawable[]
+                    {
+                        new Box
+                        {
+                            RelativeSizeAxes = Axes.Both,
+                            Width = 0.5f,
+                            ColorInfo = ColorInfo.GradientHorizontal(Color.White.WithAlpha(0), Color.White.WithAlpha(sweep_peak))
+                        },
+                        new Box
+                        {
+                            RelativeSizeAxes = Axes.Both,
+                            RelativePositionAxes = Axes.X,
+                            X = 0.5f,
+                            Width = 0.5f,
+                            ColorInfo = ColorInfo.GradientHorizontal(Color.White.WithAlpha(sweep_peak), Color.White.WithAlpha(0))
+                        }
+                    }
                 }
             }
         };
@@ -150,6 +198,11 @@ public abstract partial class CarouselFocusWindow<TModel> : Container
     /// </summary>
     public Color FillColor => fillColor;
 
+    /// <summary>
+    /// How many times the window has winked (diagnostics/tests).
+    /// </summary>
+    public int WinkCount { get; private set; }
+
     public void SetOrientation(CarouselOrientation value)
     {
         orientation = value;
@@ -173,6 +226,8 @@ public abstract partial class CarouselFocusWindow<TModel> : Container
             stillShown.Clear();
             releaseAllBut(stillShown);
             colouredFor = null;
+            sweptFor = null;
+            lastPosition = double.NaN;
             return;
         }
 
@@ -194,6 +249,36 @@ public abstract partial class CarouselFocusWindow<TModel> : Container
             fadeFill(FillFor(current), colouredFor == null ? 0 : fill_fade_duration);
             colouredFor = current;
         }
+
+        // At rest on an item it hasn't winked at yet: not merely passing through one mid-scroll.
+        bool still = Math.Abs(position - lastPosition) < 0.001;
+        lastPosition = position;
+
+        if (still && Math.Abs(position - Math.Round(position)) < 0.02 && !ReferenceEquals(current, sweptFor))
+        {
+            sweptFor = current;
+            wink();
+        }
+    }
+
+    /// <summary>
+    /// Sends the streak of light across the window, from beyond one edge to beyond the other.
+    /// </summary>
+    private void wink()
+    {
+        if (!IsLoaded)
+            return;
+
+        WinkCount++;
+
+        // How far the streak reaches either side of its centre, its slant included.
+        float reach = sweep_width / 2 + Math.Abs(UserInterfaceConstant.Shear.X) * sweep.DrawHeight / 2;
+
+        sweep.ClearTransforms();
+        sweep.X = -reach;
+        sweep.Alpha = 0;
+        sweep.MoveToX(DrawWidth + reach, sweep_duration, sweep_easing);
+        sweep.FadeTo(1, sweep_duration * 0.2).Then().FadeOut(sweep_duration * 0.8);
     }
 
     /// <summary>

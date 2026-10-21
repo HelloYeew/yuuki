@@ -30,6 +30,14 @@ public partial class BeatmapCard : CarouselCard<Beatmap>
     private const float row_tab_width = 112;
     private const float tile_square_size = 120;
 
+    /// <summary>
+    /// How much of a row's tab shows: a wash of the tier, so the rows don't shout over the focus window,
+    /// the one solid thing in the list. A little more under the pointer.
+    /// </summary>
+    private const float row_tab_alpha = 0.4f;
+
+    private const float row_tab_hover_alpha = 0.6f;
+
     public Beatmap Beatmap { get; private set; } = null!;
 
     [Resolved(canBeNull: true)]
@@ -47,9 +55,11 @@ public partial class BeatmapCard : CarouselCard<Beatmap>
     private readonly SpriteText rowLevel;
     private readonly SpriteText rowName;
     private readonly SpriteText rowSub;
+    private readonly FlowContainer rowText;
     private readonly FlowContainer rowExtras;
     private readonly LaneLabel rowLanes;
     private readonly BestMark rowBest;
+    private readonly Container rowRuleHolder;
     private readonly Box rowRule;
 
     private readonly Container tileFace;
@@ -87,10 +97,12 @@ public partial class BeatmapCard : CarouselCard<Beatmap>
                     // Shear pivots on the origin, so a centre-left origin leans it about its middle.
                     Anchor = Anchor.CentreLeft,
                     Origin = Anchor.CentreLeft,
+                    // Its middle ends at the level column's edge; leaning, its top reaches further (see Update).
                     RelativeSizeAxes = Axes.Y,
                     X = -60,
-                    Width = row_tab_width + 80,
-                    Shear = UserInterfaceConstant.Shear
+                    Width = row_tab_width + 60,
+                    Shear = UserInterfaceConstant.Shear,
+                    Alpha = row_tab_alpha
                 },
                 new Container
                 {
@@ -101,10 +113,10 @@ public partial class BeatmapCard : CarouselCard<Beatmap>
                         Anchor = Anchor.Centre,
                         Origin = Anchor.Centre,
                         X = -14,
-                        Font = YuukiFontUsage.GetFontUsage(Typeface.Nunito, 38, FontWeight.ExtraBold)
+                        Font = YuukiFontUsage.GetFontUsage(Typeface.Nunito, 34, FontWeight.ExtraBold)
                     }
                 },
-                new FlowContainer
+                rowText = new FlowContainer
                 {
                     Anchor = Anchor.CentreLeft,
                     Origin = Anchor.CentreLeft,
@@ -148,7 +160,7 @@ public partial class BeatmapCard : CarouselCard<Beatmap>
                         }
                     }
                 },
-                new Container
+                rowRuleHolder = new Container
                 {
                     Anchor = Anchor.BottomCentre,
                     Origin = Anchor.BottomCentre,
@@ -195,7 +207,7 @@ public partial class BeatmapCard : CarouselCard<Beatmap>
                             Anchor = Anchor.Centre,
                             Origin = Anchor.Centre,
                             Y = 6,
-                            Font = YuukiFontUsage.GetFontUsage(Typeface.Nunito, 52, FontWeight.ExtraBold)
+                            Font = YuukiFontUsage.GetFontUsage(Typeface.Nunito, 44, FontWeight.ExtraBold)
                         }
                     }
                 },
@@ -240,7 +252,7 @@ public partial class BeatmapCard : CarouselCard<Beatmap>
         var tier = BeatmapUtility.ColorForDifficulty(beatmap.DifficultyRating);
         var tierInk = SetlistColors.TierInk(tier);
         string tierName = BeatmapUtility.CalculateDifficultyLevel(beatmap).ToString();
-        string level = BeatmapFilter.LevelOf(beatmap).ToString();
+        string level = BeatmapUtility.FormatLevel(beatmap.DifficultyRating);
         string name = string.IsNullOrEmpty(beatmap.DifficultyName) ? "Difficulty" : beatmap.DifficultyName;
         string lanes = beatmap.LaneCount > 0 ? BeatmapUtility.FormatLanes(beatmap.LaneCount) : "";
 
@@ -279,7 +291,17 @@ public partial class BeatmapCard : CarouselCard<Beatmap>
 
         if (vertical)
         {
-            float budget = Math.Max(0, rowFace.DrawWidth - row_tab_width - 22 - rowExtras.DrawWidth - 32);
+            // The text starts clear of the tab's top corner, which leans out past its middle by a third of
+            // the row's height; the title sits up there, and used to run into it.
+            float textX = row_tab_width + Math.Abs(UserInterfaceConstant.Shear.X) * rowFace.DrawHeight / 2 + 14;
+
+            if (Math.Abs(rowText.X - textX) > 0.5f)
+            {
+                rowText.X = textX;
+                rowRuleHolder.Padding = new MarginPadding { Left = textX - 10, Right = 12 };
+            }
+
+            float budget = Math.Max(0, rowFace.DrawWidth - textX - rowExtras.DrawWidth - 32);
             rowName.MaxWidth = budget;
             rowSub.MaxWidth = budget;
         }
@@ -288,6 +310,7 @@ public partial class BeatmapCard : CarouselCard<Beatmap>
     public override bool OnHover(MouseEvent e)
     {
         rowHover.FadeTo(0.06f, 150, Easing.OutQuint);
+        rowTab.FadeTo(row_tab_hover_alpha, 150, Easing.OutQuint);
         tileSquare.BorderThickness = 3;
         tileSquare.BorderColor = rowName.Color.WithAlpha(0.3f);
         return base.OnHover(e);
@@ -296,6 +319,7 @@ public partial class BeatmapCard : CarouselCard<Beatmap>
     public override bool OnHoverLost(MouseEvent e)
     {
         rowHover.FadeOut(300, Easing.OutQuint);
+        rowTab.FadeTo(row_tab_alpha, 300, Easing.OutQuint);
         tileSquare.BorderThickness = 0;
         return base.OnHoverLost(e);
     }

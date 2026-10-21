@@ -42,6 +42,7 @@ public partial class BeatmapFocusWindow : CarouselFocusWindow<Beatmap>
         private readonly SpriteText wideLevel;
         private readonly SpriteText wideName;
         private readonly SpriteText wideSub;
+        private readonly FlowContainer wideText;
         private readonly FlowContainer wideExtras;
         private readonly LaneLabel wideLanes;
         private readonly BestMark wideBest;
@@ -69,9 +70,10 @@ public partial class BeatmapFocusWindow : CarouselFocusWindow<Beatmap>
                         {
                             Anchor = Anchor.CentreLeft,
                             Origin = Anchor.CentreLeft,
+                            // Its middle ends at the level column's edge; leaning, its top reaches further (see Update).
                             RelativeSizeAxes = Axes.Y,
                             X = -70,
-                            Width = wide_tab_width + 94,
+                            Width = wide_tab_width + 70,
                             Shear = UserInterfaceConstant.Shear
                         },
                         new Container
@@ -83,10 +85,10 @@ public partial class BeatmapFocusWindow : CarouselFocusWindow<Beatmap>
                                 Anchor = Anchor.Centre,
                                 Origin = Anchor.Centre,
                                 X = -16,
-                                Font = YuukiFontUsage.GetFontUsage(Typeface.Nunito, 48, FontWeight.ExtraBold)
+                                Font = YuukiFontUsage.GetFontUsage(Typeface.Nunito, 42, FontWeight.ExtraBold)
                             }
                         },
-                        new FlowContainer
+                        wideText = new FlowContainer
                         {
                             Anchor = Anchor.CentreLeft,
                             Origin = Anchor.CentreLeft,
@@ -158,7 +160,7 @@ public partial class BeatmapFocusWindow : CarouselFocusWindow<Beatmap>
                                     Anchor = Anchor.Centre,
                                     Origin = Anchor.Centre,
                                     Y = 8,
-                                    Font = YuukiFontUsage.GetFontUsage(Typeface.Nunito, 104, FontWeight.ExtraBold)
+                                    Font = YuukiFontUsage.GetFontUsage(Typeface.Nunito, 84, FontWeight.ExtraBold)
                                 }
                             }
                         },
@@ -191,7 +193,7 @@ public partial class BeatmapFocusWindow : CarouselFocusWindow<Beatmap>
             var tier = BeatmapUtility.ColorForDifficulty(beatmap.DifficultyRating);
             var ink = SetlistColors.TierInk(tier);
             string tierName = BeatmapUtility.CalculateDifficultyLevel(beatmap).ToString();
-            string level = BeatmapFilter.LevelOf(beatmap).ToString();
+            string level = BeatmapUtility.FormatLevel(beatmap.DifficultyRating);
             string lanes = beatmap.LaneCount > 0 ? BeatmapUtility.FormatLanes(beatmap.LaneCount) : "";
             var best = scoreStore?.GetBestMark(beatmap);
 
@@ -223,7 +225,14 @@ public partial class BeatmapFocusWindow : CarouselFocusWindow<Beatmap>
             if (!vertical)
                 return;
 
-            float budget = Math.Max(0, DrawWidth - wide_tab_width - 26 - wideExtras.DrawWidth - 36);
+            // The text starts clear of the tab's top corner, which leans out past its middle by a third of
+            // the window's height; the name sits up there, and used to run into it.
+            float textX = wide_tab_width + Math.Abs(UserInterfaceConstant.Shear.X) * DrawHeight / 2 + 16;
+
+            if (Math.Abs(wideText.X - textX) > 0.5f)
+                wideText.X = textX;
+
+            float budget = Math.Max(0, DrawWidth - textX - wideExtras.DrawWidth - 36);
             wideName.MaxWidth = budget;
             wideSub.MaxWidth = budget;
         }
