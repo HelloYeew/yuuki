@@ -25,9 +25,19 @@ public class BeatmapSetCoverSource : ICoverSource
 
     public Texture? Cached => null;
 
-    // The file as well as the set: a cover changed in the editor is a different image, not the one
-    // already shared under the set's ID.
-    public string? CacheKey => $"beatmap-cover-{beatmapSet.ID}-{beatmapSet.CoverStoragePath}";
+    public string? CacheKey => KeyFor(beatmapSet);
+
+    public bool PickColor => true;
+
+    /// <summary>
+    /// The key a set's cover is shared and coloured under, for looking its colour up in the
+    /// <see cref="Yuuki.Game.Graphics.Colors.CoverColorStore"/>.
+    /// </summary>
+    /// <remarks>
+    /// The file as well as the set: a cover changed in the editor is a different image, not the one
+    /// already shared under the set's ID.
+    /// </remarks>
+    public static string KeyFor(BeatmapSet set) => $"beatmap-cover-{set.ID}-{set.CoverStoragePath}";
 
     public Stream? Open()
     {
