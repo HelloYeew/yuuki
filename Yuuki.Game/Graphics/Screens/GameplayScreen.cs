@@ -597,13 +597,13 @@ public partial class GameplayScreen : YuukiScreen, IHaveScreenAction
 
         if (result.IsAllPerfect)
         {
-            clearBanner.Play("All Perfect", JudgementColors.CRITICAL);
+            clearBanner.Play("All Perfect", JudgementColors.ALL_PERFECT);
             playSample("fountain-shoot.wav");
             playSample("spinnerbonus-max.wav");
         }
         else if (result.IsFullCombo)
         {
-            clearBanner.Play("Full Combo", JudgementColors.BREAK);
+            clearBanner.Play("Full Combo", JudgementColors.FULL_COMBO);
             playSample("spinnerbonus-max.wav");
         }
         else

@@ -228,7 +228,6 @@ public partial class BeatmapCard : CarouselCard<Beatmap>
         rowName.Color = ink;
         rowSub.Color = SetlistColors.Secondary(ink);
         rowLanes.Color = ink;
-        rowBest.Color = ink;
         rowRule.Color = ink.WithAlpha(0.1f);
         tileName.Color = ink;
         tileSub.Color = SetlistColors.Secondary(ink);

@@ -217,7 +217,6 @@ public partial class BeatmapSetFocusWindow : CarouselFocusWindow<BeatmapSet>
             title.Color = ink;
             artist.Color = ink.WithAlpha(0.8f);
             details.Color = ink;
-            best.Color = ink;
             lanes.Color = ink;
             cover.PlaceholderColor = fill.Darken(0.15f);
         }

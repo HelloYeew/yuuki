@@ -1257,7 +1257,7 @@ public partial class BeatmapInfoPanel : FlowContainer
 
             Color rankColor = JudgementColors.For(score.Rank);
             string badge = score.IsAllPerfect ? "AP" : score.IsFullCombo ? "FC" : "";
-            Color badgeColor = score.IsAllPerfect ? JudgementColors.CRITICAL : JudgementColors.BREAK;
+            Color badgeColor = score.IsAllPerfect ? JudgementColors.ALL_PERFECT : JudgementColors.FULL_COMBO;
 
             date = score.Date;
             agoText = text(ago(date), 14, FontWeight.Regular, Color.White.WithAlpha(0.7f), Anchor.CentreLeft, 84, -11);

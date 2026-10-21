@@ -204,7 +204,6 @@ public partial class BeatmapFocusWindow : CarouselFocusWindow<Beatmap>
             wideSub.Text = string.IsNullOrEmpty(beatmap.Creator) ? tierName : $"{tierName} · mapped by {beatmap.Creator}";
             wideLanes.Color = ink;
             wideLanes.Text = lanes;
-            wideBest.Color = ink;
             wideBest.SetBest(best);
 
             heroFill.Color = tier;
@@ -214,7 +213,6 @@ public partial class BeatmapFocusWindow : CarouselFocusWindow<Beatmap>
             heroLevel.Text = level;
             heroLanes.Color = ink;
             heroLanes.Text = lanes;
-            heroBest.Color = ink;
             heroBest.SetBest(best);
         }
 

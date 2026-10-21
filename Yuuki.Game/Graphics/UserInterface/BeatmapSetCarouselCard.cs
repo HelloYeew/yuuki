@@ -179,8 +179,7 @@ public partial class BeatmapSetCarouselCard : CarouselCard<BeatmapSet>
                         rowBest = new BestMark
                         {
                             Anchor = Anchor.CentreLeft,
-                            Origin = Anchor.CentreLeft,
-                            Color = ink
+                            Origin = Anchor.CentreLeft
                         },
                         rowSkyline = new LevelSkyline
                         {

@@ -406,7 +406,7 @@ public partial class ScoreScreen : YuukiScreen, IHaveScreenAction
             return container;
 
         return fillBadge(container,
-            result.IsAllPerfect ? JudgementColors.CRITICAL : JudgementColors.BREAK,
+            result.IsAllPerfect ? JudgementColors.ALL_PERFECT : JudgementColors.FULL_COMBO,
             result.IsAllPerfect ? "ALL PERFECT" : "FULL COMBO");
     }
 

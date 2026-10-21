@@ -14,6 +14,18 @@ public static class JudgementColors
     public static readonly Color HIT = ColorExtensions.FromHex("#4FA36B");
     public static readonly Color MISS = ColorExtensions.FromHex("#D9534F");
 
+    /// <summary>
+    /// A full combo, wherever it's shown. Its own color, apart from every rank's (it used to be
+    /// <see cref="BREAK"/>, which is B's), so "B | FC" doesn't read as one blue block.
+    /// </summary>
+    public static readonly Color FULL_COMBO = ColorExtensions.FromHex("#2EC4D6");
+
+    /// <summary>
+    /// An all perfect, wherever it's shown. Its own color (it used to be <see cref="CRITICAL"/>, which is
+    /// S's, and an all perfect is always an S).
+    /// </summary>
+    public static readonly Color ALL_PERFECT = ColorExtensions.FromHex("#E8649E");
+
     public static Color For(HitResult result) => result switch
     {
         HitResult.Critical => CRITICAL,

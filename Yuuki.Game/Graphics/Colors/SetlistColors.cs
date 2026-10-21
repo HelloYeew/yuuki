@@ -19,12 +19,12 @@ public static class SetlistColors
     private static readonly Color near_black = ColorExtensions.FromHex("#1B1622");
 
     /// <summary>
-    /// A tier color as a focus window's fill: softened towards white.
+    /// A tier or rank color as a fill (a focus window, a best mark): softened towards white.
     /// </summary>
     public static Color TierFill(Color tier) => tier.Lighten(0.3f);
 
     /// <summary>
-    /// Ink for text on a tier color or its fill: the same hue, most of the way to near-black.
+    /// Ink for text on a tier or rank color, or its fill: the same hue, most of the way to near-black.
     /// </summary>
     public static Color TierInk(Color tier) => tier.Blend(near_black, 0.75f);
 
