@@ -253,6 +253,91 @@ public partial class TestSongSelectionScreen : TestYuukiScreenStack
         AddStep("Remove screen", () => songSelectionScreen.Exit());
     }
 
+    private BeatmapSetCarousel songList => (BeatmapSetCarousel)songSelectionScreen.Selector.ListArea;
+
+    /// <summary>
+    /// PgUp / PgDn move a group at a time in the current sort: here, the dummy songs' BPMs (121 to 150) in
+    /// bands of ten. Home / End go to the ends.
+    /// </summary>
+    [Test]
+    public void TestGroupJump()
+    {
+        addSongs(30);
+        sortBy(BeatmapSort.Bpm);
+        pushScreen();
+
+        AddStep("to the first", () => songSelectionScreen.Selector.JumpToEnd(last: false));
+        AddUntilStep("the 120s", () => songList.CurrentIndex == 0);
+        AddStep("next group", () => songSelectionScreen.Selector.JumpGroup(1));
+        AddUntilStep("the 130s", () => songList.CurrentIndex == 9);
+        AddStep("next group", () => songSelectionScreen.Selector.JumpGroup(1));
+        AddUntilStep("the 140s", () => songList.CurrentIndex == 19);
+        AddStep("previous group", () => songSelectionScreen.Selector.JumpGroup(-1));
+        AddUntilStep("the 130s again, from their start", () => songList.CurrentIndex == 9);
+        AddStep("to the end", () => songSelectionScreen.Selector.JumpToEnd(last: true));
+        AddUntilStep("the last", () => songList.CurrentIndex == 29);
+
+        AddStep("Remove screen", () => songSelectionScreen.Exit());
+        sortBy(BeatmapSort.Added);
+    }
+
+    [Test]
+    public void TestGroupJumpWithoutGroupsGoesTenAtATime()
+    {
+        addSongs(30);
+        sortBy(BeatmapSort.Added);
+        pushScreen();
+
+        AddStep("to the first", () => songSelectionScreen.Selector.JumpToEnd(last: false));
+        AddUntilStep("there", () => songList.CurrentIndex == 0);
+        AddStep("next \"group\"", () => songSelectionScreen.Selector.JumpGroup(1));
+        AddUntilStep("ten on", () => songList.CurrentIndex == 10);
+
+        AddStep("Remove screen", () => songSelectionScreen.Exit());
+    }
+
+    /// <summary>
+    /// The scrubber (the song list's scrollbar) is labelled where each group starts, in coarser bands than
+    /// the jump: BPM in twenties. An order without groups has no labels.
+    /// </summary>
+    [Test]
+    public void TestScrubberLabels()
+    {
+        addSongs(30);
+        sortBy(BeatmapSort.Bpm);
+        pushScreen();
+
+        AddAssert("labelled by BPM band", () => songList.ScrollbarLabels.SequenceEqual(new[] { (0, "120"), (19, "140") }));
+        AddStep("Remove screen", () => songSelectionScreen.Exit());
+
+        sortBy(BeatmapSort.Added);
+        pushScreen();
+        AddAssert("no labels as added", () => songList.ScrollbarLabels.Count == 0);
+        AddStep("Remove screen again", () => songSelectionScreen.Exit());
+    }
+
+    /// <summary>
+    /// A long jump skims, and while it does the group it's passing through shows large.
+    /// </summary>
+    [Test]
+    public void TestSkimLabelShowsTheGroup()
+    {
+        addSongs(30);
+        sortBy(BeatmapSort.Bpm);
+        pushScreen();
+
+        AddStep("to the first", () => songSelectionScreen.Selector.JumpToEnd(last: false));
+        AddUntilStep("at rest there", () => songList.CurrentIndex == 0 && songList.Motion.Skim == 0);
+        AddStep("all the way to the end", () => songSelectionScreen.Selector.JumpToEnd(last: true));
+        AddUntilStep("the group shows", () => songSelectionScreen.Selector.SkimLabelText?.EndsWith(" BPM") == true);
+        AddUntilStep("and goes once it stops", () => songList.CurrentIndex == 29 && songSelectionScreen.Selector.SkimLabelText == null);
+
+        AddStep("Remove screen", () => songSelectionScreen.Exit());
+        sortBy(BeatmapSort.Added);
+    }
+
+    private void sortBy(BeatmapSort sort) => AddStep($"sort by {sort}", () => configManager.Get<BeatmapSort>(YuukiSetting.SongSelectSort).Value = sort);
+
     private void addSongs(int count) => AddStep($"add {count} songs", () =>
     {
         beatmapsCollection.BeatmapSets = BeatmapTestUtility.CreateDummyBeatmapSets(count);

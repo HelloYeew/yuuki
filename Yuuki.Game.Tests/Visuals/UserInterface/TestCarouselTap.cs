@@ -88,7 +88,8 @@ public partial class TestCarouselTap : YuukiManualInputManagerTestScene
                 Anchor = Anchor.Centre,
                 Origin = Anchor.Centre,
                 RelativeSizeAxes = Axes.X,
-                Height = 150,
+                // The strip's height, with room above the tiles for the hero tile to rise into.
+                Height = 350,
                 Child = carousel = new BeatmapSetCarousel()
             });
             carousel.SetItems(BeatmapTestUtility.CreateDummyBeatmapSets(5));
@@ -98,13 +99,12 @@ public partial class TestCarouselTap : YuukiManualInputManagerTestScene
     }
 
     /// <summary>
-    /// Clicks the slot <paramref name="offset"/> cards along from the selected one, on the carousel's
-    /// centre line.
+    /// Clicks the slot <paramref name="offset"/> cards along from the selected one, where the carousel
+    /// draws it (past either end, where a card would be).
     /// </summary>
     private void clickSlot(int offset)
     {
-        var centre = carousel.DrawSize / 2;
-        InputManager.MoveMouseTo(carousel.ToScreenSpace(centre + new Vector2(offset * carousel.CardSpacing, 0)));
+        InputManager.MoveMouseTo(carousel.ToScreenSpace(carousel.SlotCentre(carousel.CurrentIndex + offset)));
         InputManager.Click(MouseButton.Left);
     }
 }
