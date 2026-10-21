@@ -76,6 +76,17 @@ public partial class YuukiBackground : Container
     /// </summary>
     public bool VideoShown => videoShown;
 
+    /// <summary>
+    /// The song's video, for drawing it again elsewhere: the frosted glass blurs it, as real glass would
+    /// whatever moves behind it. Null when the song has none or videos are off.
+    /// </summary>
+    public VideoSprite? Video => currentVideo;
+
+    /// <summary>
+    /// How much of <see cref="Video"/> is showing, from 0 to 1: its layer's fade times its own.
+    /// </summary>
+    public float VideoOpacity => currentVideoContainer == null ? 0 : videoLayer.Alpha * currentVideoContainer.Alpha;
+
     private Reactive<bool>? disableVideo;
     private Reactive<bool>? disableGameplayVideo;
     private Reactive<int>? backgroundDim;
