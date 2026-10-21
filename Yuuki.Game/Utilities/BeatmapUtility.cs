@@ -8,8 +8,6 @@ using System.IO;
 using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using Sakura.Framework.Extensions.ColorExtensions;
-using Sakura.Framework.Graphics.Colors;
 using Yuuki.Game.Beatmaps;
 
 namespace Yuuki.Game.Utilities;
@@ -35,22 +33,6 @@ public static class BeatmapUtility
     }
 
     public static DifficultyLevel CalculateDifficultyLevel(Beatmap beatmap) => CalculateDifficultyLevel(beatmap.DifficultyRating);
-
-    /// <summary>
-    /// The signature colour for a difficulty rating, used by carousel cards and difficulty dots.
-    /// </summary>
-    public static Color ColorForDifficulty(double difficultyRating)
-    {
-        // TODO: Replace with a continuous gradient.
-        return CalculateDifficultyLevel(difficultyRating) switch
-        {
-            DifficultyLevel.Basic => ColorExtensions.FromHex("#A3BE8C"),
-            DifficultyLevel.Advance => ColorExtensions.FromHex("#88C0D0"),
-            DifficultyLevel.Expert => ColorExtensions.FromHex("#EBCB8B"),
-            DifficultyLevel.Master => ColorExtensions.FromHex("#D08770"),
-            _ => ColorExtensions.FromHex("#B48EAD")
-        };
-    }
 
     /// <summary>
     /// How many lanes a difficulty has, as rhythm games write it: "4K".

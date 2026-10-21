@@ -32,7 +32,7 @@ public static class SetlistColors
     /// The color of a song's hardest difficulty: what its window wears until the cover's own colour is known.
     /// </summary>
     public static Color SongTier(IReadOnlyList<Beatmap> difficulties) =>
-        BeatmapUtility.ColorForDifficulty(difficulties.Count == 0 ? 0 : difficulties.Max(b => b.DifficultyRating));
+        DifficultyColors.For(difficulties.Count == 0 ? 0 : difficulties.Max(b => b.DifficultyRating));
 
     /// <summary>
     /// A song's fill and the ink printed on it: its cover's color once picked, and otherwise (not loaded
