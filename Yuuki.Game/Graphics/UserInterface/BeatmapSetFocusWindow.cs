@@ -68,6 +68,15 @@ public partial class BeatmapSetFocusWindow : CarouselFocusWindow<BeatmapSet>
         private const float wide_text_x = wide_cover_size + 32;
         private const float hero_cover_size = 220;
 
+        // Skimming, the rail's window is short: a small cover, the title and artist, nothing else.
+        private const float skim_wide_cover_size = 56;
+        private const float skim_text_scale = 0.8f;
+
+        // The hero shows the title and artist under its cover instead of the skyline and best mark.
+        private const float hero_text_scale = 0.72f;
+
+        private float skim;
+
         private static readonly Vector2 cover_decode_size = new Vector2(256, 256);
 
         [Resolved(canBeNull: true)]
@@ -193,6 +202,8 @@ public partial class BeatmapSetFocusWindow : CarouselFocusWindow<BeatmapSet>
                 extras.Origin = Anchor.Centre;
                 extras.Position = new Vector2(0, 14 + hero_cover_size + 26);
             }
+
+            layOutForSkim();
         }
 
         protected override void OnApply(BeatmapSet set)
@@ -246,15 +257,55 @@ public partial class BeatmapSetFocusWindow : CarouselFocusWindow<BeatmapSet>
             artist.Text = Model.GetDisplayArtist(unicode);
         }
 
+        public override void SetSkim(float amount)
+        {
+            if (amount == skim)
+                return;
+
+            skim = amount;
+            layOutForSkim();
+        }
+
+        /// <summary>
+        /// While the list skims the title and artist stay and the rest steps aside: in the rail the cover
+        /// shrinks with the window, and the hero swaps its skyline and best mark for the title and artist.
+        /// </summary>
+        private void layOutForSkim()
+        {
+            float lerp(float rest, float skimming) => rest + (skimming - rest) * skim;
+
+            details.Alpha = vertical ? 1 - skim : 0;
+            extras.Alpha = 1 - skim;
+
+            if (vertical)
+            {
+                float coverSize = lerp(wide_cover_size, skim_wide_cover_size);
+
+                cover.Size = new Vector2(coverSize);
+                text.Anchor = text.Origin = Anchor.CentreLeft;
+                text.Position = new Vector2(coverSize + 32, 0);
+                text.Scale = new Vector2(lerp(1, skim_text_scale));
+                text.Alpha = 1;
+            }
+            else
+            {
+                text.Anchor = text.Origin = Anchor.TopLeft;
+                text.Position = new Vector2(14, 14 + hero_cover_size + 6);
+                text.Scale = new Vector2(hero_text_scale);
+                text.Alpha = skim;
+            }
+        }
+
         public override void Update()
         {
             base.Update();
 
-            if (!vertical)
-                return;
+            float room = vertical
+                ? DrawWidth - text.X - extras.DrawWidth * (1 - skim) - 36
+                : DrawWidth - 28;
 
-            // The text column runs up to the extras, and long names scroll within it.
-            text.Width = Math.Max(0, DrawWidth - wide_text_x - extras.DrawWidth - 36);
+            // The text column runs up to the extras (or across the hero), and long names scroll within it.
+            text.Width = Math.Max(0, room / text.Scale.X);
         }
     }
 }

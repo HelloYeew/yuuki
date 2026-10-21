@@ -523,6 +523,24 @@ public partial class SongSelectionScreen : YuukiScreen, IHaveScreenAction
                 selector.NavigateNext();
                 return true;
 
+            // A group at a time: the next letter, level or BPM band in the current sort.
+            case Key.PageDown:
+                selector.JumpGroup(1);
+                return true;
+
+            case Key.PageUp:
+                selector.JumpGroup(-1);
+                return true;
+
+            // Not while searching: there they move the caret.
+            case Key.Home when !selector.IsSearchFocused:
+                selector.JumpToEnd(last: false);
+                return true;
+
+            case Key.End when !selector.IsSearchFocused:
+                selector.JumpToEnd(last: true);
+                return true;
+
             // One press, one step on: held, it would run from the song to its difficulties and on to
             // the next screen. Navigation above keeps its repeats, so holding an arrow scrolls.
             case Key.Enter when !e.IsRepeat:

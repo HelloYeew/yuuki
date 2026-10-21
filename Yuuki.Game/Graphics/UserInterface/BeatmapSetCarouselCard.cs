@@ -40,6 +40,17 @@ public partial class BeatmapSetCarouselCard : CarouselCard<BeatmapSet>
     private const float row_text_x = 74;
     private const float tile_cover_size = 120;
 
+    // Skimming: a smaller cover, the title and artist a little smaller, the extras gone.
+    private const float skim_row_cover_size = 34;
+    private const float skim_row_text_x = 60;
+    private const float skim_row_text_scale = 0.86f;
+    private const float skim_tile_cover_size = 84;
+
+    /// <summary>
+    /// The skim amount the faces are laid out for.
+    /// </summary>
+    private float laidOutSkim = -1;
+
     private static readonly string[] placeholder_palette =
     {
         "#F4A6C0", "#F6C177", "#9CCFD8", "#C4A7E7", "#A3BE8C", "#EBCB8B", "#88C0D0", "#D08770"
@@ -316,6 +327,9 @@ public partial class BeatmapSetCarouselCard : CarouselCard<BeatmapSet>
             ensureRow();
         else
             ensureTile();
+
+        // A face built just now (or a card come back from the pool) is laid out for the skim on the next update.
+        laidOutSkim = -1;
     }
 
     /// <summary>
@@ -352,9 +366,48 @@ public partial class BeatmapSetCarouselCard : CarouselCard<BeatmapSet>
     {
         base.Update();
 
-        // The row's text runs up to the extras on the right, and scrolls when it's longer.
+        float skim = Motion?.Skim ?? 0;
+
+        if (skim != laidOutSkim)
+            layOutForSkim(skim);
+
+        // The row's text runs up to the extras on the right (as far as they're still there), and scrolls
+        // when it's longer.
         if (rowFace != null && vertical)
-            rowText!.Width = Math.Max(0, rowFace.DrawWidth - row_text_x - rowExtras!.DrawWidth - 32);
+        {
+            float room = rowFace.DrawWidth - rowText!.X - rowExtras!.DrawWidth * (1 - skim) - 32;
+            rowText.Width = Math.Max(0, room / rowText.Scale.X);
+        }
+    }
+
+    /// <summary>
+    /// Compacts the faces as the list skims (<paramref name="skim"/> 0 at rest, 1 skimming): the title and
+    /// artist stay, smaller; the best mark, skyline and lanes step aside.
+    /// </summary>
+    private void layOutForSkim(float skim)
+    {
+        laidOutSkim = skim;
+
+        float lerp(float rest, float skimming) => rest + (skimming - rest) * skim;
+
+        if (rowFace != null)
+        {
+            rowCover!.Size = new Vector2(lerp(row_cover_size, skim_row_cover_size));
+            rowText!.X = lerp(row_text_x, skim_row_text_x);
+            rowText.Scale = new Vector2(lerp(1, skim_row_text_scale));
+            rowExtras!.Alpha = 1 - skim;
+        }
+
+        if (tileFace != null)
+        {
+            float cover = lerp(tile_cover_size, skim_tile_cover_size);
+
+            tileCover!.Size = new Vector2(cover);
+            tileTitle!.Y = cover + 8;
+            tileTitle.Width = cover + 10;
+            tileArtist!.Y = cover + 28;
+            tileArtist.Width = cover + 10;
+        }
     }
 
     public override bool OnHover(MouseEvent e)

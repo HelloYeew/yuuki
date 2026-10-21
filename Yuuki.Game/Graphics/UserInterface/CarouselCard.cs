@@ -15,6 +15,12 @@ public abstract partial class CarouselCard<TModel> : PoolableDrawable
     /// </summary>
     public Reactive<CarouselOrientation>? Orientation { get; set; }
 
+    /// <summary>
+    /// How the carousel is moving, handed to the card with <see cref="Orientation"/>: a card that
+    /// compacts while the list skims reads <see cref="CarouselMotion.Skim"/> from it.
+    /// </summary>
+    public CarouselMotion? Motion { get; set; }
+
     protected CarouselCard()
     {
         // Quiet: a moving list brushes a lot of cards past the pointer. Selecting plays its own sound.

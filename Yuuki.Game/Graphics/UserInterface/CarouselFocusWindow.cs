@@ -64,6 +64,15 @@ public abstract partial class CarouselFocusFace<TModel> : Container
     public virtual void RefreshColors()
     {
     }
+
+    /// <summary>
+    /// Compacts the face as the list skims: <paramref name="amount"/> is 0 at rest, 1 skimming. Called
+    /// every frame the window lays out; a face that compacts keeps the last amount and does nothing when
+    /// it hasn't changed.
+    /// </summary>
+    public virtual void SetSkim(float amount)
+    {
+    }
 }
 
 /// <summary>
@@ -233,6 +242,11 @@ public abstract partial class CarouselFocusWindow<TModel> : Container
     public TModel? ShownItem => colouredFor;
 
     /// <summary>
+    /// How the carousel is moving: the faces compact while it skims.
+    /// </summary>
+    public CarouselMotion? Motion { get; set; }
+
+    /// <summary>
     /// The fill the window wears (or is fading to) for <see cref="ShownItem"/>.
     /// </summary>
     public Color FillColor => fillColor;
@@ -363,6 +377,7 @@ public abstract partial class CarouselFocusWindow<TModel> : Container
         var face = faceFor(index, items[index]);
         face.Position = orientation == CarouselOrientation.Vertical ? new Vector2(0f, offset) : new Vector2(offset, 0f);
         face.Alpha = alpha;
+        face.SetSkim(Motion?.Skim ?? 0);
         stillShown.Add((index, face));
     }
 

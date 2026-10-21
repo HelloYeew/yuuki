@@ -14,6 +14,7 @@ using Sakura.Framework.Graphics.Transforms;
 using Sakura.Framework.Input;
 using Sakura.Framework.Maths;
 using Sakura.Framework.Reactive;
+using Yuuki.Game.Graphics.Text;
 
 namespace Yuuki.Game.Graphics.UserInterface;
 
@@ -139,6 +140,11 @@ public abstract partial class Carousel<TModel, TCard> : Container
     public Color ScrollbarTrackColor { get; set; } = Color.White.WithAlpha(0.12f);
 
     /// <summary>
+    /// The colour of the labels along the scrollbar (see <see cref="SetScrollbarLabels"/>).
+    /// </summary>
+    public Color ScrollbarLabelColor { get; set; } = Color.White.WithAlpha(0.7f);
+
+    /// <summary>
     /// The scrollbar thumb's colour at rest; it's drawn fully opaque while hovered or dragged.
     /// </summary>
     public Color ScrollbarThumbColor { get; set; } = Color.White.WithAlpha(0.55f);
@@ -182,6 +188,39 @@ public abstract partial class Carousel<TModel, TCard> : Container
     private double dragVelocity;
     private double lastFramePosition;
     private float pressTravel;
+
+    /// <summary>
+    /// Whether moving fast through the list compacts it (skim mode). Song lists do; a difficulty list,
+    /// a handful of items, doesn't.
+    /// </summary>
+    public bool AllowSkim { get; set; }
+
+    /// <summary>
+    /// How the list is moving: skim mode and the look-ahead. Shared with the cards and the focus window.
+    /// </summary>
+    public CarouselMotion Motion { get; } = new CarouselMotion();
+
+    /// <summary>
+    /// Steps faster than this (items a second, over the last <see cref="step_window"/>) skim.
+    /// </summary>
+    private const double skim_steps_per_second = 7;
+
+    private const double step_window = 400;
+
+    /// <summary>
+    /// How long skim mode outlasts the movement that set it off (ms), so it doesn't flicker between steps.
+    /// </summary>
+    private const double skim_hold = 220;
+
+    // When the user stepped (keys, wheel), the scroll velocity (items/s, smoothed), and the position it
+    // was last measured from.
+    private readonly Queue<double> stepTimes = new Queue<double>();
+    private double skimUntil = double.MinValue;
+    private double smoothedVelocity;
+    private double motionFrom = double.NaN;
+
+    // The labels along the scrollbar, kept to hand to each scrollbar SetItems builds.
+    private IReadOnlyList<(int Index, string Label)> scrollbarLabels = Array.Empty<(int, string)>();
 
     public int CurrentIndex => currentIndex;
 
@@ -266,6 +305,7 @@ public abstract partial class Carousel<TModel, TCard> : Container
         if (focusWindow == null)
             return;
 
+        focusWindow.Motion = Motion;
         focusWindow.SetOrientation(Orientation.Value);
         focusHost.Add(focusWindow);
     }
@@ -283,6 +323,7 @@ public abstract partial class Carousel<TModel, TCard> : Container
         };
 
         applyScrollbarOrientation();
+        scrollbar.SetLabels(scrollbarLabels);
         Add(scrollbar);
     }
 
@@ -382,7 +423,22 @@ public abstract partial class Carousel<TModel, TCard> : Container
 
     #endregion
 
-    private CarouselMetrics metrics() => new CarouselMetrics(DrawSize);
+    private CarouselMetrics metrics() => new CarouselMetrics(DrawSize, Motion.Skim, Motion.Lead);
+
+    /// <summary>
+    /// The labels along the scrollbar (diagnostics/tests).
+    /// </summary>
+    public IReadOnlyList<(int Index, string Label)> ScrollbarLabels => scrollbarLabels;
+
+    /// <summary>
+    /// Labels along the scrollbar: each at its item's place on the track (the start of a group in the
+    /// current sort, say), so a drag across the track can aim. Kept across <see cref="SetItems"/>.
+    /// </summary>
+    public void SetScrollbarLabels(IReadOnlyList<(int Index, string Label)> labels)
+    {
+        scrollbarLabels = labels;
+        scrollbar?.SetLabels(labels);
+    }
 
     /// <summary>
     /// Swaps the geometry strategy and reshapes every live slot to the new orientation, then relays out.
@@ -425,6 +481,9 @@ public abstract partial class Carousel<TModel, TCard> : Container
         position = 0;
         lastFramePosition = 0;
         dragVelocity = 0;
+
+        // A new list isn't the old one moving.
+        motionFrom = double.NaN;
 
         CurrentItem.Value = items.Count > 0 ? items[0] : null;
         updateLayout();
@@ -546,6 +605,7 @@ public abstract partial class Carousel<TModel, TCard> : Container
             () => pool.Get(c =>
             {
                 c.Orientation = Orientation;
+                c.Motion = Motion;
                 c.Apply(wrapper.Model, wrapper.Index);
             }),
             () => isOnScreen(wrapper.Index),
@@ -616,13 +676,32 @@ public abstract partial class Carousel<TModel, TCard> : Container
         {
             position = clamped;
             lastFramePosition = clamped;
+
+            // Put there, not moved there: no speed to skim on or lead with.
+            motionFrom = clamped;
             updateLayout();
         }
     }
 
-    public void Next() => SetIndex(currentIndex + 1);
+    /// <summary>
+    /// One step on, as a key press takes: counted towards skim mode.
+    /// </summary>
+    public void Next()
+    {
+        recordStep();
+        SetIndex(currentIndex + 1);
+    }
 
-    public void Previous() => SetIndex(currentIndex - 1);
+    /// <summary>
+    /// One step back, as a key press takes: counted towards skim mode.
+    /// </summary>
+    public void Previous()
+    {
+        recordStep();
+        SetIndex(currentIndex - 1);
+    }
+
+    private void recordStep() => stepTimes.Enqueue(Clock.CurrentTime);
 
     /// <summary>
     /// The index of <paramref name="item"/> in the carousel, or -1 if it is not currently present.
@@ -636,6 +715,11 @@ public abstract partial class Carousel<TModel, TCard> : Container
     /// </summary>
     /// <summary>Whether <paramref name="item"/> is one of the carousel's items.</summary>
     public bool Contains(TModel item) => items.Contains(item);
+
+    /// <summary>
+    /// The item at <paramref name="index"/>, or null past either end.
+    /// </summary>
+    public TModel? ItemAt(int index) => index >= 0 && index < items.Count ? items[index] : null;
 
     public void SelectItem(TModel item, bool animate = true)
     {
@@ -753,6 +837,7 @@ public abstract partial class Carousel<TModel, TCard> : Container
             return true;
 
         int before = currentIndex;
+        recordStep();
         SetIndex(currentIndex + direction);
         Scrolled?.Invoke(direction, currentIndex != before);
 
@@ -862,7 +947,41 @@ public abstract partial class Carousel<TModel, TCard> : Container
         for (int i = 0; i < wrappers.Count; i++)
             wrappers[i].StepAnimation(now);
 
+        updateMotion(now, dt);
         updateLayout();
+    }
+
+    /// <summary>
+    /// Follows how fast the list moves: into skim mode past about seven items a second (stepping, a fling,
+    /// a long jump or the scrubber) and back out a moment after it slows, and the look-ahead leaning with
+    /// the direction of travel.
+    /// </summary>
+    private void updateMotion(double now, double dt)
+    {
+        double velocity = double.IsNaN(motionFrom) ? 0 : (position - motionFrom) / dt * 1000;
+        motionFrom = position;
+        smoothedVelocity += (velocity - smoothedVelocity) * (1 - Math.Exp(-dt / 120));
+
+        while (stepTimes.Count > 0 && now - stepTimes.Peek() > step_window)
+            stepTimes.Dequeue();
+
+        if (AllowSkim)
+        {
+            bool fast = stepTimes.Count / (step_window / 1000) > skim_steps_per_second
+                        || Math.Abs(currentIndex - position) > 3
+                        || Math.Abs(smoothedVelocity) > 9;
+
+            if (fast)
+                skimUntil = now + skim_hold;
+        }
+
+        // Quick in, gentler out.
+        float skimTarget = now < skimUntil ? 1 : 0;
+        float skim = Motion.Skim + (skimTarget - Motion.Skim) * (float)(1 - Math.Exp(-dt / (skimTarget > 0 ? 70 : 140)));
+        Motion.Skim = skim < 0.002f ? 0 : skim > 0.998f ? 1 : skim;
+
+        float lead = Motion.Lead + ((float)Math.Clamp(smoothedVelocity / 12, -1, 1) - Motion.Lead) * (float)(1 - Math.Exp(-dt / 260));
+        Motion.Lead = Math.Abs(lead) < 0.001f ? 0 : lead;
     }
 
     private void updateExitingWrappers(double now)
@@ -941,7 +1060,10 @@ public abstract partial class Carousel<TModel, TCard> : Container
 
         private readonly Carousel<TModel, TCard> carousel;
         private readonly Box track;
+        private readonly Container labelLayer;
         private readonly Box thumb;
+
+        private IReadOnlyList<(int Index, string Label)> labels = Array.Empty<(int, string)>();
 
         private CarouselOrientation orientation = CarouselOrientation.Horizontal;
         private bool visible;
@@ -966,11 +1088,35 @@ public abstract partial class Carousel<TModel, TCard> : Container
                     RelativeSizeAxes = Axes.Both,
                     Color = carousel.ScrollbarTrackColor
                 },
+                // Under the thumb, which passes over them.
+                labelLayer = new Container
+                {
+                    RelativeSizeAxes = Axes.Both
+                },
                 thumb = new Box
                 {
                     Color = carousel.ScrollbarThumbColor
                 }
             };
+        }
+
+        /// <summary>
+        /// Puts <paramref name="value"/> along the track, each where its item's thumb would be.
+        /// </summary>
+        public void SetLabels(IReadOnlyList<(int Index, string Label)> value)
+        {
+            labels = value;
+            labelLayer.Clear();
+
+            foreach (var (_, label) in value)
+            {
+                labelLayer.Add(new SpriteText
+                {
+                    Origin = Anchor.Centre,
+                    Text = label,
+                    Font = YuukiFontUsage.GetFontUsage(Typeface.Nunito, 10, FontWeight.ExtraBold)
+                });
+            }
         }
 
         public void SetOrientation(CarouselOrientation value)
@@ -1019,6 +1165,26 @@ public abstract partial class Carousel<TModel, TCard> : Container
 
             track.Color = carousel.ScrollbarTrackColor;
             thumb.Color = active ? carousel.ScrollbarThumbColor.WithAlpha(1f) : carousel.ScrollbarThumbColor;
+
+            updateLabels(thumbLen);
+        }
+
+        private void updateLabels(float thumbLen)
+        {
+            int count = carousel.items.Count;
+
+            for (int i = 0; i < labelLayer.Children.Count && i < labels.Count; i++)
+            {
+                var text = labelLayer.Children[i];
+                float fraction = count > 1 ? Math.Clamp(labels[i].Index / (float)(count - 1), 0, 1) : 0;
+
+                // Where the thumb's middle is when that item is selected.
+                float along = thumbLen / 2f + fraction * (trackLength - thumbLen);
+
+                text.Anchor = orientation == CarouselOrientation.Vertical ? Anchor.TopCentre : Anchor.CentreLeft;
+                text.Position = orientation == CarouselOrientation.Vertical ? new Vector2(0, along) : new Vector2(along, 0);
+                text.Color = carousel.ScrollbarLabelColor;
+            }
         }
 
         // Thumb spans its share of the track, floored at the minimum but never longer than the track.

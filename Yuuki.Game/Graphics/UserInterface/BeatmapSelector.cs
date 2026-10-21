@@ -162,6 +162,19 @@ public partial class BeatmapSelector : Container
     [Cached]
     private readonly SongListFilter listFilter = new SongListFilter();
 
+    // The group the list is passing through, large, while it skims; and the songs listed, for the groups.
+    private SkimLabel skimLabel = null!;
+    private List<BeatmapSet> listedSets = new List<BeatmapSet>();
+    private BeatmapSet? skimLabelFor;
+
+    /// <summary>
+    /// The most labels the scrubber (the song list's scrollbar) carries in each orientation; past that,
+    /// every other group goes unlabelled, and so on.
+    /// </summary>
+    private const int most_scrubber_labels_vertical = 24;
+
+    private const int most_scrubber_labels_horizontal = 40;
+
     /// <summary>The search and filters in effect.</summary>
     public BeatmapFilter Filter => filterControl.Filter;
 
@@ -190,6 +203,9 @@ public partial class BeatmapSelector : Container
     public float SideAreaLeft => currentOrientation == CarouselOrientation.Vertical
         ? carouselContainer.DrawRectangle.X
         : filterControl.DrawRectangle.X;
+
+    /// <summary>What the skim label says while it shows, or null while it doesn't (diagnostics/tests).</summary>
+    public string? SkimLabelText => skimLabel.Alpha > 0 ? skimLabel.Text : null;
 
     /// <summary>The search and filter panel (diagnostics/tests).</summary>
     public Drawable FilterArea => filterControl;
@@ -222,6 +238,9 @@ public partial class BeatmapSelector : Container
         var palette = ScreenPalette.Resolve(screenPalette, colorProvider);
 
         Add(band = new FrostedBand { Alpha = 0 });
+
+        // Over the background, outside the list: left of the rail, or above the strip's hero.
+        Add(skimLabel = new SkimLabel());
 
         Add(carouselContainer = new Container
         {
@@ -257,6 +276,11 @@ public partial class BeatmapSelector : Container
         // On the light glass the scrollbars are ink, not white.
         carousel.ScrollbarTrackColor = difficultyCarousel.ScrollbarTrackColor = palette.Text.WithAlpha(0.07f);
         carousel.ScrollbarThumbColor = difficultyCarousel.ScrollbarThumbColor = palette.Control.WithAlpha(0.5f);
+
+        // The song list's scrollbar is the scrubber: wide enough for its group labels.
+        carousel.ScrollbarLabelColor = SetlistColors.Secondary(palette.Text);
+        carousel.ScrollbarThickness = 20;
+        carousel.ScrollbarHoverThickness = 22;
 
         carousel.CurrentItem.BindValueChanged(onCarouselSetChanged);
         difficultyCarousel.CurrentItem.BindValueChanged(onCarouselBeatmapChanged);
@@ -298,6 +322,7 @@ public partial class BeatmapSelector : Container
 
         var sets = Filter.Apply(library, difficultiesOf, forcedSet);
         carousel.SetItems(sets);
+        listedSets = sets;
         updateMatchCount(sets.Count, library);
 
         if (workingBeatmap != null)
@@ -365,6 +390,7 @@ public partial class BeatmapSelector : Container
         dock.Position = regionShown ? dockShownPosition : dockHiddenPosition;
 
         noResults.SetLayout(orientation);
+        updateScrubberLabels();
 
         // The vertical song list starts below the filters rather than running under them, and the
         // difficulty list below the docked song. The strip's lists take the whole region: the hero tile
@@ -491,6 +517,7 @@ public partial class BeatmapSelector : Container
         BeatmapSet? current = workingBeatmap?.BeatmapSet ?? carousel.CurrentItem.Value;
 
         carousel.SetItems(sets);
+        listedSets = sets;
         updateMatchCount(countMatches(sets), library);
 
         int index = current == null ? -1 : sets.FindIndex(s => s.ID == current.ID);
@@ -504,6 +531,8 @@ public partial class BeatmapSelector : Container
     /// </summary>
     private void updateMatchCount(int count, List<BeatmapSet> library)
     {
+        updateScrubberLabels();
+
         MatchCount = count;
         filterControl.SetCounts(count, library.Count);
         filterControl.SetLevelCounts(Filter.LevelCounts(library, difficultiesOf));
@@ -620,6 +649,8 @@ public partial class BeatmapSelector : Container
     {
         base.Update();
 
+        updateSkimLabel();
+
         if (!selectionCommitted && Clock.CurrentTime - lastSelectionChangeTime >= selection_commit_delay)
         {
             selectionCommitted = true;
@@ -641,6 +672,168 @@ public partial class BeatmapSelector : Container
 
         if (!Equals(workingBeatmap.BeatmapSet, set))
             workingBeatmap.BeatmapSet = set;
+    }
+
+    /// <summary>
+    /// The song's level as the Level sort places it: its highest difficulty the filter lets through (any,
+    /// when none do).
+    /// </summary>
+    private int levelOf(BeatmapSet set)
+    {
+        int top = -1, any = 0;
+
+        foreach (var beatmap in difficultiesOf(set))
+        {
+            int level = BeatmapFilter.LevelOf(beatmap);
+            any = Math.Max(any, level);
+
+            if (Filter.Matches(beatmap))
+                top = Math.Max(top, level);
+        }
+
+        return top >= 0 ? top : any;
+    }
+
+    /// <summary>
+    /// The group a listed song is in under the current sort (see <see cref="SongGroups"/>), or null.
+    /// </summary>
+    private string? groupAt(int index) => carousel.ItemAt(index) is BeatmapSet set
+        ? SongGroups.LabelOf(set, Filter.Sort, Filter.Sort == BeatmapSort.Level ? levelOf(set) : 0)
+        : null;
+
+    /// <summary>
+    /// Labels the scrubber with where each group starts in the current sort, thinned out on a long list.
+    /// </summary>
+    private void updateScrubberLabels()
+    {
+        var labels = new List<(int Index, string Label)>();
+        string? previous = null;
+
+        for (int i = 0; i < listedSets.Count; i++)
+        {
+            var set = listedSets[i];
+
+            if (SongGroups.TickOf(set, Filter.Sort, Filter.Sort == BeatmapSort.Level ? levelOf(set) : 0) is not { } tick)
+                break;
+
+            if (tick != previous)
+                labels.Add((i, tick));
+
+            previous = tick;
+        }
+
+        int most = currentOrientation == CarouselOrientation.Vertical ? most_scrubber_labels_vertical : most_scrubber_labels_horizontal;
+        int every = Math.Max(1, (int)Math.Ceiling(labels.Count / (double)most));
+
+        carousel.SetScrollbarLabels(labels.Where((_, k) => k % every == 0).ToList());
+    }
+
+    /// <summary>
+    /// Shows the group the song list is passing through while it skims, over the background beside it.
+    /// </summary>
+    private void updateSkimLabel()
+    {
+        float skim = State == SelectionState.SelectingSet && regionShown ? carousel.Motion.Skim : 0;
+        var shown = carousel.FocusWindow?.ShownItem;
+
+        if (skim > 0 && shown != null && !ReferenceEquals(shown, skimLabelFor))
+        {
+            skimLabelFor = shown;
+            skimLabel.Text = SongGroups.LabelOf(shown, Filter.Sort, Filter.Sort == BeatmapSort.Level ? levelOf(shown) : 0) ?? "";
+        }
+
+        skimLabel.Alpha = string.IsNullOrEmpty(skimLabel.Text) ? 0 : skim;
+
+        if (skimLabel.Alpha <= 0)
+            return;
+
+        if (currentOrientation == CarouselOrientation.Vertical)
+        {
+            // Left of the rail, level with its focus window.
+            var window = carousel.FocusWindowRect;
+            var centre = ToLocalSpace(carousel.ToScreenSpace(window.Center));
+
+            skimLabel.Anchor = Anchor.TopLeft;
+            skimLabel.Origin = Anchor.CentreRight;
+            skimLabel.Position = new Vector2(ToLocalSpace(carouselContainer.ToScreenSpace(Vector2.Zero)).X - 40, centre.Y);
+        }
+        else
+        {
+            // Above the hero, in the middle of the screen, where the background shows.
+            var window = carousel.FocusWindowRect;
+            var top = ToLocalSpace(carousel.ToScreenSpace(new Vector2(window.Center.X, window.Y)));
+
+            skimLabel.Anchor = Anchor.TopLeft;
+            skimLabel.Origin = Anchor.BottomCentre;
+            skimLabel.Position = new Vector2(top.X, top.Y - 24);
+        }
+    }
+
+    /// <summary>
+    /// Jumps a group at a time: to the start of the next letter, level or BPM band in the current sort, or
+    /// back to the start of the one before. Ten songs at a time in an order without groups, and three
+    /// difficulties at a time while picking one.
+    /// </summary>
+    public void JumpGroup(int direction)
+    {
+        if (State == SelectionState.SelectingBeatmap)
+        {
+            jumpTo(difficultyCarousel, difficultyCarousel.CurrentIndex + direction * 3, direction);
+            return;
+        }
+
+        int count = carousel.Count;
+        if (count == 0)
+            return;
+
+        int start = carousel.CurrentIndex;
+
+        if (groupAt(start) is not { } group)
+        {
+            jumpTo(carousel, start + direction * 10, direction);
+            return;
+        }
+
+        int index = start;
+
+        if (direction > 0)
+        {
+            while (index < count - 1 && groupAt(index) == group)
+                index++;
+        }
+        else
+        {
+            // Back into the group before, then to its first song.
+            while (index > 0 && groupAt(index) == group)
+                index--;
+
+            string? before = groupAt(index);
+
+            while (index > 0 && groupAt(index - 1) == before)
+                index--;
+        }
+
+        jumpTo(carousel, index, direction);
+    }
+
+    /// <summary>
+    /// Jumps to the first or (<paramref name="last"/>) the last item of the list in use.
+    /// </summary>
+    public void JumpToEnd(bool last)
+    {
+        if (State == SelectionState.SelectingBeatmap)
+            jumpTo(difficultyCarousel, last ? difficultyCarousel.Count - 1 : 0, last ? 1 : -1);
+        else
+            jumpTo(carousel, last ? carousel.Count - 1 : 0, last ? 1 : -1);
+    }
+
+    private void jumpTo<TModel, TCard>(Carousel<TModel, TCard> list, int index, int direction)
+        where TModel : class
+        where TCard : CarouselCard<TModel>, new()
+    {
+        int before = list.CurrentIndex;
+        list.SetIndex(index);
+        playNavigationSound(direction, list.CurrentIndex != before);
     }
 
     /// <summary>

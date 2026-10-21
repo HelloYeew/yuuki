@@ -17,9 +17,22 @@ public readonly struct CarouselMetrics
     /// </summary>
     public readonly Vector2 DrawSize;
 
-    public CarouselMetrics(Vector2 drawSize)
+    /// <summary>
+    /// How far into skim mode the list is, 0 (at rest) to 1 (compacted); see <see cref="CarouselMotion"/>.
+    /// </summary>
+    public readonly float Skim;
+
+    /// <summary>
+    /// The look-ahead, -1 to 1: positive while moving towards later items, which moves the cue back so
+    /// more of them show.
+    /// </summary>
+    public readonly float Lead;
+
+    public CarouselMetrics(Vector2 drawSize, float skim = 0, float lead = 0)
     {
         DrawSize = drawSize;
+        Skim = skim;
+        Lead = lead;
     }
 }
 
@@ -88,6 +101,13 @@ public abstract class CarouselLayoutStrategy
     protected static float SmoothStep(float t) => t * t * (3f - 2f * t);
 
     /// <summary>
+    /// <paramref name="rest"/> at rest, moving to <paramref name="skimming"/> as the list skims; just
+    /// <paramref name="rest"/> when the layout has no skim size for it.
+    /// </summary>
+    protected static float WhileSkimming(float rest, float? skimming, CarouselMetrics m) =>
+        skimming is float s ? rest + (s - rest) * m.Skim : rest;
+
+    /// <summary>
     /// How far along the scroll axis the slot at <paramref name="offset"/> sits from the cue. Every slot
     /// keeps one size; near the cue they part by the window's extra length, so the window always has its
     /// gap and a slot slides in and out from under it rather than overlapping its neighbours.
@@ -149,21 +169,40 @@ public class RailCarouselLayout : CarouselLayoutStrategy
 
     public float BottomFade { get; set; } = 60f;
 
+    /// <summary>The row pitch while skimming, or null for rows that don't compact.</summary>
+    public float? SkimRowPitch { get; set; }
+
+    /// <summary>The window's height while skimming, or null for a window that doesn't compact.</summary>
+    public float? SkimWindowHeight { get; set; }
+
+    /// <summary>
+    /// How far the cue moves against the direction of travel at full look-ahead, as a share of the rail's
+    /// height.
+    /// </summary>
+    public float LeadShare { get; set; } = 0.07f;
+
+    private float pitch(CarouselMetrics m) => WhileSkimming(RowPitch, SkimRowPitch, m);
+
+    private float windowHeight(CarouselMetrics m) => WhileSkimming(WindowHeight, SkimWindowHeight, m);
+
+    /// <summary>The cue's distance from the rail's middle (px): up, as the list moves on down.</summary>
+    private float cue(CarouselMetrics m) => -LeadShare * m.DrawSize.Y * m.Lead;
+
     private float rowWidth(CarouselMetrics m) => Math.Max(1f, m.DrawSize.X - 2 * SideInset - ScrollbarGutter);
 
-    public override Vector2 SlotSize(CarouselMetrics m) => new Vector2(rowWidth(m), RowPitch - RowGap);
+    public override Vector2 SlotSize(CarouselMetrics m) => new Vector2(rowWidth(m), pitch(m) - RowGap);
 
     public override SlotLayout Compute(float offset, CarouselMetrics m)
     {
-        float y = AlongAxis(offset, RowPitch, WindowHeight);
+        float y = cue(m) + AlongAxis(offset, pitch(m), windowHeight(m));
 
         float alpha = 1f;
         float half = m.DrawSize.Y / 2f;
 
         if (half > 1f)
         {
-            float fromTop = y + half - RowPitch / 2f;
-            float fromBottom = half - y - RowPitch / 2f;
+            float fromTop = y + half - pitch(m) / 2f;
+            float fromBottom = half - y - pitch(m) / 2f;
             alpha = Math.Clamp(fromTop / TopFade, 0f, 1f) * Math.Clamp(fromBottom / BottomFade, 0f, 1f);
         }
 
@@ -171,14 +210,14 @@ public class RailCarouselLayout : CarouselLayoutStrategy
         return new SlotLayout(new Vector2(-ScrollbarGutter / 2f, y), Vector2.One, alpha * UnderWindowAlpha(offset));
     }
 
-    public override double DragToPositionDelta(Vector2 mouseDelta, CarouselMetrics m) => -mouseDelta.Y / RowPitch;
+    public override double DragToPositionDelta(Vector2 mouseDelta, CarouselMetrics m) => -mouseDelta.Y / pitch(m);
 
     public override int IndexAtLocal(Vector2 local, double position, CarouselMetrics m)
     {
         if (FocusWindow(m).Contains(local))
             return (int)Math.Round(position);
 
-        return SlotAlong(local.Y - m.DrawSize.Y / 2f, position, RowPitch, WindowHeight, m.DrawSize.Y / 2f);
+        return SlotAlong(local.Y - m.DrawSize.Y / 2f - cue(m), position, pitch(m), windowHeight(m), m.DrawSize.Y / 2f);
     }
 
     public override bool IsOnScreen(float offset, CarouselMetrics m)
@@ -188,14 +227,14 @@ public class RailCarouselLayout : CarouselLayoutStrategy
         if (half <= 1f)
             return Math.Abs(offset) <= 6f;
 
-        return Math.Abs(AlongAxis(offset, RowPitch, WindowHeight)) <= half + RowPitch;
+        return Math.Abs(cue(m) + AlongAxis(offset, pitch(m), windowHeight(m))) <= half + pitch(m);
     }
 
     // Rows slide in from the right, the side the rail comes in from.
     public override Vector2 EntranceOffset(CarouselMetrics m) => new Vector2(90f, 0f);
 
     public override RectangleF FocusWindow(CarouselMetrics m) =>
-        new RectangleF(SideInset, m.DrawSize.Y / 2f - WindowHeight / 2f, rowWidth(m), WindowHeight);
+        new RectangleF(SideInset, m.DrawSize.Y / 2f + cue(m) - windowHeight(m) / 2f, rowWidth(m), windowHeight(m));
 }
 
 /// <summary>
@@ -222,30 +261,52 @@ public class StripCarouselLayout : CarouselLayoutStrategy
     /// <summary>Distance over which tiles fade at the left and right ends (px).</summary>
     public float EdgeFade { get; set; } = 70f;
 
-    public override Vector2 SlotSize(CarouselMetrics m) => TileSize;
+    /// <summary>The tile pitch while skimming, or null for tiles that don't compact.</summary>
+    public float? SkimPitch { get; set; }
+
+    /// <summary>A tile's size while skimming, or null for tiles that don't compact.</summary>
+    public Vector2? SkimTileSize { get; set; }
+
+    /// <summary>
+    /// How far the cue moves against the direction of travel at full look-ahead, as a share of the strip's
+    /// width.
+    /// </summary>
+    public float LeadShare { get; set; } = 0.06f;
+
+    private float pitch(CarouselMetrics m) => WhileSkimming(Pitch, SkimPitch, m);
+
+    private Vector2 tileSize(CarouselMetrics m) => new Vector2(
+        WhileSkimming(TileSize.X, SkimTileSize?.X, m),
+        WhileSkimming(TileSize.Y, SkimTileSize?.Y, m));
+
+    /// <summary>The cue's distance from the strip's middle (px): left, as the list moves on right.</summary>
+    private float cue(CarouselMetrics m) => -LeadShare * m.DrawSize.X * m.Lead;
+
+    public override Vector2 SlotSize(CarouselMetrics m) => tileSize(m);
 
     public override SlotLayout Compute(float offset, CarouselMetrics m)
     {
-        float x = AlongAxis(offset, Pitch, WindowSize.X);
-        float y = -m.DrawSize.Y / 2f + TileTop + TileSize.Y / 2f;
+        var tile = tileSize(m);
+        float x = cue(m) + AlongAxis(offset, pitch(m), WindowSize.X);
+        float y = -m.DrawSize.Y / 2f + TileTop + tile.Y / 2f;
 
         float alpha = 1f;
         float half = m.DrawSize.X / 2f;
 
         if (half > 1f)
-            alpha = Math.Clamp((half - Math.Abs(x) - TileSize.X / 2f) / EdgeFade + 1f, 0f, 1f);
+            alpha = Math.Clamp((half - Math.Abs(x) - tile.X / 2f) / EdgeFade + 1f, 0f, 1f);
 
         return new SlotLayout(new Vector2(x, y), Vector2.One, alpha * UnderWindowAlpha(offset));
     }
 
-    public override double DragToPositionDelta(Vector2 mouseDelta, CarouselMetrics m) => -mouseDelta.X / Pitch;
+    public override double DragToPositionDelta(Vector2 mouseDelta, CarouselMetrics m) => -mouseDelta.X / pitch(m);
 
     public override int IndexAtLocal(Vector2 local, double position, CarouselMetrics m)
     {
         if (FocusWindow(m).Contains(local))
             return (int)Math.Round(position);
 
-        return SlotAlong(local.X - m.DrawSize.X / 2f, position, Pitch, WindowSize.X, m.DrawSize.X / 2f);
+        return SlotAlong(local.X - m.DrawSize.X / 2f - cue(m), position, pitch(m), WindowSize.X, m.DrawSize.X / 2f);
     }
 
     public override bool IsOnScreen(float offset, CarouselMetrics m)
@@ -255,12 +316,12 @@ public class StripCarouselLayout : CarouselLayoutStrategy
         if (half <= 1f)
             return Math.Abs(offset) <= 6f;
 
-        return Math.Abs(AlongAxis(offset, Pitch, WindowSize.X)) <= half + Pitch;
+        return Math.Abs(cue(m) + AlongAxis(offset, pitch(m), WindowSize.X)) <= half + pitch(m);
     }
 
     // Tiles rise into place from below.
     public override Vector2 EntranceOffset(CarouselMetrics m) => new Vector2(0f, 60f);
 
     public override RectangleF FocusWindow(CarouselMetrics m) =>
-        new RectangleF(m.DrawSize.X / 2f - WindowSize.X / 2f, m.DrawSize.Y - WindowBottom - WindowSize.Y, WindowSize.X, WindowSize.Y);
+        new RectangleF(m.DrawSize.X / 2f + cue(m) - WindowSize.X / 2f, m.DrawSize.Y - WindowBottom - WindowSize.Y, WindowSize.X, WindowSize.Y);
 }
