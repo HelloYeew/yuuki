@@ -120,7 +120,7 @@ public partial class TestFinalSetupScreen : TestYuukiScreenStack
     // The config outlives each test, so a test that counts revert buttons starts from the defaults.
     private void resetSettings() => AddStep("settings to defaults", () =>
     {
-        foreach (YuukiSetting setting in new[] { YuukiSetting.ScrollSpeed, YuukiSetting.AudioOffset, YuukiSetting.BackgroundDim, YuukiSetting.BackgroundBlur })
+        foreach (YuukiSetting setting in new[] { YuukiSetting.ScrollSpeed, YuukiSetting.AudioOffset, YuukiSetting.VisualOffset, YuukiSetting.BackgroundDim, YuukiSetting.BackgroundBlur })
             config.Get<int>(setting).Value = config.Get<int>(setting).Default;
 
         config.Get<bool>(YuukiSetting.ScrollSpeedFollowsBpm).Value = false;

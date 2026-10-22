@@ -71,6 +71,12 @@ public partial class GameplayContainer : Container
 
     public Sakura.Framework.Input.Key? SwipeRightKey { get; set; }
 
+    /// <summary>
+    /// What the HUD's pause button does (see <see cref="GameplayHud.PauseRequested"/>). Null, as in a replay,
+    /// shows no button. Set before load.
+    /// </summary>
+    public Action? PauseRequested { get; init; }
+
     private double audioOffset;
 
     /// <summary>
@@ -85,6 +91,23 @@ public partial class GameplayContainer : Container
             audioOffset = value;
             if (clockContainer.IsNotNull())
                 clockContainer.GameplayClock.Offset = value;
+        }
+    }
+
+    private double visualOffset;
+
+    /// <summary>
+    /// The visual offset (ms): moves where the notes are drawn, not when taps are judged (see
+    /// <see cref="Playfield.VisualOffset"/>).
+    /// </summary>
+    public double VisualOffset
+    {
+        get => visualOffset;
+        set
+        {
+            visualOffset = value;
+            if (playfield.IsNotNull())
+                playfield.VisualOffset = value;
         }
     }
 
@@ -292,14 +315,16 @@ public partial class GameplayContainer : Container
                     Child = playfield = new Playfield(chart, hitSounds)
                     {
                         Preempt = Preempt,
-                        AllowJudgement = allowJudgement
+                        AllowJudgement = allowJudgement,
+                        VisualOffset = visualOffset
                     }
                 }
             },
             // HUD lives outside the gameplay clock so it animates in real time.
             hud = new GameplayHud(Score, Health, Skills, () => clockContainer.CurrentTime, SongLength ?? chart.LastNoteTime + 2000)
             {
-                ComboClock = clockContainer.GameplayClock
+                ComboClock = clockContainer.GameplayClock,
+                PauseRequested = PauseRequested
             }
         };
 

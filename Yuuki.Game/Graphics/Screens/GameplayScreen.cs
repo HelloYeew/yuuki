@@ -246,7 +246,9 @@ public partial class GameplayScreen : YuukiScreen, IHaveScreenAction
                 SwipeLeftKey = config?.Get<Key>(YuukiSetting.SwipeLeftKey).Value,
                 SwipeRightKey = config?.Get<Key>(YuukiSetting.SwipeRightKey).Value,
                 AudioOffset = config?.Get(YuukiSetting.AudioOffset, 0).Value ?? 0,
-                SongLength = channel != null && channel.Length > 0 ? channel.Length : null
+                VisualOffset = config?.Get(YuukiSetting.VisualOffset, 0).Value ?? 0,
+                SongLength = channel != null && channel.Length > 0 ? channel.Length : null,
+                PauseRequested = pauseIfRunning
             },
             retryProgress = new Box
             {
@@ -335,7 +337,10 @@ public partial class GameplayScreen : YuukiScreen, IHaveScreenAction
             audioManager.GameplayChannel.OnEnd += onTrackEnded;
 
         if (window != null)
+        {
             window.FocusLost += onFocusLost;
+            window.EnteringBackground += onFocusLost;
+        }
     }
 
     public override void OnResuming(Screen? last)
@@ -362,7 +367,10 @@ public partial class GameplayScreen : YuukiScreen, IHaveScreenAction
             audioManager.GameplayChannel.OnEnd -= onTrackEnded;
 
         if (window != null)
+        {
             window.FocusLost -= onFocusLost;
+            window.EnteringBackground -= onFocusLost;
+        }
 
         gameplay.Stop();
         audioManager?.EndGameplay();
@@ -433,11 +441,16 @@ public partial class GameplayScreen : YuukiScreen, IHaveScreenAction
         }
     }
 
-    private void onFocusLost() => Scheduler.Add(() =>
+    // Leaving the game pauses it: another window taking focus, or a phone's home screen, a call or the
+    // notification shade. Either comes in on the window's own thread.
+    private void onFocusLost() => Scheduler.Add(pauseIfRunning);
+
+    // The pause button's way in: like Escape, but never resuming or quitting.
+    private void pauseIfRunning()
     {
-        if (state == PlayState.Playing)
+        if (state is PlayState.Playing or PlayState.CountingDown)
             pause();
-    });
+    }
 
     private void pause()
     {

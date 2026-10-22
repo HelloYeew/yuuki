@@ -59,6 +59,19 @@ public partial class Playfield : Container
     /// </summary>
     public bool AllowJudgement { get; set; } = true;
 
+    // What the notes are drawn on: the field's own clock, VisualOffset along.
+    private readonly OffsetClock displayClock;
+
+    /// <summary>
+    /// How far along the notes are drawn from the time they're judged at, in ms: the player's visual offset. Positive
+    /// draws them further along, for a screen that shows them late. Taps are judged where they were.
+    /// </summary>
+    public double VisualOffset
+    {
+        get => displayClock.Offset;
+        set => displayClock.Offset = value;
+    }
+
     private readonly HitWindows hitWindows = new HitWindows();
 
     /// <summary>
@@ -150,6 +163,23 @@ public partial class Playfield : Container
 
     // Lanes pressed since the last frame — a tap shorter than a frame still counts for Touch notes.
     private readonly bool[] laneTapped;
+
+    // By finger (TouchSource): the lane it's in (-1 when it isn't on the lanes), and where (screen space) and
+    // when (input time) the stroke it's making started, for telling a flick.
+    private readonly int[] fingerLane = new int[InputState.MAX_TOUCHES];
+    private readonly Vector2[] strokeStart = new Vector2[InputState.MAX_TOUCHES];
+    private readonly double[] strokeStartTime = new double[InputState.MAX_TOUCHES];
+    private readonly bool[] fingerFlicked = new bool[InputState.MAX_TOUCHES];
+
+    // How many fingers are in each lane: the lane's let go when the last one leaves.
+    private readonly int[] laneFingers;
+
+    /// <summary>
+    /// How far a finger travels (screen space: dp on a phone) within <see cref="flick_time"/> to flick.
+    /// </summary>
+    private const float flick_distance = 24;
+
+    private const double flick_time = 200;
 
     /// <summary>
     /// Lets the owner rewrite a judgement before it's shown and scored — skills that upgrade results
@@ -282,6 +312,7 @@ public partial class Playfield : Container
 
     public Playfield(PlayableBeatmap chart, HitSoundPlayer? hitSounds = null)
     {
+        displayClock = new OffsetClock(() => Clock);
         this.chart = chart;
         this.hitSounds = hitSounds;
         laneCount = Math.Max(1, chart.LaneCount);
@@ -293,6 +324,8 @@ public partial class Playfield : Container
         lastSlideTick = new int[chart.Notes.Length];
         slideTickIntervals = new double[chart.Notes.Length];
         laneHeld = new bool[laneCount];
+        laneFingers = new int[laneCount];
+        Array.Fill(fingerLane, -1);
         preemptSource = () => Preempt;
 
         // Precompute for the per-frame time window. Notes are already sorted by StartTime.
@@ -351,7 +384,8 @@ public partial class Playfield : Container
             notePool = new DrawablePool<DrawableNote>(64),
             noteContainer = new Container
             {
-                RelativeSizeAxes = Axes.Both
+                RelativeSizeAxes = Axes.Both,
+                Clock = displayClock
             },
             effectContainer = new Container
             {
@@ -660,7 +694,7 @@ public partial class Playfield : Container
     private void advance(double time)
     {
         applyReplayInputs(time);
-        reconcileNotes(time);
+        reconcileNotes(time + VisualOffset);
 
         if (!Silent)
             updateEffects(time);
@@ -1020,7 +1054,7 @@ public partial class Playfield : Container
 
         if (e.Key == SwipeLeftKey || e.Key == SwipeRightKey)
         {
-            PressSwipe(e.Key == SwipeLeftKey ? SwipeDirection.Left : SwipeDirection.Right, pressTime(e));
+            PressSwipe(e.Key == SwipeLeftKey ? SwipeDirection.Left : SwipeDirection.Right, pressTime(e.Timestamp));
             return true;
         }
 
@@ -1028,7 +1062,7 @@ public partial class Playfield : Container
         if (lane < 0 || lane >= laneCount)
             return false;
 
-        PressLane(lane, pressTime(e));
+        PressLane(lane, pressTime(e.Timestamp));
         return true;
     }
 
@@ -1041,8 +1075,128 @@ public partial class Playfield : Container
         if (lane < 0 || lane >= laneCount)
             return false;
 
-        ReleaseLane(lane, pressTime(e));
+        ReleaseLane(lane, pressTime(e.Timestamp));
         return false;
+    }
+
+    // Touch is another: each finger on the lanes holds the lane it's in, and hands it over as it slides
+    // into another (following a hold that drifts across), and a quick stroke is a flick.
+
+    public override bool OnTouchDown(TouchEvent e)
+    {
+        // Paused, the fingers are for the menu over the field.
+        if (!AcceptsUserInput || InputPaused)
+            return false;
+
+        int lane = perspective.LaneAt(ToLocalSpace(e.ScreenSpacePosition));
+        if (lane < 0)
+            return false;
+
+        int finger = (int)e.Source;
+        fingerLane[finger] = lane;
+        fingerFlicked[finger] = false;
+        startStroke(finger, e);
+
+        if (laneFingers[lane]++ == 0)
+            PressLane(lane, pressTime(e.Timestamp));
+
+        return true;
+    }
+
+    public override bool OnTouchMove(TouchEvent e)
+    {
+        int finger = (int)e.Source;
+        int from = fingerLane[finger];
+        if (from < 0)
+            return false;
+
+        double time = pressTime(e.Timestamp);
+
+        // A flick is a stroke the length of flick_distance in under flick_time; a finger that's been at it
+        // longer (holding, sliding) measures from where it was then. One flick a touch.
+        if (!fingerFlicked[finger])
+        {
+            if (inputTime(e) - strokeStartTime[finger] > flick_time)
+                startStroke(finger, e);
+            else if (Vector2.Distance(e.ScreenSpacePosition, strokeStart[finger]) >= flick_distance)
+            {
+                fingerFlicked[finger] = true;
+                Flick(e.ScreenSpacePosition.X - strokeStart[finger].X, time);
+            }
+        }
+
+        int to = perspective.LaneAt(ToLocalSpace(e.ScreenSpacePosition));
+        if (to < 0 || to == from)
+            return true;
+
+        fingerLane[finger] = to;
+
+        if (--laneFingers[from] == 0)
+            ReleaseLane(from, time);
+        if (laneFingers[to]++ == 0)
+            PressLane(to, time);
+
+        return true;
+    }
+
+    public override bool OnTouchUp(TouchEvent e)
+    {
+        int finger = (int)e.Source;
+        int lane = fingerLane[finger];
+        if (lane < 0)
+            return false;
+
+        fingerLane[finger] = -1;
+
+        if (--laneFingers[lane] == 0)
+            ReleaseLane(lane, pressTime(e.Timestamp));
+
+        return true;
+    }
+
+    private void startStroke(int finger, TouchEvent e)
+    {
+        strokeStart[finger] = e.ScreenSpacePosition;
+        strokeStartTime[finger] = inputTime(e);
+    }
+
+    // When a touch happened, on the input timeline: its own time where it has one.
+    private static double inputTime(TouchEvent e) => double.IsNaN(e.Timestamp) ? TimeSource.CurrentTime : e.Timestamp;
+
+    /// <summary>
+    /// A flick on the lanes at gameplay <paramref name="time"/>, by touch; <paramref name="dx"/> is how far
+    /// it went sideways. For now a flick takes a swipe whichever way the swipe points: it's played as the
+    /// swipe the nearest one in reach wants, so a replay records what was hit, or the way it went when that
+    /// one takes either (or there's none).
+    /// </summary>
+    public void Flick(float dx, double time)
+    {
+        SwipeDirection wanted = nearestSwipeDirection(time);
+        PressSwipe(wanted != SwipeDirection.Any ? wanted : dx < 0 ? SwipeDirection.Left : SwipeDirection.Right, time);
+    }
+
+    // Which way the nearest swipe a press at time could hit points; Any when there's none.
+    private SwipeDirection nearestSwipeDirection(double time)
+    {
+        SwipeDirection direction = SwipeDirection.Any;
+        double bestError = double.MaxValue;
+
+        foreach (KeyValuePair<int, DrawableNote> kv in visibleNotes)
+        {
+            BeatmapNote note = chart.Notes[kv.Key];
+            if (note.Type != NoteType.Swipe || judged[kv.Key])
+                continue;
+
+            double error = time - note.StartTime;
+
+            if (hitWindows.CanHit(error) && Math.Abs(error) < Math.Abs(bestError))
+            {
+                bestError = error;
+                direction = note.Direction;
+            }
+        }
+
+        return direction;
     }
 
     /// <summary>
@@ -1111,14 +1265,14 @@ public partial class Playfield : Container
     }
 
     /// <summary>
-    /// Translates the OS event timestamp into gameplay time for latency-free judging, falling back
-    /// to the current frame time if the source clock isn't a <see cref="GameplayClock"/> or the
-    /// event carried no timestamp (e.g. synthesized test input).
+    /// Translates an OS event timestamp (a key's or a finger's) into gameplay time for latency-free
+    /// judging, falling back to the current frame time if the source clock isn't a
+    /// <see cref="GameplayClock"/> or the event carried no timestamp (e.g. synthesized test input).
     /// </summary>
-    private double pressTime(KeyEvent e)
+    private double pressTime(double timestamp)
     {
-        if (Clock is GameplayClock gameplayClock && !double.IsNaN(e.Timestamp))
-            return gameplayClock.GetTimeAt(e.Timestamp);
+        if (Clock is GameplayClock gameplayClock && !double.IsNaN(timestamp))
+            return gameplayClock.GetTimeAt(timestamp);
 
         return Clock.CurrentTime;
     }
@@ -1485,17 +1639,20 @@ public partial class Playfield : Container
         foreach (Drawable effect in removeEffectBuffer)
             effectContainer.Remove(effect);
 
-        // Pulse the judgement line on each beat of the chart's timing.
-        if (!chart.ControlPoints.HasTiming || judgementLine.IsNull() || time < 0)
+        // Pulse the judgement line on each beat of the chart's timing, as the notes are drawn: it's what they're seen
+        // to reach the line on.
+        double shown = time + VisualOffset;
+
+        if (!chart.ControlPoints.HasTiming || judgementLine.IsNull() || shown < 0)
             return;
 
-        double beatStart = chart.ControlPoints.BeatStartAt(time);
+        double beatStart = chart.ControlPoints.BeatStartAt(shown);
 
         if (beatStart.Equals(lastBeatStart))
             return;
 
         lastBeatStart = beatStart;
-        Beat?.Invoke(chart.ControlPoints.TimingPointAt(time).BeatLength);
+        Beat?.Invoke(chart.ControlPoints.TimingPointAt(shown).BeatLength);
 
         judgementLine.ClearTransforms();
         judgementLine.Color = palette.Accent;

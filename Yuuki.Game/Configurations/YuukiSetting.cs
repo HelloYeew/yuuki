@@ -53,8 +53,9 @@ public enum YuukiSetting
 
     /// <summary>
     /// Global audio offset in ms, added to the gameplay clock (<c>GameplayClock.Offset</c>). It covers
-    /// the output latency the audio backend can't see (display, device, Bluetooth). Hitting late on
-    /// average means it should go down; hitting early, up.
+    /// the output latency the audio backend can't see (device, Bluetooth) and the touch or key's own delay.
+    /// Hitting late on average means it should go down; hitting early, up. <see cref="VisualOffset"/> then
+    /// puts the notes where they're seen in time with the music.
     /// </summary>
     AudioOffset,
 
@@ -145,5 +146,12 @@ public enum YuukiSetting
     /// <summary>
     /// Whether a tap leaves a burst of stars and a petal, and a drag a trail of stars, outside a song.
     /// </summary>
-    TouchEffects
+    TouchEffects,
+
+    /// <summary>
+    /// How far along the notes are drawn, in ms, from the time they're judged at (<c>Playfield.VisualOffset</c>):
+    /// it moves what's seen without moving the judging, which <see cref="AudioOffset"/> sets. Notes reaching the line
+    /// after the music says they should means it should go up; before, down. The calibration screen sets both.
+    /// </summary>
+    VisualOffset
 }

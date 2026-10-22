@@ -19,6 +19,10 @@ public class YuukiConfigManager : ConfigManager<YuukiSetting>
 
     public const int MAX_AUDIO_OFFSET = 300;
 
+    public const int MIN_VISUAL_OFFSET = -300;
+
+    public const int MAX_VISUAL_OFFSET = 300;
+
     public const double MIN_UI_SCALE = 0.5;
     public const double MAX_UI_SCALE = 1.75;
 
@@ -52,6 +56,7 @@ public class YuukiConfigManager : ConfigManager<YuukiSetting>
         Get(YuukiSetting.CarouselOrientation, CarouselOrientation.Vertical);
         Get(YuukiSetting.BlurBackground, true);
         Get(YuukiSetting.AudioOffset, 0);
+        Get(YuukiSetting.VisualOffset, 0);
         Get(YuukiSetting.BackgroundBlur, 0);
         Get(YuukiSetting.ScrollSpeedFollowsBpm, false);
         Get(YuukiSetting.CursorSize, 1.0);
