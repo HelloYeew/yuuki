@@ -21,6 +21,7 @@ using Yuuki.Game.Audio;
 using Yuuki.Game.Beatmaps;
 using Yuuki.Game.Configurations;
 using Yuuki.Game.Graphics.Colors;
+using Yuuki.Game.Graphics.Drawables;
 using Yuuki.Game.Graphics.Containers;
 using Yuuki.Game.Graphics.Text;
 
@@ -32,7 +33,12 @@ public partial class MusicPlayerOverlay : OverlayContainer
     private const float header_height = 150;
     private const float controls_height = 56;
     private const float list_height = 320;
-    private const float footer_margin = 116;
+
+    // 16 above the footer, which is shorter on a phone.
+    private float footerMargin => (footer?.DrawHeight ?? 100) + 16;
+
+    [Resolved(canBeNull: true)]
+    private ScreenFooter? footer { get; set; }
 
     /// <summary>
     /// How much bigger the panel is on a phone, so its text and buttons come out big enough; its list
@@ -107,7 +113,7 @@ public partial class MusicPlayerOverlay : OverlayContainer
         {
             Anchor = Anchor.BottomRight,
             Origin = Anchor.BottomRight,
-            Position = new Vector2(-20, -footer_margin),
+            Position = new Vector2(-20, -footerMargin),
             Size = new Vector2(panel_width, header_height + controls_height + list_height),
             Masking = true,
             CornerRadius = 12,
@@ -384,7 +390,7 @@ public partial class MusicPlayerOverlay : OverlayContainer
         if (panel.Scale.X != scale)
             panel.Scale = new Vector2(scale);
 
-        float fitted = Math.Clamp((DrawHeight - footer_margin - top_margin) / scale - header_height - controls_height, min_list_height, list_height);
+        float fitted = Math.Clamp((DrawHeight - footerMargin - top_margin) / scale - header_height - controls_height, min_list_height, list_height);
 
         if (Math.Abs(fitted - listHeight) < 0.5f)
             return;
@@ -400,8 +406,8 @@ public partial class MusicPlayerOverlay : OverlayContainer
     {
         uiSounds?.Play(UISound.OverlayOpen);
         this.FadeIn(200, Easing.OutQuint);
-        panel.Y = -footer_margin + 30;
-        panel.MoveToY(-footer_margin, 400, Easing.OutQuint);
+        panel.Y = -footerMargin + 30;
+        panel.MoveToY(-footerMargin, 400, Easing.OutQuint);
         panel.FadeIn(200, Easing.OutQuint);
     }
 
@@ -409,7 +415,7 @@ public partial class MusicPlayerOverlay : OverlayContainer
     {
         uiSounds?.Play(UISound.OverlayClose);
         this.FadeOut(200, Easing.OutQuint);
-        panel.MoveToY(-footer_margin + 30, 300, Easing.OutQuint);
+        panel.MoveToY(-footerMargin + 30, 300, Easing.OutQuint);
     }
 
     /// <summary>

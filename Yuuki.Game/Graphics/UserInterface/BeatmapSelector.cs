@@ -248,6 +248,11 @@ public partial class BeatmapSelector : Container
     /// <summary>Searches for <paramref name="text"/>, as typing it in the search box would.</summary>
     public void Search(string text) => filterControl.SetSearch(text);
 
+    /// <summary>
+    /// What's typed in the search.
+    /// </summary>
+    public string SearchText => filterControl.SearchText;
+
     [Resolved(canBeNull: true)]
     private BeatmapsCollection? beatmapsCollection { get; set; }
 
@@ -309,10 +314,12 @@ public partial class BeatmapSelector : Container
         carousel.ScrollbarTrackColor = difficultyCarousel.ScrollbarTrackColor = palette.Text.WithAlpha(0.07f);
         carousel.ScrollbarThumbColor = difficultyCarousel.ScrollbarThumbColor = palette.Control.WithAlpha(0.5f);
 
-        // The song list's scrollbar is the scrubber: wide enough for its group labels.
+        // The song list's scrollbar is the scrubber: wide enough for its group labels, with a rounded thumb
+        // inside the track.
         carousel.ScrollbarLabelColor = SetlistColors.Secondary(palette.Text);
         carousel.ScrollbarThickness = 20;
         carousel.ScrollbarHoverThickness = 22;
+        carousel.ScrollbarThumbInset = difficultyCarousel.ScrollbarThumbInset = 3;
 
         carousel.CurrentItem.BindValueChanged(onCarouselSetChanged);
         difficultyCarousel.CurrentItem.BindValueChanged(onCarouselBeatmapChanged);
@@ -338,7 +345,7 @@ public partial class BeatmapSelector : Container
         carousel.TimeBeforeLoad = 80;
         carousel.LoadDelayPerSlot = 60;
 
-        Add(filterControl = new BeatmapFilterControl { Alpha = 0 });
+        Add(filterControl = new BeatmapFilterControl { Alpha = 0, RandomRequested = SelectRandom });
 
         if (config != null)
         {
@@ -393,7 +400,12 @@ public partial class BeatmapSelector : Container
         }
 
         if (gameLayout != null)
+        {
             BindValueChanged(gameLayout.Current, _ => applyGameLayout(), true);
+
+            // By touch the footer has no actions, so random gets a button in the bar.
+            BindValueChanged(gameLayout.Touch, e => filterControl.ShowRandom(e.NewValue), true);
+        }
     }
 
     private void onOrientationSettingChanged(ValueChangedEvent<CarouselOrientation> e) => applyOrientation(e.NewValue);
@@ -421,6 +433,9 @@ public partial class BeatmapSelector : Container
         currentOrientation = orientation;
         carousel.Orientation.Value = orientation;
         difficultyCarousel.Orientation.Value = orientation;
+
+        // Across the strip's long track the thumb is longer, so it's still easy to find and grab.
+        carousel.ScrollbarMinThumb = difficultyCarousel.ScrollbarMinThumb = orientation == CarouselOrientation.Vertical ? 30 : 44;
         dock.SetOrientation(orientation);
 
         bool vertical = orientation == CarouselOrientation.Vertical;
@@ -652,11 +667,7 @@ public partial class BeatmapSelector : Container
             return;
 
         if (State == SelectionState.SelectingBeatmap && difficultyCarousel != null && !populateDifficulties(set))
-        {
-            difficultyCarousel.AnimateExit();
-            carousel.AnimateEntrance();
-            setState(SelectionState.SelectingSet);
-        }
+            returnToSets();
 
         SetChanged?.Invoke(set);
 

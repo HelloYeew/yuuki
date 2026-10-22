@@ -29,6 +29,14 @@ public partial class ScreenFooter : Container
     /// </summary>
     private const float phone_button_scale = 1.25f;
 
+    /// <summary>
+    /// The bar's height, and a phone's: there it keeps only its lower strip (and the line above it), and
+    /// the screen's name and hint go, so the screens get the room.
+    /// </summary>
+    private const float height = 100;
+
+    private const float phone_height = 68;
+
     private static readonly Vector2 buttons_position = new Vector2(-16, -14);
 
     private SpriteText screenNameText = null!;
@@ -53,7 +61,7 @@ public partial class ScreenFooter : Container
         Anchor = Anchor.BottomCentre;
         Origin = Anchor.BottomCentre;
         RelativeSizeAxes = Axes.X;
-        Size = new Vector2(1, 100);
+        Size = new Vector2(1, height);
     }
 
     public readonly Reactive<string> ScreenName = new Reactive<string>("Main Menu");
@@ -226,15 +234,24 @@ public partial class ScreenFooter : Container
         base.LoadComplete();
 
         if (gameLayout != null)
+        {
             BindValueChanged(gameLayout.Current, e => applyLayout(e.NewValue == DisplayLayout.Phone), true);
+            // By touch there are no keys, and each screen has its own buttons for these.
+            BindValueChanged(gameLayout.Touch, e => footerKeybindContainer.Alpha = e.NewValue ? 0 : 1, true);
+        }
     }
 
     /// <summary>
-    /// Scales the action buttons and the right-hand buttons up on a phone, each about its bottom corner,
-    /// with the right-hand ones lowered to stay centred in the bar.
+    /// On a phone: the bar slims to its lower strip, and the action buttons and the right-hand buttons
+    /// scale up, each about its bottom corner, with the right-hand ones lowered to stay centred in it.
     /// </summary>
     private void applyLayout(bool phone)
     {
+        Height = phone ? phone_height : height;
+        footerBackgroundBoxUpper.Alpha = phone ? 0 : 0.5f;
+        screenDescriptionText.Alpha = phone ? 0 : 1;
+        screenNameBackgroundContainer.Alpha = phone ? 0 : 1;
+
         float scale = phone ? phone_button_scale : 1;
 
         footerKeybindContainer.Scale = new Vector2(scale);

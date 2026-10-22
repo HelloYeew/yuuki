@@ -87,7 +87,7 @@ public partial class SongSelectionScreen : YuukiScreen, IHaveScreenAction
             new ScreenAction()
             {
                 Name = "Back",
-                Action = onBackButtonClick,
+                Action = onBackKey,
                 KeyCombination = new KeyCombination(InputKeyExtensions.FromKey(Key.Escape))
             },
             new ScreenAction()
@@ -95,6 +95,22 @@ public partial class SongSelectionScreen : YuukiScreen, IHaveScreenAction
                 Name = "Random",
                 Action = onRandomClick,
                 KeyCombination = new KeyCombination(InputKeyExtensions.FromKey(Key.F2))
+            },
+            // A group at a time (or ten songs, three difficulties). The screen takes the keys itself, so
+            // they repeat while held (see OnKeyDown).
+            new ScreenAction()
+            {
+                Name = "Jump back",
+                Action = () => selector.JumpGroup(-1),
+                KeyCombination = new KeyCombination(InputKeyExtensions.FromKey(Key.PageUp)),
+                HintOnly = true
+            },
+            new ScreenAction()
+            {
+                Name = "Jump ahead",
+                Action = () => selector.JumpGroup(1),
+                KeyCombination = new KeyCombination(InputKeyExtensions.FromKey(Key.PageDown)),
+                HintOnly = true
             }
         };
     }
@@ -707,6 +723,21 @@ public partial class SongSelectionScreen : YuukiScreen, IHaveScreenAction
         newButton?.MoveTo(new Vector2(200, RightBottomShearButton.DEFAULT_POSITION.Y), 500, Easing.OutQuint)
             .FadeOut(500, Easing.OutQuint);
         this.FadeOut(500, Easing.OutQuint);
+    }
+
+    /// <summary>
+    /// Escape: a search still applied is cleared first (as in osu!), and the next Escape goes back. The
+    /// back button always goes back.
+    /// </summary>
+    private void onBackKey()
+    {
+        if (selector.State == BeatmapSelector.SelectionState.SelectingSet && selector.SearchText.Length > 0)
+        {
+            selector.Search(string.Empty);
+            return;
+        }
+
+        onBackButtonClick();
     }
 
     private void onBackButtonClick()

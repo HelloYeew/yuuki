@@ -81,6 +81,24 @@ public partial class BeatmapFilterControl : Container
     public BeatmapFilter Filter { get; } = new BeatmapFilter();
 
     /// <summary>
+    /// Fired by the random button (see <see cref="ShowRandom"/>).
+    /// </summary>
+    public Action? RandomRequested { get; set; }
+
+    /// <summary>
+    /// Shows a random button in the phone's bar, for touch, where there's no key for one (the footer
+    /// offers it on a keyboard).
+    /// </summary>
+    public void ShowRandom(bool show)
+    {
+        randomShown = show;
+        randomButton.Alpha = phone && show ? 1 : 0;
+    }
+
+    /// <summary>The random button, while it shows (tests).</summary>
+    public Drawable? RandomButton => randomButton.Alpha > 0 ? randomButton : null;
+
+    /// <summary>
     /// Fired whenever the filter changes (typing settles a moment first).
     /// </summary>
     public event Action<BeatmapFilter>? FilterChanged;
@@ -105,7 +123,9 @@ public partial class BeatmapFilterControl : Container
     private readonly Container card;
     private readonly Container body;
     private readonly Container searchRow;
-    private readonly FilterToggle filterToggle;
+    private readonly BarButton filterToggle;
+    private readonly BarButton randomButton;
+    private bool randomShown;
     private readonly Container sheet;
     private readonly Box sheetFill;
     private readonly FlowContainer sheetFlow;
@@ -231,7 +251,14 @@ public partial class BeatmapFilterControl : Container
                                 Height = 1.5f
                             },
                             // Only on a phone, where the filters live in a sheet it opens.
-                            filterToggle = new FilterToggle(() => SetSheetOpen(!SheetOpen))
+                            filterToggle = new BarButton(IconUsage.Tune, () => SetSheetOpen(!SheetOpen))
+                            {
+                                Anchor = Anchor.CentreRight,
+                                Origin = Anchor.CentreRight,
+                                Alpha = 0
+                            },
+                            // Only by touch, where there's no key for a random song (see ShowRandom).
+                            randomButton = new BarButton(IconUsage.Shuffle, () => RandomRequested?.Invoke())
                             {
                                 Anchor = Anchor.CentreRight,
                                 Origin = Anchor.CentreRight,
@@ -353,6 +380,7 @@ public partial class BeatmapFilterControl : Container
         searchTabFill.Color = accent;
         searchIcon.Color = accentInk;
         filterToggle.SetColors(accent, accentInk, control, palette.Surface);
+        randomButton.SetColors(accent, accentInk, control, palette.Surface);
         sheetFill.Color = palette.Surface.Lighten(0.2f).WithAlpha(0.97f);
         searchBox.SetColors(ink, control);
         countNumber.Color = ink;
@@ -369,10 +397,13 @@ public partial class BeatmapFilterControl : Container
     {
         base.Update();
 
+        // Right to left: the filter button, the random button, the count.
         float countWidth = countFlow.DrawWidth;
         float toggleWidth = phone ? filterToggle.DrawWidth + 14 : 0;
-        searchBox.Width = Math.Max(0, searchBox.Parent!.DrawWidth - searchBox.X - countWidth - toggleWidth - 16);
-        countFlow.X = -toggleWidth;
+        float randomWidth = phone && randomShown ? randomButton.DrawWidth + 14 : 0;
+        randomButton.X = -toggleWidth;
+        searchBox.Width = Math.Max(0, searchBox.Parent!.DrawWidth - searchBox.X - countWidth - toggleWidth - randomWidth - 16);
+        countFlow.X = -toggleWidth - randomWidth;
 
         // On a phone the sheet spans the bar, and its lane chips share the sheet's width.
         if (phone)
@@ -450,6 +481,7 @@ public partial class BeatmapFilterControl : Container
         searchRow.Height = phone ? 56 : search_height;
         rule.Alpha = phone ? 0 : 1;
         filterToggle.Alpha = phone ? 1 : 0;
+        randomButton.Alpha = phone && randomShown ? 1 : 0;
         searchBox.SetFontSize(phone ? 32 : 36);
         countNumber.Font = YuukiFontUsage.GetFontUsage(Typeface.Nunito, phone ? 19 : 18, FontWeight.ExtraBold);
         countRest.Font = YuukiFontUsage.GetFontUsage(Typeface.Nunito, phone ? 19 : 18, FontWeight.Bold);
@@ -605,6 +637,11 @@ public partial class BeatmapFilterControl : Container
     public void SetSearch(string text) => searchBox.Text.Value = text;
 
     /// <summary>
+    /// What's typed in the search.
+    /// </summary>
+    public string SearchText => searchBox.Text.Value;
+
+    /// <summary>
     /// Opens the level range back up to every level.
     /// </summary>
     public void ClearLevelRange() => onRangeChanged(0, BeatmapFilter.MAX_LEVEL);
@@ -720,6 +757,18 @@ public partial class BeatmapFilterControl : Container
         }
 
         protected override Drawable? CreateBackground() => null;
+
+        /// <summary>
+        /// Escape with something typed clears it as it leaves the box, so the whole list is back at
+        /// once (as in osu!); empty, it just leaves.
+        /// </summary>
+        public override bool OnKeyDown(KeyEvent e)
+        {
+            if (e.Key == Key.Escape && HasFocus && !IsComposing && Text.Value.Length > 0)
+                Text.Value = string.Empty;
+
+            return base.OnKeyDown(e);
+        }
     }
 
     /// <summary>
@@ -1098,14 +1147,18 @@ public partial class BeatmapFilterControl : Container
     /// The phone's filter button: the accent blade the search tab is, with a dot while any filter or a sort
     /// other than "added" is on, so a filtered list never looks complete by accident.
     /// </summary>
-    private partial class FilterToggle : ClickableContainer
+    /// <summary>
+    /// A button in the phone's bar: a sheared accent pill with an icon, and a dot it can show (the filter
+    /// button's "a filter is on").
+    /// </summary>
+    private partial class BarButton : ClickableContainer
     {
         private readonly Box fill;
         private readonly IconSprite icon;
         private readonly Container dot;
         private readonly Box dotFill;
 
-        public FilterToggle(Action action)
+        public BarButton(IconUsage iconUsage, Action action)
         {
             Action = action;
             Size = new Vector2(60, 48);
@@ -1129,7 +1182,7 @@ public partial class BeatmapFilterControl : Container
                 {
                     Anchor = Anchor.Centre,
                     Origin = Anchor.Centre,
-                    Icon = IconUsage.Tune,
+                    Icon = iconUsage,
                     IconSize = 26
                 },
                 dot = new Container

@@ -936,8 +936,12 @@ public partial class BeatmapInfoPanel : FlowContainer
             : float.MaxValue;
         float rowWidth = Math.Clamp(maxRight - topShift - leaderboardSlope * score_row_height / 2, 560, score_row_width);
 
+        // How much of the list's left end is past the screen's edge (the panel tucks its left ends off it),
+        // at rest: measured on the row, not its sliding content.
+        float offscreen = details.ToLocalSpace(Vector2.Zero).X - rankingRow.X;
+
         rankingScroll.Width = rowWidth + topShift + 24;
-        bestRow.Place(0, rowWidth);
+        bestRow.Place(0, rowWidth, offscreen);
         bestBand.X = -leaderboardSlope * best_band_height / 2;
         bestBand.Width = rowWidth + leaderboardSlope * best_band_height;
 
@@ -947,7 +951,8 @@ public partial class BeatmapInfoPanel : FlowContainer
         foreach (ScoreRow row in rankingRows)
         {
             float top = rankingContent.ToLocalSpace(new Vector2(row.DrawRectangle.X, row.DrawRectangle.Y)).Y;
-            row.Place(leaderboardSlope * (bestRow.Y - top), rowWidth);
+            float shift = leaderboardSlope * (bestRow.Y - top);
+            row.Place(shift, rowWidth, offscreen - shift);
 
             float fadeIn = (top + score_row_height - viewTop) / score_fade_distance;
             float fadeOut = (viewBottom - top) / score_fade_distance;
@@ -1310,10 +1315,24 @@ public partial class BeatmapInfoPanel : FlowContainer
         /// </summary>
         private const float min_width_for_date = 720;
 
+        /// <summary>
+        /// Where the left-hand content sits, from the panel's left end: the position, the date under how
+        /// long ago, the badges, and the end of the personal best's wash.
+        /// </summary>
+        private const float position_x = 18;
+
+        private const float date_x = 84;
+        private const float badges_x = 170;
+
         private readonly Container inner;
         private readonly Box fill;
         private readonly Color restColor;
         private readonly Drawable[] dateParts;
+        private readonly Drawable positionText;
+        private readonly Drawable dateText;
+        private readonly Drawable badges;
+        private readonly Drawable highlight;
+        private float shownInset = -1;
 
         private readonly SpriteText agoText;
         private readonly DateTimeOffset date;
@@ -1337,8 +1356,8 @@ public partial class BeatmapInfoPanel : FlowContainer
             Color badgeColor = score.IsAllPerfect ? JudgementColors.ALL_PERFECT : JudgementColors.FULL_COMBO;
 
             date = score.Date;
-            agoText = text(ago(date), 14, FontWeight.Regular, Color.White.WithAlpha(0.7f), Anchor.CentreLeft, 84, -11);
-            Drawable dateText = text(score.Date.LocalDateTime.ToString("d MMM yyyy, HH:mm:ss"), 18, FontWeight.Bold, Color.White, Anchor.CentreLeft, 84, 10);
+            agoText = text(ago(date), 14, FontWeight.Regular, Color.White.WithAlpha(0.7f), Anchor.CentreLeft, date_x, -11);
+            dateText = text(score.Date.LocalDateTime.ToString("d MMM yyyy, HH:mm:ss"), 18, FontWeight.Bold, Color.White, Anchor.CentreLeft, date_x, 10);
 
             Child = inner = new Container
             {
@@ -1353,12 +1372,12 @@ public partial class BeatmapInfoPanel : FlowContainer
                         Alpha = 0.75f
                     }, Axes.Both),
                     // The personal best's wash of colour behind its position.
-                    highlighted
+                    highlight = highlighted
                         ? sheared(new Box
                         {
                             RelativeSizeAxes = Axes.Both,
                             ColorInfo = ColorInfo.GradientHorizontal(palette.Accent.WithAlpha(0.9f), palette.Accent.WithAlpha(0))
-                        }, Axes.Y, width: 170)
+                        }, Axes.Y, width: badges_x)
                         : new Container(),
                     // The score on its own darker block, joined to the rank tab.
                     sheared(new Box
@@ -1372,13 +1391,13 @@ public partial class BeatmapInfoPanel : FlowContainer
                         RelativeSizeAxes = Axes.Both,
                         Color = rankColor
                     }, Axes.Y, width: rank_tab_width, anchor: Anchor.CentreRight),
-                    text(position, 22, FontWeight.Bold, Color.White, Anchor.CentreLeft, 18),
+                    positionText = text(position, 22, FontWeight.Bold, Color.White, Anchor.CentreLeft, position_x),
                     agoText,
-                    new FlowContainer
+                    badges = new FlowContainer
                     {
                         Anchor = Anchor.CentreLeft,
                         Origin = Anchor.CentreLeft,
-                        X = 170,
+                        X = badges_x,
                         Y = -11,
                         AutoSizeAxes = Axes.Both,
                         Direction = FlowDirection.Horizontal,
@@ -1417,14 +1436,29 @@ public partial class BeatmapInfoPanel : FlowContainer
             inner.Add(new HoverClickSounds(UISound.Select));
         }
 
-        /// <summary>Puts the panel <paramref name="shift"/> along from the list's left edge, <paramref name="width"/> wide.</summary>
-        public void Place(float shift, float width)
+        /// <summary>
+        /// Puts the panel <paramref name="shift"/> along from the list's left edge, <paramref name="width"/>
+        /// wide, with <paramref name="offscreen"/> of its left end past the screen's edge: its left-hand
+        /// content moves in by that much, so the position is never cut off.
+        /// </summary>
+        public void Place(float shift, float width, float offscreen = 0)
         {
             inner.X = shift;
             inner.Width = width;
 
+            float inset = Math.Max(0, offscreen);
+
+            if (Math.Abs(inset - shownInset) > 0.5f)
+            {
+                shownInset = inset;
+                positionText.X = position_x + inset;
+                agoText.X = dateText.X = date_x + inset;
+                badges.X = badges_x + inset;
+                highlight.Width = badges_x + inset;
+            }
+
             foreach (Drawable part in dateParts)
-                part.Alpha = width >= min_width_for_date ? 1 : 0;
+                part.Alpha = width - inset >= min_width_for_date ? 1 : 0;
         }
 
         public override bool ReceivePositionalInputAt(Vector2 screenSpacePos) => inner.Contains(screenSpacePos);

@@ -69,24 +69,24 @@ public partial class StartScreen : YuukiScreen
             Position = new Vector2(400, -48)
         });
 
-        setPrompt(phone: false);
+        setPrompt(touch: false);
     }
 
     protected override void LoadComplete()
     {
         base.LoadComplete();
 
-        // The layout is picked from the window once the game is running, which can be after this loads.
+        // Touch is worked out from the window once the game is running, which can be after this loads.
         if (gameLayout != null)
-            BindValueChanged(gameLayout.Current, e => setPrompt(e.NewValue == DisplayLayout.Phone), true);
+            BindValueChanged(gameLayout.Touch, e => setPrompt(e.NewValue), true);
     }
 
     /// <summary>
-    /// A phone has no keys to press.
+    /// A touch screen has no keys to press.
     /// </summary>
-    private void setPrompt(bool phone)
+    private void setPrompt(bool touch)
     {
-        string prompt = phone ? "Tap anywhere to start" : "Press any key to start";
+        string prompt = touch ? "Tap anywhere to start" : "Press any key to start";
         ScreenHelperText.Value = prompt;
         startText.Text = prompt;
     }

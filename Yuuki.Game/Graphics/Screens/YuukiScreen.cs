@@ -114,6 +114,9 @@ public class ScreenActionKeyBindingContainer : KeyBindingContainer<ScreenAction>
     {
         foreach (var action in actions)
         {
+            if (action.HintOnly)
+                continue;
+
             keyBindings.Add(new KeyBinding(action.KeyCombination, action));
             keyBindings.Add(new KeyBinding(action.GamepadKeyCombination, action));
         }

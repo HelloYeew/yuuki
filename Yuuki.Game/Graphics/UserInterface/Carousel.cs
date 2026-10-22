@@ -142,6 +142,12 @@ public abstract partial class Carousel<TModel, TCard> : Container
     public float ScrollbarMinThumb { get; set; } = 30f;
 
     /// <summary>
+    /// How far (px) the thumb sits in from the track's edges, all round: 0 fills the track's width, more
+    /// makes it a rounded bar inside it.
+    /// </summary>
+    public float ScrollbarThumbInset { get; set; }
+
+    /// <summary>
     /// The scrollbar's track colour. White by default; a carousel on a light surface sets ink instead.
     /// </summary>
     public Color ScrollbarTrackColor { get; set; } = Color.White.WithAlpha(0.12f);
@@ -1090,7 +1096,8 @@ public abstract partial class Carousel<TModel, TCard> : Container
         private readonly Carousel<TModel, TCard> carousel;
         private readonly Box track;
         private readonly Container labelLayer;
-        private readonly Box thumb;
+        private readonly Container thumb;
+        private readonly Box thumbFill;
 
         private IReadOnlyList<(int Index, string Label)> labels = Array.Empty<(int, string)>();
 
@@ -1122,9 +1129,14 @@ public abstract partial class Carousel<TModel, TCard> : Container
                 {
                     RelativeSizeAxes = Axes.Both
                 },
-                thumb = new Box
+                thumb = new Container
                 {
-                    Color = carousel.ScrollbarThumbColor
+                    Masking = true,
+                    Child = thumbFill = new Box
+                    {
+                        RelativeSizeAxes = Axes.Both,
+                        Color = carousel.ScrollbarThumbColor
+                    }
                 }
             };
         }
@@ -1176,24 +1188,29 @@ public abstract partial class Carousel<TModel, TCard> : Container
             currentThickness += (targetThickness - currentThickness) * thickness_lerp;
             CornerRadius = currentThickness / 2f;
 
+            float inset = carousel.ScrollbarThumbInset;
             float thumbLen = thumbLength();
-            float thumbPos = progress * (trackLength - thumbLen);
+            float thumbPos = inset + progress * travel(thumbLen);
+            float thumbWidth = Math.Max(0, currentThickness - inset * 2);
 
             if (orientation == CarouselOrientation.Vertical)
             {
                 Size = new Vector2(currentThickness, trackLength);
-                thumb.Size = new Vector2(currentThickness, thumbLen);
+                thumb.Size = new Vector2(thumbWidth, thumbLen);
                 thumb.Position = new Vector2(0, thumbPos);
             }
             else
             {
                 Size = new Vector2(trackLength, currentThickness);
-                thumb.Size = new Vector2(thumbLen, currentThickness);
+                thumb.Size = new Vector2(thumbLen, thumbWidth);
                 thumb.Position = new Vector2(thumbPos, 0);
             }
 
+            // Rounded at its ends like the track; inset, it's a bar of its own inside it.
+            thumb.CornerRadius = thumbWidth / 2f;
+
             track.Color = carousel.ScrollbarTrackColor;
-            thumb.Color = active ? carousel.ScrollbarThumbColor.WithAlpha(1f) : carousel.ScrollbarThumbColor;
+            thumbFill.Color = active ? carousel.ScrollbarThumbColor.WithAlpha(1f) : carousel.ScrollbarThumbColor;
 
             updateLabels(thumbLen);
         }
@@ -1208,7 +1225,7 @@ public abstract partial class Carousel<TModel, TCard> : Container
                 float fraction = count > 1 ? Math.Clamp(labels[i].Index / (float)(count - 1), 0, 1) : 0;
 
                 // Where the thumb's middle is when that item is selected.
-                float along = thumbLen / 2f + fraction * (trackLength - thumbLen);
+                float along = carousel.ScrollbarThumbInset + thumbLen / 2f + fraction * travel(thumbLen);
 
                 text.Anchor = orientation == CarouselOrientation.Vertical ? Anchor.TopCentre : Anchor.CentreLeft;
                 text.Position = orientation == CarouselOrientation.Vertical ? new Vector2(0, along) : new Vector2(along, 0);
@@ -1216,17 +1233,24 @@ public abstract partial class Carousel<TModel, TCard> : Container
             }
         }
 
-        // Thumb spans its share of the track, floored at the minimum but never longer than the track.
-        private float thumbLength() => Math.Min(trackLength, Math.Max(carousel.ScrollbarMinThumb, thumbFraction * trackLength));
+        // Thumb spans its share of the track (inside its inset ends), floored at the minimum but never
+        // longer than the track.
+        private float thumbLength()
+        {
+            float room = Math.Max(1f, trackLength - carousel.ScrollbarThumbInset * 2);
+            return Math.Min(room, Math.Max(carousel.ScrollbarMinThumb, thumbFraction * room));
+        }
+
+        // How far the thumb moves from one end to the other.
+        private float travel(float thumbLen) => Math.Max(1f, trackLength - carousel.ScrollbarThumbInset * 2 - thumbLen);
 
         private float progressFromPointer(Vector2 screenSpacePosition)
         {
             var local = ToLocalSpace(screenSpacePosition);
             float thumbLen = thumbLength();
-            float travel = Math.Max(1f, trackLength - thumbLen);
             float pos = orientation == CarouselOrientation.Vertical ? local.Y : local.X;
             // Centre the thumb on the cursor.
-            return Math.Clamp((pos - thumbLen / 2f) / travel, 0, 1);
+            return Math.Clamp((pos - carousel.ScrollbarThumbInset - thumbLen / 2f) / travel(thumbLen), 0, 1);
         }
 
         public override bool OnHover(MouseEvent e) => visible;

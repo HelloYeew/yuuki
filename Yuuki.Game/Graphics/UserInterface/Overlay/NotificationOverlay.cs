@@ -19,6 +19,7 @@ using Sakura.Framework.Maths;
 using Sakura.Framework.Reactive;
 using Yuuki.Game.Audio;
 using Yuuki.Game.Graphics.Colors;
+using Yuuki.Game.Graphics.Drawables;
 using Yuuki.Game.Graphics.Containers;
 using Yuuki.Game.Graphics.Text;
 using Yuuki.Game.Graphics.UserInterface.Notifications;
@@ -33,9 +34,13 @@ public partial class NotificationOverlay : FocusedOverlayContainer
     private const float edge_margin = 20;
 
     /// <summary>
-    /// The music player popup's distance from the bottom, so the two panels open from the same place.
+    /// The panel's distance from the bottom: 16 above the footer (shorter on a phone), as the music player
+    /// popup is, so the two open from the same place.
     /// </summary>
-    private const float footer_margin = 116;
+    private float footerMargin => (footer?.DrawHeight ?? 100) + 16;
+
+    [Resolved(canBeNull: true)]
+    private ScreenFooter? footer { get; set; }
 
     private const float toast_width = 340;
 
@@ -95,7 +100,7 @@ public partial class NotificationOverlay : FocusedOverlayContainer
             {
                 Anchor = Anchor.BottomRight,
                 Origin = Anchor.BottomRight,
-                Position = new Vector2(-edge_margin, -footer_margin),
+                Position = new Vector2(-edge_margin, -footerMargin),
                 Size = new Vector2(panel_width, 220),
                 Masking = true,
                 CornerRadius = 12,
@@ -281,7 +286,7 @@ public partial class NotificationOverlay : FocusedOverlayContainer
             toasts.Scale = new Vector2(scale);
         }
 
-        float maxHeight = Math.Min(panel_max_height, (DrawHeight - footer_margin - edge_margin * 2) / scale);
+        float maxHeight = Math.Min(panel_max_height, (DrawHeight - footerMargin - edge_margin * 2) / scale);
         float wanted = header_height + (empty ? emptyState.Height : listContent.Height);
 
         panel.Height = Math.Clamp(wanted, header_height, Math.Max(header_height, maxHeight));
@@ -321,8 +326,8 @@ public partial class NotificationOverlay : FocusedOverlayContainer
         dim.FadeTo(0.4f, 300, Easing.OutQuint);
 
         panel.ClearTransforms();
-        panel.Y = -footer_margin + 30;
-        panel.MoveToY(-footer_margin, 400, UserInterfaceConstant.SoftBounce);
+        panel.Y = -footerMargin + 30;
+        panel.MoveToY(-footerMargin, 400, UserInterfaceConstant.SoftBounce);
         panel.FadeIn(200, Easing.OutQuint);
 
         toasts.MoveAllToCentre();
@@ -339,7 +344,7 @@ public partial class NotificationOverlay : FocusedOverlayContainer
         dim.FadeOut(300, Easing.OutQuint);
 
         panel.ClearTransforms();
-        panel.MoveToY(-footer_margin + 30, 300, Easing.InCubic);
+        panel.MoveToY(-footerMargin + 30, 300, Easing.InCubic);
         panel.FadeOut(200, Easing.OutQuint);
     }
 

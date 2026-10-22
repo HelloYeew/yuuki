@@ -86,7 +86,22 @@ public class GameLayout
 
     public readonly Reactive<DisplayLayout> Current = new Reactive<DisplayLayout>(DisplayLayout.Desktop);
 
+    /// <summary>
+    /// Whether the game is played by touch, so there are no keys to hint at: the footer's key actions
+    /// hide, and each screen's own buttons do their work. See <see cref="IsTouch"/>.
+    /// </summary>
+    public readonly Reactive<bool> Touch = new Reactive<bool>(false);
+
     public bool IsPhone => Current.Value == DisplayLayout.Phone;
+
+    /// <summary>
+    /// Whether to take the game as played by touch. The framework doesn't tell a touch from a click yet,
+    /// so a mobile platform stands in for it (and the Layout setting forcing the phone layout, to preview
+    /// one); once it does, this follows the last input instead. Not the window: a small desktop screen
+    /// gets the phone layout but still has its keys.
+    /// </summary>
+    public static bool IsTouch(LayoutPreference preference, bool mobile) =>
+        mobile || preference == LayoutPreference.Phone;
 
     /// <summary>
     /// Whether a window <paramref name="heightPoints"/> tall is a phone's, given whether it was.
@@ -100,8 +115,8 @@ public class GameLayout
     /// </summary>
     public static double Zoom(LayoutPreference preference, bool phoneWindow, double uiScale)
     {
-        bool phoneStart = preference == LayoutPreference.Phone || (preference == LayoutPreference.Auto && phoneWindow);
-        return Math.Min((phoneStart ? PHONE_ZOOM : 1) * uiScale, MAX_ZOOM);
+        bool phoneSized = preference == LayoutPreference.Phone || (preference == LayoutPreference.Auto && phoneWindow);
+        return Math.Min((phoneSized ? PHONE_ZOOM : 1) * uiScale, MAX_ZOOM);
     }
 
     /// <summary>

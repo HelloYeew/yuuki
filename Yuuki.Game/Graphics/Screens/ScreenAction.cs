@@ -13,6 +13,12 @@ public struct ScreenAction : IEquatable<ScreenAction>
     public KeyCombination KeyCombination;
     public KeyCombination GamepadKeyCombination;
 
+    /// <summary>
+    /// Shown in the footer (where a click runs it), but its key isn't bound for it: the screen takes the
+    /// key itself, to keep its repeats, say.
+    /// </summary>
+    public bool HintOnly;
+
     public bool Equals(ScreenAction other)
     {
         return Name == other.Name && KeyCombination.Equals(other.KeyCombination) && GamepadKeyCombination.Equals(other.GamepadKeyCombination);

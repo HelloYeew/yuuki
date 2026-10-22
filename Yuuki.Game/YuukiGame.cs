@@ -273,6 +273,10 @@ public partial class YuukiGame : App
     {
         base.Update();
 
+        // The footer is shorter on a phone: the screens above it follow its height.
+        if (ShowFooter.Value && Math.Abs(screenStack.Padding.Bottom - footer.DrawSize.Y) > 0.5f)
+            screenStack.Padding = new MarginPadding { Bottom = footer.DrawSize.Y };
+
         if (updateLayout())
         {
             // A new canvas, straight away: easing between two layouts would show neither properly.
@@ -311,6 +315,7 @@ public partial class YuukiGame : App
     private bool updateLayout()
     {
         phoneWindow = GameLayout.IsPhoneWindow(Window?.Height ?? GameLayout.DESKTOP_ABOVE + 1, phoneWindow);
+        layout.Touch.Value = GameLayout.IsTouch(layoutPreference.Value, RuntimeInfo.IsMobile);
 
         var chosen = GameLayout.Choose(layoutPreference.Value, phoneWindow, targetZoom);
 
