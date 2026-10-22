@@ -56,7 +56,7 @@ public partial class TestSettingsSearch : YuukiManualInputManagerTestScene
     public void TestSectionNameNarrowsTheRest()
     {
         AddStep("search \"gameplay offset\"", () => overlay.SearchText = "gameplay offset");
-        AddAssert("just the offset in Gameplay", () => overlay.ShownSettings.SequenceEqual(new[] { "Audio offset" }));
+        AddAssert("just the offsets in Gameplay", () => overlay.ShownSettings.SequenceEqual(new[] { "Audio offset", "Visual offset", "Calibrate offsets" }));
     }
 
     [Test]
