@@ -143,8 +143,7 @@ public enum YuukiSetting
     Prefer24HourTime,
 
     /// <summary>
-    /// The layout to use: picked from the window's size, or forced to the desktop or phone one. Backed by
-    /// <see cref="Yuuki.Game.Graphics.LayoutPreference"/>.
+    /// Whether a tap leaves a burst of stars and a petal, and a drag a trail of stars, outside a song.
     /// </summary>
-    Layout
+    TouchEffects
 }

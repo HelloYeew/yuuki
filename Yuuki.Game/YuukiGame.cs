@@ -2,6 +2,7 @@
 // See the LICENSE file for full license text.
 
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 using Sakura.Framework;
@@ -27,6 +28,7 @@ using Yuuki.Game.Graphics.Containers;
 using Yuuki.Game.Graphics.Drawables;
 using Yuuki.Game.Graphics.Screens;
 using Yuuki.Game.Graphics.ScreenStacks;
+using Yuuki.Game.Graphics.UserInterface;
 using Yuuki.Game.Graphics.UserInterface.Dialog;
 using Yuuki.Game.Graphics.UserInterface.Overlay;
 using Yuuki.Game.Resources;
@@ -53,7 +55,6 @@ public partial class YuukiGame : App
     private bool phoneWindow;
 
     private readonly GameLayout layout = new GameLayout();
-    private Reactive<LayoutPreference> layoutPreference = null!;
     private YuukiScreenStack screenStack = null!;
     private YuukiBackground background = null!;
     private ScreenFooter footer = null!;
@@ -66,6 +67,7 @@ public partial class YuukiGame : App
     private BeatmapImportManager importManager = null!;
     private HoldToExitGameOverlay holdToExit = null!;
     private VolumeOverlay volumeOverlay = null!;
+    private TouchEffects touchEffects = null!;
 
     /// <summary>
     /// How long the screen and music take to go out once quitting is settled.
@@ -91,6 +93,12 @@ public partial class YuukiGame : App
 
     public ReactiveBool ShowFooter = new ReactiveBool(false);
     public Reactive<InputType> LatestInputType = new Reactive<InputType>(InputType.Keyboard);
+
+    /// <summary>
+    /// How the platform opens the files it hands over as links (a phone's), for importing; null where every file
+    /// has a path. Set by the platform's head before load.
+    /// </summary>
+    public IExternalFiles? ExternalFiles { get; init; }
 
     public override void Load()
     {
@@ -158,13 +166,11 @@ public partial class YuukiGame : App
             Child = new YuukiGlobalActionContainer()
         });
 
-        Add(new SafeAreaContainer
+        // In the safe area, as everything added to the app is: clear of a notch and the system bars. What
+        // should reach the screen's edges under them (backgrounds, dims, bars) bleeds out of it.
+        Add(mainContainer = new DrawSizePreservingFillContainer
         {
-            RelativeSizeAxes = Axes.Both,
-            Child = mainContainer = new DrawSizePreservingFillContainer
-            {
-                RelativeSizeAxes = Axes.Both
-            }
+            RelativeSizeAxes = Axes.Both
         });
 
         Cache(audioManager = new YuukiAudioManager());
@@ -178,11 +184,17 @@ public partial class YuukiGame : App
         Cache(volumeFader);
         mainContainer.Add(volumeFader);
 
+        // Covers let go of a moment ago, kept to show again at once.
+        var recentCovers = new RecentCoverTextures();
+        Cache(recentCovers);
+        mainContainer.Add(recentCovers);
+
         mainContainer.Add(background = new YuukiBackground
         {
             Anchor = Anchor.Centre,
             Origin = Anchor.Centre,
             RelativeSizeAxes = Axes.Both,
+            Bleed = Edges.All,
             Alpha = 0
         });
         Cache(background);
@@ -230,6 +242,9 @@ public partial class YuukiGame : App
 
         mainContainer.Add(notificationOverlay);
 
+        if (ExternalFiles != null)
+            Cache(ExternalFiles);
+
         importManager = new BeatmapImportManager();
         Cache(importManager);
         mainContainer.Add(importManager);
@@ -250,8 +265,12 @@ public partial class YuukiGame : App
 
         mainContainer.Add(cursor);
 
+        // Over everything, at the window's own scale (dp on a phone), in the screen's colors, and off in play.
+        Add(touchEffects = new TouchEffects { RelativeSizeAxes = Axes.Both });
+        touchEffects.Palette.BindTo(footer.ColorPalette);
+        touchEffects.Suppressed.BindTo(cursor.Hidden);
+
         uiScale = config.Get<double>(YuukiSetting.UIScale);
-        layoutPreference = config.Get<LayoutPreference>(YuukiSetting.Layout);
         updateLayout();
         displayedZoom = targetZoom;
         applyZoom();
@@ -304,7 +323,7 @@ public partial class YuukiGame : App
         get
         {
             double scale = Math.Clamp(Math.Round(uiScale.Value / ui_scale_step) * ui_scale_step, YuukiConfigManager.MIN_UI_SCALE, YuukiConfigManager.MAX_UI_SCALE);
-            return GameLayout.Zoom(layoutPreference.Value, phoneWindow, scale);
+            return GameLayout.Zoom(phoneWindow, scale);
         }
     }
 
@@ -315,9 +334,9 @@ public partial class YuukiGame : App
     private bool updateLayout()
     {
         phoneWindow = GameLayout.IsPhoneWindow(Window?.Height ?? GameLayout.DESKTOP_ABOVE + 1, phoneWindow);
-        layout.Touch.Value = GameLayout.IsTouch(layoutPreference.Value, RuntimeInfo.IsMobile);
+        layout.Touch.Value = InputManager.CurrentState.LastPointerWasTouch;
 
-        var chosen = GameLayout.Choose(layoutPreference.Value, phoneWindow, targetZoom);
+        var chosen = GameLayout.Choose(phoneWindow, targetZoom);
 
         if (chosen == layout.Current.Value)
             return false;
@@ -366,6 +385,12 @@ public partial class YuukiGame : App
         importManager.Gather(e.FilePath);
         return true;
     }
+
+    /// <summary>
+    /// Imports the .osz files another app hands the game, as a phone's "open with" does. Safe from any thread:
+    /// they wait for the game to have loaded.
+    /// </summary>
+    public void ImportShared(IReadOnlyList<string> paths) => Scheduler.Add(() => importManager.Import(paths.Where(importManager.Accepts).ToList()));
 
     /// <summary>
     /// Whether the settings, the music player or a dialog is open over the screen.
@@ -435,11 +460,51 @@ public partial class YuukiGame : App
         if (exiting)
             return true;
 
+        if (e.Key == Key.SystemBack)
+            return onSystemBack(e);
+
         LatestInputType.Value = InputType.Keyboard;
         return base.OnKeyDown(e);
     }
 
+    public override bool OnKeyUp(KeyEvent e) => base.OnKeyUp(e.Key == Key.SystemBack ? asEscape(e) : e);
+
+    /// <summary>
+    /// A phone's Back (its button, or the swipe in from an edge) does what Escape does: closes what's open,
+    /// pauses a song, goes back a screen. At the main menu with nothing open it's left to the system, which
+    /// puts the game in the background as Back does any app, rather than Escape's hold to quit.
+    /// </summary>
+    private bool onSystemBack(KeyEvent e)
+    {
+        if (screenStack.CurrentScreen is MainMenuScreen && !IsOverlayOpen)
+            return false;
+
+        return base.OnKeyDown(asEscape(e));
+    }
+
+    private static KeyEvent asEscape(KeyEvent e) => new KeyEvent(Key.Escape, e.Modifiers, e.IsRepeat, e.Timestamp);
+
     public override bool OnMouseDown(MouseButtonEvent e) => exiting || base.OnMouseDown(e);
+
+    // The touch effects see every finger, whatever takes it.
+
+    public override bool OnTouchDown(TouchEvent e)
+    {
+        touchEffects.FingerDown(e.Source, e.ScreenSpacePosition);
+        return base.OnTouchDown(e);
+    }
+
+    public override bool OnTouchMove(TouchEvent e)
+    {
+        touchEffects.FingerMove(e.Source, e.ScreenSpacePosition);
+        return base.OnTouchMove(e);
+    }
+
+    public override bool OnTouchUp(TouchEvent e)
+    {
+        touchEffects.FingerUp(e.Source);
+        return base.OnTouchUp(e);
+    }
 
     public override void OnGamepadConnected(GamepadConnectedEvent e)
     {

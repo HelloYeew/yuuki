@@ -58,7 +58,7 @@ public class YuukiConfigManager : ConfigManager<YuukiSetting>
         Get(YuukiSetting.CursorRotate, true);
         Get(YuukiSetting.SongSelectSort, BeatmapSort.Added);
         Get(YuukiSetting.UIScale, 1.0);
-        Get(YuukiSetting.Layout, LayoutPreference.Auto);
+        Get(YuukiSetting.TouchEffects, true);
         Get(YuukiSetting.HitsoundVolume, 1.0);
         Get(YuukiSetting.InactiveVolume, 0.25);
         Get(YuukiSetting.PlayfieldSize, MAX_PLAYFIELD_SIZE);
