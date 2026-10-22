@@ -30,8 +30,8 @@ public partial class ComposeScreen : Container
 
     private readonly Dictionary<ComposeTool, EditorToolButton> toolButtons = new Dictionary<ComposeTool, EditorToolButton>();
     private readonly Dictionary<HitSampleAddition, EditorToolButton> additionButtons = new Dictionary<HitSampleAddition, EditorToolButton>();
-    private readonly Dictionary<SwipeDirection, EditorToolButton> swipeButtons = new Dictionary<SwipeDirection, EditorToolButton>();
-    private readonly Dictionary<SkillType, EditorToolButton> skillButtons = new Dictionary<SkillType, EditorToolButton>();
+    private readonly Dictionary<SwipeDirection, EditorOption> swipeOptions = new Dictionary<SwipeDirection, EditorOption>();
+    private readonly Dictionary<SkillType, EditorOption> skillOptions = new Dictionary<SkillType, EditorOption>();
 
     private TextFlowContainer inspector = null!;
     private string? shownInspector;
@@ -51,8 +51,10 @@ public partial class ComposeScreen : Container
     private EditorPanelColumn right = null!;
     private EditorPanel tools = null!;
     private EditorPanel hitsounds = null!;
-    private EditorPanel noteSettings = null!;
-    private bool noteSettingsOnRight;
+
+    // What a new swipe or skill note will be, under its tool while that tool's picked.
+    private EditorOptionRow swipeRow = null!;
+    private EditorOptionRow skillRow = null!;
 
     protected override void LoadComplete()
     {
@@ -63,23 +65,14 @@ public partial class ComposeScreen : Container
     }
 
     /// <summary>
-    /// On a phone the height left between the editor's bars (about 490) can't take all three panels down
-    /// the left, so "New notes" moves under Selection on the right and the tool rows tighten.
+    /// On a phone the height left between the editor's bars (about 490) is tight, so the rows tighten.
     /// </summary>
     private void applyLayout()
     {
         bool phone = gameLayout?.IsPhone == true;
 
-        if (phone != noteSettingsOnRight)
-        {
-            (phone ? left : right).RemovePanel(noteSettings);
-            (phone ? right : left).AddPanel(noteSettings);
-            noteSettingsOnRight = phone;
-        }
-
         tools.SetCompact(phone);
         hitsounds.SetCompact(phone);
-        noteSettings.SetCompact(phone);
     }
 
     [BackgroundDependencyLoader]
@@ -114,8 +107,15 @@ public partial class ComposeScreen : Container
         addTool(tools, ComposeTool.Tap, IconUsage.CropSquare, "Tap", "2");
         addTool(tools, ComposeTool.Hold, IconUsage.Height, "Hold", "3");
         addTool(tools, ComposeTool.Swipe, IconUsage.SwapHoriz, "Swipe", "4");
+        tools.AddRow(swipeRow = new EditorOptionRow());
+        addSwipe(SwipeDirection.Any, IconUsage.SwapHoriz, "Either");
+        addSwipe(SwipeDirection.Left, IconUsage.KeyboardDoubleArrowLeft, "Left");
+        addSwipe(SwipeDirection.Right, IconUsage.KeyboardDoubleArrowRight, "Right");
         addTool(tools, ComposeTool.Pass, IconUsage.RadioButtonUnchecked, "Pass", "5");
         addTool(tools, ComposeTool.Skill, IconUsage.AutoAwesome, "Skill", "6");
+        tools.AddRow(skillRow = new EditorOptionRow());
+        addSkill(SkillType.Heal, IconUsage.Favorite, "Heal");
+        addSkill(SkillType.BreakToCritical, IconUsage.AutoAwesome, "Critical");
         addTool(tools, ComposeTool.Touch, IconUsage.HorizontalRule, "Touch", "7");
         left.AddPanel(tools);
 
@@ -124,14 +124,6 @@ public partial class ComposeScreen : Container
         addAddition(hitsounds, HitSampleAddition.Finish, "Finish", "E");
         addAddition(hitsounds, HitSampleAddition.Clap, "Clap", "R");
         left.AddPanel(hitsounds);
-
-        noteSettings = new EditorPanel("New notes");
-        addSwipe(noteSettings, SwipeDirection.Any, IconUsage.SwapHoriz, "Swipe either side");
-        addSwipe(noteSettings, SwipeDirection.Left, IconUsage.KeyboardDoubleArrowLeft, "Swipe left");
-        addSwipe(noteSettings, SwipeDirection.Right, IconUsage.KeyboardDoubleArrowRight, "Swipe right");
-        addSkill(noteSettings, SkillType.Heal, IconUsage.Favorite, "Skill: heal");
-        addSkill(noteSettings, SkillType.BreakToCritical, IconUsage.AutoAwesome, "Skill: break -> critical");
-        left.AddPanel(noteSettings);
 
         var selection = new EditorPanel("Selection");
         selection.AddRow(inspector = new TextFlowContainer(t =>
@@ -148,18 +140,21 @@ public partial class ComposeScreen : Container
         {
             foreach (var (tool, button) in toolButtons)
                 button.Active = tool == e.NewValue;
+
+            swipeRow.Alpha = e.NewValue == ComposeTool.Swipe ? 1 : 0;
+            skillRow.Alpha = e.NewValue == ComposeTool.Skill ? 1 : 0;
         }, true);
 
         session.NewSwipeDirection.BindValueChanged(e =>
         {
-            foreach (var (direction, button) in swipeButtons)
-                button.Active = direction == e.NewValue;
+            foreach (var (direction, option) in swipeOptions)
+                option.Active = direction == e.NewValue;
         }, true);
 
         session.NewSkill.BindValueChanged(e =>
         {
-            foreach (var (skill, button) in skillButtons)
-                button.Active = skill == e.NewValue;
+            foreach (var (skill, option) in skillOptions)
+                option.Active = skill == e.NewValue;
         }, true);
     }
 
@@ -177,19 +172,11 @@ public partial class ComposeScreen : Container
         panel.AddRow(button);
     }
 
-    private void addSwipe(EditorPanel panel, SwipeDirection direction, IconUsage icon, string text)
-    {
-        var button = new EditorToolButton(icon, text, null, () => session.NewSwipeDirection.Value = direction);
-        swipeButtons[direction] = button;
-        panel.AddRow(button);
-    }
+    private void addSwipe(SwipeDirection direction, IconUsage icon, string text) =>
+        swipeOptions[direction] = swipeRow.AddOption(icon, text, () => session.NewSwipeDirection.Value = direction);
 
-    private void addSkill(EditorPanel panel, SkillType skill, IconUsage icon, string text)
-    {
-        var button = new EditorToolButton(icon, text, null, () => session.NewSkill.Value = skill);
-        skillButtons[skill] = button;
-        panel.AddRow(button);
-    }
+    private void addSkill(SkillType skill, IconUsage icon, string text) =>
+        skillOptions[skill] = skillRow.AddOption(icon, text, () => session.NewSkill.Value = skill);
 
     /// <summary>
     /// Toggles a hitsound: on the selection when there is one (on for all unless all have it already),

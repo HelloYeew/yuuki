@@ -14,6 +14,7 @@ using Sakura.Framework.Graphics.Transforms;
 using Sakura.Framework.Input;
 using Sakura.Framework.Maths;
 using Yuuki.Game.Audio;
+using Yuuki.Game.Graphics;
 using Yuuki.Game.Graphics.Colors;
 using Yuuki.Game.Graphics.Text;
 
@@ -69,8 +70,8 @@ public partial class EditorPanel : Container
     }
 
     /// <summary>
-    /// Tighter rows, for a short screen (a phone's): tool buttons 32 tall rather than 36, 4 apart rather
-    /// than 5.
+    /// Tighter rows, for a short screen (a phone's): tool buttons 32 tall rather than 36, option rows 28
+    /// rather than 30, 4 apart rather than 5.
     /// </summary>
     public void SetCompact(bool compact)
     {
@@ -78,6 +79,9 @@ public partial class EditorPanel : Container
 
         foreach (var button in rows.Children.OfType<EditorToolButton>())
             button.Height = compact ? 32 : 36;
+
+        foreach (var row in rows.Children.OfType<EditorOptionRow>())
+            row.Height = compact ? EditorOptionRow.COMPACT_HEIGHT : EditorOptionRow.HEIGHT;
     }
 
     public void AddRow(Drawable row)
@@ -109,11 +113,15 @@ public partial class EditorToolButton : Container
     private readonly Box background;
     private readonly IconSprite icon;
     private readonly SpriteText label;
+    private readonly SpriteText hotkeyText;
     private EditorColors colors;
     private bool active;
 
     [Resolved(canBeNull: true)]
     private UISoundPlayer? uiSounds { get; set; }
+
+    [Resolved(canBeNull: true)]
+    private GameLayout? gameLayout { get; set; }
 
     public EditorToolButton(IconUsage iconUsage, string text, string? hotkey, Action action)
     {
@@ -142,7 +150,7 @@ public partial class EditorToolButton : Container
                 Text = text,
                 Font = YuukiFontUsage.GetFontUsage(Typeface.Nunito, 15, FontWeight.Bold)
             },
-            new SpriteText
+            hotkeyText = new SpriteText
             {
                 Anchor = Anchor.CentreRight,
                 Origin = Anchor.CentreRight,
@@ -159,6 +167,15 @@ public partial class EditorToolButton : Container
     {
         colors = EditorColors.From(colorProvider);
         updateState(false);
+    }
+
+    protected override void LoadComplete()
+    {
+        base.LoadComplete();
+
+        // No keys on a touch screen, so no key to show.
+        if (gameLayout != null)
+            BindValueChanged(gameLayout.Touch, e => hotkeyText.Alpha = e.NewValue ? 0 : 1, true);
     }
 
     public bool Active

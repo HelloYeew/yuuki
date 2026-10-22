@@ -35,11 +35,6 @@ public partial class EditorPanelColumn : YuukiScrollableContainer
 
     public void AddPanel(EditorPanel panel) => flow.Add(panel);
 
-    /// <summary>
-    /// Takes <paramref name="panel"/> out of the column without disposing it, to go in another.
-    /// </summary>
-    public void RemovePanel(EditorPanel panel) => flow.Remove(panel, false);
-
     public override void Update()
     {
         base.Update();
