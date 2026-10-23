@@ -3,6 +3,7 @@
 
 using System;
 using System.Collections.Generic;
+using Sakura.Framework;
 using Sakura.Framework.Allocation;
 using Sakura.Framework.Development;
 using Sakura.Framework.Extensions.ColorExtensions;
@@ -58,7 +59,7 @@ public partial class MainMenuScreen : YuukiScreen, IHaveScreenAction
     private MenuShearButton editButton = null!;
     private MenuShearButton listButton = null!;
     private MenuShearButton moreButton = null!;
-    private MenuShearButton exitButton = null!;
+    private MenuShearButton? exitButton;
 
     [Resolved]
     private YuukiScreenStack screenStack { get; set; } = null!;
@@ -257,18 +258,22 @@ public partial class MainMenuScreen : YuukiScreen, IHaveScreenAction
             }
         });
 
-        // Apart from the menu's own buttons, in the corner opposite the version, as quitting is.
-        Add(exitButton = new MenuShearButton
+        // Apart from the menu's own buttons, in the corner opposite the version, as quitting is. Not on a phone or tablet,
+        // where only the player ends an app, from the system.
+        if (!RuntimeInfo.IsMobile)
         {
-            Anchor = Anchor.BottomRight,
-            Origin = Anchor.BottomRight,
-            Position = new Vector2(-36, -18),
-            ButtonSize = new Vector2(190, 62),
-            Icon = IconUsage.PowerSettingsNew,
-            Text = "Exit",
-            BackgroundColor = UserInterfaceConstant.DangerColor,
-            Action = onExitButtonClick
-        });
+            Add(exitButton = new MenuShearButton
+            {
+                Anchor = Anchor.BottomRight,
+                Origin = Anchor.BottomRight,
+                Position = new Vector2(-36, -18),
+                ButtonSize = new Vector2(190, 62),
+                Icon = IconUsage.PowerSettingsNew,
+                Text = "Exit",
+                BackgroundColor = UserInterfaceConstant.DangerColor,
+                Action = onExitButtonClick
+            });
+        }
 
         Add(versionText = new SpriteText()
         {
@@ -378,7 +383,8 @@ public partial class MainMenuScreen : YuukiScreen, IHaveScreenAction
         if (idlePanel.Scale.X != panelScale)
             idlePanel.Scale = new Vector2(panelScale);
         versionText.Alpha = settled(1 - idleAmount);
-        exitButton.Alpha = versionText.Alpha;
+        if (exitButton != null)
+            exitButton.Alpha = versionText.Alpha;
     }
 
     /// <summary>
@@ -439,7 +445,7 @@ public partial class MainMenuScreen : YuukiScreen, IHaveScreenAction
     /// </summary>
     public override bool OnKeyDown(KeyEvent e)
     {
-        if (e.Key == Key.Escape && !e.IsRepeat && active && holdToExit != null && !(game?.IsOverlayOpen ?? false))
+        if (e.Key == Key.Escape && !e.IsRepeat && active && holdToExit != null && !(game?.IsOverlayOpen ?? false) && !RuntimeInfo.IsMobile)
         {
             holdToExit.BeginHold();
             return true;
