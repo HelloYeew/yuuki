@@ -296,6 +296,11 @@ public partial class YuukiGame : App
         if (ShowFooter.Value && Math.Abs(screenStack.Padding.Bottom - footer.DrawSize.Y) > 0.5f)
             screenStack.Padding = new MarginPadding { Bottom = footer.DrawSize.Y };
 
+        // Out of sight it stays out of sight as the window changes shape, which moves the screen's edge away from the
+        // safe area's.
+        if (!ShowFooter.Value && footer.GetLatestTransformEndTime() <= Clock.CurrentTime && Math.Abs(footer.Y - hiddenFooterY()) > 0.5f)
+            footer.Y = hiddenFooterY();
+
         if (updateLayout())
         {
             // A new canvas, straight away: easing between two layouts would show neither properly.
@@ -532,8 +537,19 @@ public partial class YuukiGame : App
 
     private void hideFooter()
     {
-        footer.MoveToY(footer.DrawSize.Y + 30, 500, Easing.OutQuint);
+        footer.MoveToY(hiddenFooterY(), 500, Easing.OutQuint);
         screenStack.Padding = new MarginPadding(0);
+    }
+
+    /// <summary>
+    /// How far down the footer goes to be out of sight: past the bottom of the screen, not just of the safe area it
+    /// sits on. On a phone the screen goes on below that, by the home indicator's room or a rounded corner's, and the
+    /// footer's background reaches down there.
+    /// </summary>
+    private float hiddenFooterY()
+    {
+        float screenBottom = mainContainer.ToLocalSpace(ToScreenSpace(new Vector2(0, DrawSize.Y))).Y;
+        return Math.Max(0, screenBottom - mainContainer.DrawSize.Y) + footer.DrawSize.Y + 30;
     }
 
     private void showFooter()
