@@ -2,8 +2,10 @@
 // See the LICENSE file for full license text.
 
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System;
+using Sakura.Framework;
 using Sakura.Framework.Allocation;
 using Sakura.Framework.Audio;
 using Sakura.Framework.Configurations;
@@ -30,6 +32,8 @@ using Yuuki.Game.Graphics;
 using Yuuki.Game.Graphics.Colors;
 using Yuuki.Game.Graphics.Containers;
 using Yuuki.Game.Graphics.Text;
+using Yuuki.Game.Graphics.Screens;
+using Yuuki.Game.Graphics.ScreenStacks;
 using Vector2 = Sakura.Framework.Maths.Vector2;
 
 namespace Yuuki.Game.Graphics.UserInterface.Overlay;
@@ -96,12 +100,28 @@ public partial class SettingsOverlay : FocusedOverlayContainer
     [Resolved(canBeNull: true)]
     private AppHost? host { get; set; }
 
+    [Resolved(canBeNull: true)]
+    private IPlatformHaptics? haptics { get; set; }
 
     [Resolved(canBeNull: true)]
     private BeatmapImportManager? importManager { get; set; }
 
     [Resolved(canBeNull: true)]
     private GameLayout? gameLayout { get; set; }
+
+    [Resolved(canBeNull: true)]
+    private IAudioManager? audioManager { get; set; }
+
+    [Resolved(canBeNull: true)]
+    private YuukiAudioManager? music { get; set; }
+
+    [Resolved(canBeNull: true)]
+    private YuukiScreenStack? screenStack { get; set; }
+
+    [Resolved(canBeNull: true)]
+    private OffsetManager? offsets { get; set; }
+
+    private YuukiDropdown<string>? outputDevices;
 
     private const string framework_url = "https://github.com/HelloYeew/sakura";
     private const string yuuki_url = "https://github.com/HelloYeew/yuuki";
@@ -130,6 +150,7 @@ public partial class SettingsOverlay : FocusedOverlayContainer
                     new Box
                     {
                         RelativeSizeAxes = Axes.Both,
+                        Bleed = Edges.All,
                         Color = palette.Backdrop,
                         Alpha = 0.85f
                     },
@@ -221,13 +242,19 @@ public partial class SettingsOverlay : FocusedOverlayContainer
             playfieldPreview = new PlayfieldPreview()
         });
 
+        // What a phone leaves out: a choice of renderer or audio driver (it has the one that works), an audio buffer
+        // size (the system sizes its own: a set one takes Android off its low-latency path, and iOS queues 30 ms
+        // whatever it is), a cursor, other windows to turn the volume down for, and a folder to open.
+        bool phone = RuntimeInfo.IsMobile;
+
         addSection(content, IconUsage.Monitor, "Graphics",
-            settingRow("Renderer", "The graphics backend the game draws with.",
+            phone ? null : settingRow("Renderer", "The graphics backend the game draws with.",
                 dropdown(frameworkConfigManager.Get<RendererType>(FrameworkSetting.RendererType), RendererTypes.GetSuitableRenderers()),
                 "graphics api", "compatibility", "directx"),
-            settingRow("Window mode", "Windowed, borderless or full screen.",
-                dropdown(frameworkConfigManager.Get<WindowMode>(FrameworkSetting.WindowMode), Enum.GetValues<WindowMode>()),
-                "fullscreen", "display", "screen"),
+            settingRow("Window mode", phone ? "Full screen hides the status and navigation bars; a swipe in from an edge shows them for a moment." : "Windowed, borderless or full screen.",
+                dropdown(frameworkConfigManager.Get<WindowMode>(FrameworkSetting.WindowMode), host?.Window?.SupportedWindowModes ?? Enum.GetValues<WindowMode>(),
+                    phone ? formatPhoneWindowMode : null),
+                "fullscreen", "display", "screen", "status bar", "navigation bar", "immersive"),
             settingRow("Frame limiter", "How often frames are drawn. VSync avoids tearing; unlimited is the most responsive.",
                 dropdown(frameworkConfigManager.Get<FrameSync>(FrameworkSetting.FrameLimiter), Enum.GetValues<FrameSync>()),
                 "fps", "framerate", "refresh rate"),
@@ -245,7 +272,7 @@ public partial class SettingsOverlay : FocusedOverlayContainer
             settingRow("Master volume", "Everything, together.",
                 percentSlider(frameworkConfigManager.Get<double>(FrameworkSetting.MasterVolume)),
                 "sound", "loudness"),
-            settingRow("Inactive volume", "How loud the game gets, of master volume, while you're in another window.",
+            phone ? null : settingRow("Inactive volume", "How loud the game gets, of master volume, while you're in another window.",
                 percentSlider(configManager.Get<double>(YuukiSetting.InactiveVolume)),
                 "unfocused", "background", "alt-tab", "minimize"),
             settingRow("Music volume", "The songs.",
@@ -257,7 +284,10 @@ public partial class SettingsOverlay : FocusedOverlayContainer
             settingRow("Hitsound volume", "The notes, holds and combo break during play, on top of effects volume.",
                 percentSlider(configManager.Get<double>(YuukiSetting.HitsoundVolume)),
                 "samples", "sfx", "keysound"),
-            settingRow("Audio driver", "The audio backend sound plays through.",
+            settingRow("Output device", "Where sound plays. The system default follows your system as its choice changes.",
+                outputDeviceDropdown(frameworkConfigManager.Get<string>(FrameworkSetting.AudioDevice)),
+                "device", "output", "speaker", "headphone", "bluetooth"),
+            phone ? null : settingRow("Audio driver", "The audio backend sound plays through.",
                 dropdown(frameworkConfigManager.Get<AudioBackend>(FrameworkSetting.AudioBackend), AudioBackends.GetSuitableBackends()),
                 "device", "output", "speaker", "headphone"));
 
@@ -269,10 +299,24 @@ public partial class SettingsOverlay : FocusedOverlayContainer
             settingRow("Follow song BPM", "Scroll speed becomes the time at 120 BPM, so faster songs scroll faster.",
                 toggle(configManager.Get<bool>(YuukiSetting.ScrollSpeedFollowsBpm)),
                 "tempo", "note speed"),
-            settingRow("Audio offset", "Hitting late on average? Lower it. Early? Raise it. The results screen can work it out for you.",
+            audioOffsetRow = settingRow("Audio offset", audio_offset_description,
                 intSlider(configManager.Get<int>(YuukiSetting.AudioOffset), YuukiConfigManager.MIN_AUDIO_OFFSET, YuukiConfigManager.MAX_AUDIO_OFFSET, 1,
                     v => v > 0 ? $"+{v} ms" : $"{v} ms"),
-                "latency", "delay", "sync", "timing", "calibrate"),
+                "latency", "delay", "sync", "timing", "calibrate", "headphones", "bluetooth"),
+            visualOffsetRow = settingRow("Visual offset", visual_offset_description,
+                intSlider(configManager.Get<int>(YuukiSetting.VisualOffset), YuukiConfigManager.MIN_VISUAL_OFFSET, YuukiConfigManager.MAX_VISUAL_OFFSET, 1,
+                    v => v > 0 ? $"+{v} ms" : $"{v} ms"),
+                "latency", "delay", "sync", "display", "screen", "monitor", "calibrate"),
+            settingRow("How offsets work", "What Sakura measures by itself, the three offsets you set for the rest, and which one to change.",
+                offsetGuideButton(),
+                "latency", "delay", "sync", "timing", "audio offset", "visual offset", "help", "guide", "explain"),
+            settingRow("Calibrate offsets", "Tap along to clicks, then to notes, and both offsets are worked out for you.",
+                calibrateButton(),
+                "latency", "delay", "sync", "timing", "audio offset", "visual offset", "wizard"),
+            settingRow("Offsets by device", "What you're playing on now, every pair of headphones and screen you've played on, and every song offset.",
+                offsetDevicesButton(),
+                "latency", "delay", "sync", "timing", "audio offset", "visual offset", "song offset", "device", "headphones", "bluetooth",
+                "display", "monitor", "per device"),
             settingRow("Background dim", "How dark the background is during play.",
                 intSlider(configManager.Get<int>(YuukiSetting.BackgroundDim), 0, 100, 5, v => $"{v}%"),
                 "brightness", "level"),
@@ -281,6 +325,12 @@ public partial class SettingsOverlay : FocusedOverlayContainer
             settingRow("Disable video during play", "Show only the background image while playing. Menus and song select keep the video.",
                 toggle(configManager.Get<bool>(YuukiSetting.DisableGameplayVideo)),
                 "no-video", "performance"),
+            // Only where there's a motor to feel.
+            haptics?.IsSupported == true
+                ? settingRow("Haptics", "Feel your hits: a tap for every note you hit, firmer the better the hit, and a buzz for a full combo or a fail.",
+                    toggle(configManager.Get<bool>(YuukiSetting.Haptics)),
+                    "vibration", "vibrate", "rumble", "taptic", "feedback", "touch")
+                : null,
             settingRow("Playfield size", "How much of the window the note highway takes. It keeps its shape at any size.",
                 percentSlider(configManager.Get<double>(YuukiSetting.PlayfieldSize), YuukiConfigManager.MIN_PLAYFIELD_SIZE, YuukiConfigManager.MAX_PLAYFIELD_SIZE),
                 "scale", "scaling", "lanes"),
@@ -296,13 +346,15 @@ public partial class SettingsOverlay : FocusedOverlayContainer
         foreach (YuukiSetting setting in new[] { YuukiSetting.PlayfieldSize, YuukiSetting.PlayfieldPositionX, YuukiSetting.PlayfieldPositionY })
             BindValueChanged(configManager.Get<double>(setting), _ => showPlayfieldPreview());
 
-        addControlsSection(content, configManager);
+        // The keys each lane and action are on: nothing to bind on a phone, played by touch.
+        if (!phone)
+            addControlsSection(content, configManager);
 
         addSection(content, IconUsage.Palette, "Interface",
             settingRow("Original-language titles", "Show titles, artists and sources in their original script instead of romanised.",
                 toggle(configManager.Get<bool>(YuukiSetting.UseUnicodeInfo)),
                 "unicode", "romaji", "metadata", "language"),
-            settingRow("Yuuki theme on start", "Open the game on the Yuuki theme instead of a random song.",
+            settingRow("yuuki. theme on start", "Open the game on the yuuki. theme instead of a random song.",
                 toggle(configManager.Get<bool>(YuukiSetting.UseYuukiTheme)),
                 "intro", "welcome", "menu music", "startup"),
             settingRow("Song list layout", "A horizontal strip of covers, or a vertical list.",
@@ -311,18 +363,18 @@ public partial class SettingsOverlay : FocusedOverlayContainer
             settingRow("Blur song select background", "Soften the background, and frost the glass the song list sits on. Off is lighter on slower machines.",
                 toggle(configManager.Get<bool>(YuukiSetting.BlurBackground)),
                 "carousel"),
-            settingRow("Layout", "Desktop or phone. Auto picks the phone layout, with bigger text and buttons, for a short window or a large UI scale.",
-                dropdown(configManager.Get<LayoutPreference>(YuukiSetting.Layout), Enum.GetValues<LayoutPreference>()),
-                "phone", "mobile", "compact", "tablet", "touch", "responsive"),
-            settingRow("UI scale", "How big menus, buttons and text are. Gameplay keeps its own size. A phone starts bigger, so less goes further.",
+            settingRow("UI scale", "How big menus, buttons and text are. Gameplay keeps its own size. A phone starts bigger, so less goes further, and from 1.4× up you get the phone layout, with bigger text and buttons.",
                 multiplierSlider(configManager.Get<double>(YuukiSetting.UIScale), YuukiConfigManager.MIN_UI_SCALE, YuukiConfigManager.MAX_UI_SCALE),
-                "scaling", "zoom", "interface size"),
-            settingRow("Cursor size", "How big the cursor is.",
+                "scaling", "zoom", "interface size", "layout", "phone", "mobile", "compact", "tablet", "responsive"),
+            phone ? null : settingRow("Cursor size", "How big the cursor is.",
                 multiplierSlider(configManager.Get<double>(YuukiSetting.CursorSize), 0.5, 2),
                 "mouse", "pointer", "scale"),
-            settingRow("Cursor rotation", "Turn the cursor to point along a drag while a button is held.",
+            phone ? null : settingRow("Cursor rotation", "Turn the cursor to point along a drag while a button is held.",
                 toggle(configManager.Get<bool>(YuukiSetting.CursorRotate)),
                 "mouse", "pointer", "rotate"),
+            phone ? settingRow("Touch effects", "Stars and a petal where you tap, and a trail of stars where you drag. Never during a song.",
+                toggle(configManager.Get<bool>(YuukiSetting.TouchEffects)),
+                "tap", "sparkle", "stars", "petal", "sakura", "trail") : null,
             settingRow("Clock", "A face, the time, the game's running time, or all three. Clicking the clock changes it too.",
                 dropdown(configManager.Get<ClockDisplayMode>(YuukiSetting.ClockDisplayMode), Enum.GetValues<ClockDisplayMode>(), formatClockMode),
                 "footer", "runtime", "controller"),
@@ -335,30 +387,35 @@ public partial class SettingsOverlay : FocusedOverlayContainer
         addSection(content, IconUsage.BugReport, "Debug",
             warningBanner("If you don't know what one of these does, don't touch it.",
                 "They're the framework's low-level settings, here for troubleshooting."),
-            settingRow("Game folder", "Where your settings, scores and beatmaps are kept.",
+            phone ? null : settingRow("Game folder", "Where your settings, scores and beatmaps are kept.",
                 new PillButton(palette.Control, Color.White)
                 {
                     Text = "Open yuuki. folder",
                     Action = () => storage?.PresentExternally()
                 },
                 "files", "directory", "storage", "logs", "data"),
-            settingRow("Import beatmaps", "Adds osu!mania beatmaps (.osz) to your library. You can also drop them on the window.",
+            settingRow("Import beatmaps", phone
+                    ? "Adds osu!mania beatmaps (.osz) to your library. You can also open one with yuuki. from your files or browser."
+                    : "Adds osu!mania beatmaps (.osz) to your library. You can also drop them on the window.",
                 importButton(),
                 "osz", "songs", "maps", "add"),
             settingRow("Performance overlay", "The frame-time graph in the corner.",
                 dropdown(frameworkConfigManager.Get<PerformanceOverlayState>(FrameworkSetting.ShowFpsGraph), Enum.GetValues<PerformanceOverlayState>()),
                 "fps", "framerate", "counter", "frame time"),
+            settingRow("Log overlay", "The log as it's written, in the bottom-left corner (Ctrl+Shift+L).",
+                toggle(frameworkConfigManager.Get<bool>(FrameworkSetting.ShowLogOverlay)),
+                "console", "messages", "errors", "warnings"),
             settingRow("Zero-copy video", "Hand decoded video frames straight to the GPU, skipping a copy.",
                 toggle(frameworkConfigManager.Get<bool>(FrameworkSetting.VideoZeroCopy)),
                 "performance"),
-            settingRow("Audio buffer size", "Smaller cuts audio latency; larger guards against crackling.",
+            phone ? null : settingRow("Audio buffer size", "Smaller cuts audio latency; larger guards against crackling.",
                 dropdown(frameworkConfigManager.Get<int>(FrameworkSetting.AudioDeviceBufferFrames), new[] { 128, 256, 512, 1024, 2048 },
                     frames => $"{frames} frames"),
                 "delay", "stutter", "glitch"),
-            settingRow("Relative mouse mode", "Lock and hide the cursor, reading raw mouse movement.",
+            phone ? null : settingRow("Relative mouse mode", "Lock and hide the cursor, reading raw mouse movement.",
                 toggle(frameworkConfigManager.Get<bool>(FrameworkSetting.RelativeMouseMode)),
                 "raw input", "cursor"),
-            settingRow("Cursor sensitivity", "How far the cursor moves in relative mouse mode.",
+            phone ? null : settingRow("Cursor sensitivity", "How far the cursor moves in relative mouse mode.",
                 multiplierSlider(frameworkConfigManager.Get<double>(FrameworkSetting.CursorSensitivity), 0.1, 4),
                 "mouse", "speed", "velocity", "raw input"));
 
@@ -425,6 +482,8 @@ public partial class SettingsOverlay : FocusedOverlayContainer
                 Masking = true,
                 Shear = UserInterfaceConstant.Shear,
                 CornerRadius = 5,
+                // Its slanted end goes past the screen's edge, under a notch or camera cutout too.
+                Bleed = Edges.Left,
                 Child = new Box
                 {
                     RelativeSizeAxes = Axes.Both,
@@ -442,7 +501,8 @@ public partial class SettingsOverlay : FocusedOverlayContainer
         }
     };
 
-    private void addSection(FlowContainer content, IconUsage icon, string title, params Drawable[] rows)
+    // A row the platform doesn't have comes as null, and is left out.
+    private void addSection(FlowContainer content, IconUsage icon, string title, params Drawable?[] rows)
     {
         var section = new FlowContainer
         {
@@ -481,8 +541,11 @@ public partial class SettingsOverlay : FocusedOverlayContainer
             }
         };
 
-        foreach (Drawable row in rows)
-            section.Add(row);
+        foreach (Drawable? row in rows)
+        {
+            if (row != null)
+                section.Add(row);
+        }
 
         content.Add(section);
 
@@ -557,6 +620,8 @@ public partial class SettingsOverlay : FocusedOverlayContainer
     {
         Reactive<Key> swipeLeft = configManager.Get<Key>(YuukiSetting.SwipeLeftKey);
         Reactive<Key> swipeRight = configManager.Get<Key>(YuukiSetting.SwipeRightKey);
+        Reactive<Key> songOffsetDown = configManager.Get<Key>(YuukiSetting.SongOffsetDownKey);
+        Reactive<Key> songOffsetUp = configManager.Get<Key>(YuukiSetting.SongOffsetUpKey);
 
         var rows = new List<Drawable>();
 
@@ -568,8 +633,10 @@ public partial class SettingsOverlay : FocusedOverlayContainer
 
             var strip = new KeycapStrip(palette, LaneKeyLayouts.Parse(setting.Value, count), defaults, keyCapture)
             {
-                // A lane on a swipe key would never fire (swipes are checked first).
+                // A lane on a swipe key would never fire (swipes are checked first), and one on a song offset key would
+                // take its presses.
                 IsReserved = key => isReservedInPlay(key) || key == swipeLeft.Value || key == swipeRight.Value
+                                    || key == songOffsetDown.Value || key == songOffsetUp.Value
             };
 
             strip.KeysChanged += keys => setting.Value = LaneKeyLayouts.Format(keys);
@@ -587,7 +654,7 @@ public partial class SettingsOverlay : FocusedOverlayContainer
         {
             Format = (side, key) => side == 0 ? $"{KeyLabels.For(key)}  «" : $"»  {KeyLabels.For(key)}",
             // A swipe on a lane's key would take that lane's presses in every song with that many lanes.
-            IsReserved = key => isReservedInPlay(key) || usedByAnyLane(configManager, key)
+            IsReserved = key => isReservedInPlay(key) || usedByAnyLane(configManager, key) || key == songOffsetDown.Value || key == songOffsetUp.Value
         };
 
         swipes.KeysChanged += keys =>
@@ -601,6 +668,26 @@ public partial class SettingsOverlay : FocusedOverlayContainer
 
         rows.Add(settingRow("Swipe", "Left swipe, then right swipe. A swipe that goes either way takes either.", keycaps(swipes),
             "keys", "keybinds", "bindings", "flick"));
+
+        var songOffsetKeys = new KeycapStrip(palette, new[] { songOffsetDown.Value, songOffsetUp.Value },
+            new[] { songOffsetDown.Default, songOffsetUp.Default }, keyCapture)
+        {
+            Format = (side, key) => side == 0 ? $"{KeyLabels.For(key)}  lower" : $"raise  {KeyLabels.For(key)}",
+            // On a lane's key or a swipe's it would never be seen: they take the press first.
+            IsReserved = key => isReservedInPlay(key) || usedByAnyLane(configManager, key) || key == swipeLeft.Value || key == swipeRight.Value
+        };
+
+        songOffsetKeys.KeysChanged += keys =>
+        {
+            songOffsetDown.Value = keys[0];
+            songOffsetUp.Value = keys[1];
+        };
+
+        BindValueChanged(songOffsetDown, _ => songOffsetKeys.SetKeys(new[] { songOffsetDown.Value, songOffsetUp.Value }));
+        BindValueChanged(songOffsetUp, _ => songOffsetKeys.SetKeys(new[] { songOffsetDown.Value, songOffsetUp.Value }));
+
+        rows.Add(settingRow("Song offset", "Lowers, then raises, the song's own offset while playing or paused: 5 ms a press, 1 ms with Alt.",
+            keycaps(songOffsetKeys), "keys", "keybinds", "bindings", "nudge", "offset", "timing"));
 
         rows.Add(settingRow("Pause", "Pauses the song, with a count-in to resume.", fixedKeys("Esc"),
             "keys", "keybinds", "escape"));
@@ -734,11 +821,23 @@ public partial class SettingsOverlay : FocusedOverlayContainer
             SetPhone(false);
         }
 
+        private bool phone;
+
+        /// <summary>
+        /// Changes the explanation, for one that says what's in use now. A search still finds it by the first.
+        /// </summary>
+        public void SetDescription(string description)
+        {
+            descriptionText.Text = description;
+            SetPhone(phone);
+        }
+
         /// <summary>
         /// Bigger text on a phone, where the desktop sizes come out too small to read.
         /// </summary>
         public void SetPhone(bool phone)
         {
+            this.phone = phone;
             titleText.Font = YuukiFontUsage.GetFontUsage(Typeface.Quicksand, phone ? 24 : 22, FontWeight.Bold);
 
             var descriptionFont = YuukiFontUsage.GetFontUsage(Typeface.Nunito, phone ? 19 : 15, FontWeight.Regular);
@@ -761,6 +860,74 @@ public partial class SettingsOverlay : FocusedOverlayContainer
     /// Picks .osz files and imports them in the background; progress and the result show as
     /// notifications. Dropping .osz files on the window does the same.
     /// </summary>
+    // A phone's window always fills the screen: its modes are whether the system bars show.
+    private static string formatPhoneWindowMode(WindowMode mode) => mode == WindowMode.Windowed ? "System bars shown" : "Full screen";
+
+    private Drawable calibrateButton() => new PillButton(palette.Control, Color.White)
+    {
+        Text = "Calibrate",
+        Action = () =>
+        {
+            // Over a song being played, its music would be heard over the clicks.
+            if (screenStack == null || music?.InGameplay == true)
+                return;
+
+            Hide();
+            screenStack.Push(new CalibrationScreen { ReturnsToSettings = true });
+        }
+    };
+
+    private Drawable offsetDevicesButton() => new PillButton(palette.Control, Color.White)
+    {
+        Text = "Manage",
+        Action = () =>
+        {
+            if (screenStack == null || music?.InGameplay == true)
+                return;
+
+            Hide();
+            screenStack.Push(new OffsetDevicesScreen { ReturnsToSettings = true });
+        }
+    };
+
+    private const string audio_offset_description = "Hitting late on average? Lower it. Early? Raise it. The results screen can work it out for you.";
+    private const string visual_offset_description = "Notes meeting the line after the music? Raise it. Before? Lower it. Moves only what you see, not the judging.";
+
+    private SettingRow? audioOffsetRow;
+    private SettingRow? visualOffsetRow;
+    private string? shownAudioDescription;
+    private string? shownVisualDescription;
+
+    // Says which device each offset is kept for, as the devices change.
+    private void updateOffsetDescriptions()
+    {
+        if (offsets == null)
+            return;
+
+        string audio = offsets.PerDevice ? $"For {OffsetManager.AudioDeviceLabel(offsets.AudioDevice)}. {audio_offset_description}" : audio_offset_description;
+        string visual = offsets.PerDevice ? $"For {OffsetManager.DisplayLabel(offsets.Display)}. {visual_offset_description}" : visual_offset_description;
+
+        if (audio != shownAudioDescription)
+            audioOffsetRow?.SetDescription(shownAudioDescription = audio);
+
+        if (visual != shownVisualDescription)
+            visualOffsetRow?.SetDescription(shownVisualDescription = visual);
+    }
+
+    private Drawable offsetGuideButton() => new PillButton(palette.Control, Color.White)
+    {
+        Text = "Explain",
+        Action = () =>
+        {
+            // Not over a song being played, as for calibrating, which it leads to.
+            if (screenStack == null || music?.InGameplay == true)
+                return;
+
+            Hide();
+            screenStack.Push(new OffsetGuideScreen { ReturnsToSettings = true });
+        }
+    };
+
     private Drawable importButton() => new PillButton(palette.Control, Color.White)
     {
         Text = "Import .osz files",
@@ -793,6 +960,72 @@ public partial class SettingsOverlay : FocusedOverlayContainer
         dropdown.Current.BindTo(setting);
         setting.BindTo(dropdown.Current);
         return new SettingControl(dropdown, RevertToDefaultButton.For(setting), dropdown.ItemHeight, dropdown.Items.Select(dropdown.Formatter).ToArray());
+    }
+
+    /// <summary>
+    /// The output devices, the system's default first. A device picked and then unplugged stays listed, marked, so the
+    /// choice shows as what it is. The list follows devices being plugged in and out while the settings are open.
+    /// </summary>
+    private SettingControl outputDeviceDropdown(Reactive<string> setting)
+    {
+        var dropdown = outputDevices = new YuukiDropdown<string>
+        {
+            Width = control_width,
+            Items = outputDeviceChoices(setting.Value),
+            Formatter = formatOutputDevice
+        };
+
+        dropdown.Current.BindTo(setting);
+        setting.BindTo(dropdown.Current);
+
+        if (audioManager != null)
+            audioManager.OutputDevicesChanged += listOutputDevices;
+
+        return new SettingControl(dropdown, RevertToDefaultButton.For(setting), dropdown.ItemHeight, dropdown.Items.Select(dropdown.Formatter).ToArray());
+    }
+
+    private void listOutputDevices()
+    {
+        if (outputDevices != null)
+            outputDevices.Items = outputDeviceChoices(outputDevices.Current.Value);
+    }
+
+    private string[] outputDeviceChoices(string picked)
+    {
+        var devices = audioManager?.OutputDevices ?? Array.Empty<string>();
+        var choices = devices.Prepend(string.Empty);
+
+        return string.IsNullOrEmpty(picked) || devices.Contains(picked) ? choices.ToArray() : choices.Append(picked).ToArray();
+    }
+
+    private string formatOutputDevice(string name)
+    {
+        if (name.Length == 0)
+            return "System default";
+
+        return audioManager?.OutputDevices.Contains(name) == false ? $"{name} (not connected)" : name;
+    }
+
+    protected override void LoadComplete()
+    {
+        base.LoadComplete();
+
+        if (offsets != null)
+        {
+            offsets.Changed += updateOffsetDescriptions;
+            updateOffsetDescriptions();
+        }
+    }
+
+    protected override void Dispose(bool isDisposing)
+    {
+        if (audioManager != null)
+            audioManager.OutputDevicesChanged -= listOutputDevices;
+
+        if (offsets != null)
+            offsets.Changed -= updateOffsetDescriptions;
+
+        base.Dispose(isDisposing);
     }
 
     private static string formatClockMode(ClockDisplayMode mode) => mode switch
@@ -993,7 +1226,7 @@ public partial class SettingsOverlay : FocusedOverlayContainer
     /// </summary>
     private Drawable createAbout()
     {
-        string built = BuildInfo.BuildTime is DateTime time ? $"  ·  built {time:yyyy-MM-dd HH:mm}" : "";
+        string built = BuildInfo.BuildTime is DateTime time ? string.Create(CultureInfo.InvariantCulture, $"  ·  built {time:yyyy-MM-dd HH:mm}") : "";
         string commit = BuildInfo.Commit is string hash ? $"  ·  {hash}" : "";
 
         return new FlowContainer
@@ -1137,6 +1370,11 @@ public partial class SettingsOverlay : FocusedOverlayContainer
 
         for (int i = 0; i < sections.Count; i++)
             sections[i].Button.SlideIn(i * 60);
+
+        // Ready to type into. Not by touch, where that's the on-screen keyboard covering the settings: there
+        // it comes up when the search is tapped.
+        if (gameLayout?.Touch.Value == true)
+            return;
 
         searchBox.HoldFocus = true;
         Scheduler.Add(() =>
@@ -1292,19 +1530,38 @@ public partial class SettingsOverlay : FocusedOverlayContainer
         // It's drawn over the settings, so the sliders under it must still get the drag.
         public override bool HandlePositionalInput => false;
 
+        private readonly LaneBackground highway;
+
+        [Resolved(canBeNull: true)]
+        private GameLayout? gameLayout { get; set; }
+
         public PlayfieldPreview()
         {
             Alpha = 0;
 
-            var perspective = new LanePerspective();
-            perspective.LayOut(BASE_SIZE.X, BASE_SIZE.Y);
-
-            var highway = new LaneBackground
+            Child = highway = new LaneBackground
             {
                 RelativeSizeAxes = Axes.Both,
                 Color = Color.White,
                 Alpha = 0.5f
             };
+        }
+
+        protected override void LoadComplete()
+        {
+            base.LoadComplete();
+
+            // Higher by touch, as the playfield is.
+            if (gameLayout != null)
+                BindValueChanged(gameLayout.Touch, e => layOut(e.NewValue), true);
+            else
+                layOut(false);
+        }
+
+        private void layOut(bool touch)
+        {
+            var perspective = new LanePerspective();
+            perspective.LayOut(BASE_SIZE.X, BASE_SIZE.Y, touch);
 
             // The same trapezoid the playfield's backdrop fills, at every lane count.
             highway.SetCorners(
@@ -1312,8 +1569,6 @@ public partial class SettingsOverlay : FocusedOverlayContainer
                 perspective.Project(1, perspective.EdgeOffset(perspective.LaneCount)),
                 perspective.Project(0, perspective.EdgeOffset(perspective.LaneCount)),
                 perspective.Project(0, perspective.EdgeOffset(0)));
-
-            Child = highway;
         }
     }
 

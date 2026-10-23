@@ -31,9 +31,27 @@ public partial class GameplayMenuOverlay : Container
     [Resolved(canBeNull: true)]
     private UISoundPlayer? uiSounds { get; set; }
 
+    private readonly FlowContainer content;
     private readonly FlowContainer buttonFlow;
 
     private int selected;
+
+    /// <summary>
+    /// Shown under the buttons, as the song's offset is while paused. Set before load.
+    /// </summary>
+    public Drawable? Footer
+    {
+        init
+        {
+            if (value == null)
+                return;
+
+            value.Anchor = Anchor.TopCentre;
+            value.Origin = Anchor.TopCentre;
+            value.Margin = new MarginPadding { Top = buttons_gap };
+            content.Add(value);
+        }
+    }
 
     public GameplayMenuOverlay(string title, string subtitle, YuukiColorPalette palette, params (IconUsage Icon, string Label, Action Action)[] options)
     {
@@ -45,11 +63,12 @@ public partial class GameplayMenuOverlay : Container
             new Box
             {
                 RelativeSizeAxes = Axes.Both,
+                Bleed = Edges.All,
                 Color = palette.Backdrop,
                 Alpha = 0.75f
             },
             // Title, subtitle and buttons, centred on each other.
-            new FlowContainer
+            content = new FlowContainer
             {
                 Anchor = Anchor.Centre,
                 Origin = Anchor.Centre,

@@ -2,6 +2,7 @@
 // See the LICENSE file for full license text.
 
 using System.Collections.Generic;
+using System.Linq;
 using System;
 using Sakura.Framework.Allocation;
 using Sakura.Framework.Extensions.ColorExtensions;
@@ -20,6 +21,7 @@ using Yuuki.Game.Beatmaps;
 using Yuuki.Game.Configurations;
 using Yuuki.Game.Database;
 using Yuuki.Game.Gameplay;
+using Yuuki.Game.Gameplay.Scoring;
 using Yuuki.Game.Graphics.Colors;
 using Yuuki.Game.Graphics.Containers;
 using Yuuki.Game.Graphics.ScreenStacks;
@@ -98,6 +100,9 @@ public partial class FinalSetupScreen : YuukiScreen, IHaveScreenAction
 
     [Resolved(canBeNull: true)]
     private ScoreStore? scoreStore { get; set; }
+
+    [Resolved(canBeNull: true)]
+    private OffsetManager? offsets { get; set; }
 
     [Resolved(canBeNull: true)]
     private GameLayout? gameLayout { get; set; }
@@ -255,7 +260,7 @@ public partial class FinalSetupScreen : YuukiScreen, IHaveScreenAction
         AutoSizeAxes = Axes.Y,
         Direction = FlowDirection.Vertical,
         Spacing = new Vector2(0, 22),
-        Children = new Drawable[]
+        Children = new Drawable?[]
         {
             sectionTitle("Play settings"),
             settingRow("Scroll speed",
@@ -265,13 +270,24 @@ public partial class FinalSetupScreen : YuukiScreen, IHaveScreenAction
                 "Scroll speed becomes the time at 120 BPM, so faster songs scroll faster.",
                 YuukiSetting.ScrollSpeedFollowsBpm),
             settingRow("Audio offset",
-                "Hitting late on average? Lower it. Early? Raise it. The results screen can work it out for you.",
+                forDevice(offsets?.AudioDevice, OffsetManager.AudioDeviceLabel)
+                + "Hitting late on average? Lower it. Early? Raise it. The results screen can work it out for you.",
                 YuukiSetting.AudioOffset, 0, YuukiConfigManager.MIN_AUDIO_OFFSET, YuukiConfigManager.MAX_AUDIO_OFFSET, 1,
-                v => v > 0 ? $"+{v} ms" : $"{v} ms"),
+                OffsetManager.Signed),
             settingRow("Visual offset",
-                "Notes meeting the line after the music? Raise it. Before? Lower it. Settings can calibrate both.",
+                forDevice(offsets?.Display, OffsetManager.DisplayLabel)
+                + "Notes meeting the line after the music? Raise it. Before? Lower it. Settings can calibrate both.",
                 YuukiSetting.VisualOffset, 0, YuukiConfigManager.MIN_VISUAL_OFFSET, YuukiConfigManager.MAX_VISUAL_OFFSET, 1,
-                v => v > 0 ? $"+{v} ms" : $"{v} ms"),
+                OffsetManager.Signed),
+            createSongOffsetRow(),
+            // All three together, as they'll be played with.
+            new OffsetStack(palette)
+            {
+                RelativeSizeAxes = Axes.X,
+                Compact = true,
+                BeatmapId = offsets != null ? workingBeatmap?.Beatmap?.ID : null,
+                DifficultyName = workingBeatmap?.Beatmap?.DifficultyName
+            },
             settingRow("Background dim",
                 "How dark the background is during play — previewed behind this screen.",
                 YuukiSetting.BackgroundDim, 50, 0, 100, 5, v => $"{v}%"),
@@ -281,10 +297,68 @@ public partial class FinalSetupScreen : YuukiScreen, IHaveScreenAction
             toggleRow("Disable video",
                 "Show only the background image during play. Song select keeps the video.",
                 YuukiSetting.DisableGameplayVideo)
-        }
+        }.OfType<Drawable>().ToArray()
     };
 
+    // Which device an offset is kept for, ahead of what it does.
+    private static string forDevice(string? device, Func<string, string> label) => device != null ? $"For {label(device)}. " : string.Empty;
+
+    /// <summary>
+    /// This difficulty's song offset, and its last play to set it from as osu! does; null for none to set (a generated
+    /// chart, or no offsets to keep it in).
+    /// </summary>
+    private Drawable? createSongOffsetRow()
+    {
+        if (offsets == null || workingBeatmap?.Beatmap is not Beatmap beatmap)
+            return null;
+
+        int id = beatmap.ID;
+        var current = new Reactive<int>(0) { Value = offsets.GetSongOffset(id) };
+        current.ValueChanged += e => offsets.SetSongOffset(id, e.NewValue);
+
+        string keys = config != null
+            ? $" In play, {KeyLabels.For(config.Get<Key>(YuukiSetting.SongOffsetDownKey).Value)} and {KeyLabels.For(config.Get<Key>(YuukiSetting.SongOffsetUpKey).Value)} nudge it."
+            : string.Empty;
+
+        string difficulty = string.IsNullOrEmpty(beatmap.DifficultyName) ? "this difficulty" : beatmap.DifficultyName;
+
+        var row = (FlowContainer)settingRow($"Song offset · {difficulty}",
+            $"Only {difficulty}, on top of your devices' offsets, for a song out of time with its music: moves its notes with their "
+            + "timing. Hitting it late? Lower it." + keys,
+            current, 0, OffsetManager.MIN_SONG_OFFSET, OffsetManager.MAX_SONG_OFFSET, 1, OffsetManager.Signed);
+
+        // osu!'s "calibrate using last play": what the last play of it leaned, taken off.
+        ScoreInfo? lastPlay = scoreStore?.Scores.LastOrDefault(s => s.BeatmapId == id && s.MeanError != null);
+
+        if (lastPlay != null)
+        {
+            var history = new TimingHistory(offsets.AudioOffsetFor, offsets.GetSongOffset);
+            int lean = (int)Math.Round(history.LeanNow(lastPlay) ?? 0);
+            PillButton useLastPlay = null!;
+
+            row.Add(useLastPlay = new PillButton(palette.Control, palette.TextLight)
+            {
+                Text = lean == 0 ? "Last play was on time" : $"Use last play ({Math.Abs(lean)} ms {(lean > 0 ? "late" : "early")})",
+                Action = () =>
+                {
+                    current.Value -= lean;
+                    useLastPlay.Text = "Taken from last play";
+                    useLastPlay.Enabled.Value = false;
+                }
+            });
+
+            useLastPlay.Enabled.Value = lean != 0;
+        }
+
+        return row;
+    }
+
     private Drawable settingRow(string title, string description, YuukiSetting setting, int defaultValue,
+                                int min, int max, int keyboardStep, Func<int, string> format)
+        => settingRow(title, description, config?.Get<int>(setting), defaultValue, min, max, keyboardStep, format);
+
+    /// <param name="current">What the slider sets, or null to show the default and set nothing.</param>
+    private Drawable settingRow(string title, string description, Reactive<int>? current, int defaultValue,
                                 int min, int max, int keyboardStep, Func<int, string> format)
     {
         SpriteText value;
@@ -337,9 +411,8 @@ public partial class FinalSetupScreen : YuukiScreen, IHaveScreenAction
         slider.Current.ValueChanged += e => value.Text = format(e.NewValue);
         value.Text = format(defaultValue);
 
-        if (config != null)
+        if (current != null)
         {
-            Reactive<int> current = config.Get<int>(setting);
             slider.Current.BindTo(current);
             slider.Current.ValueChanged += e => current.Value = e.NewValue;
 
@@ -425,9 +498,10 @@ public partial class FinalSetupScreen : YuukiScreen, IHaveScreenAction
         };
 
         // A lane on a swipe key would never fire (swipes are checked first); a swipe on a lane key would
-        // take the lane's presses. Enter starts the song from here, and ` is quick retry.
-        lanes.IsReserved = key => key is Key.Enter or Key.Grave || swipes.Keys.Contains(key);
-        swipes.IsReserved = key => key is Key.Enter or Key.Grave || lanes.Keys.Contains(key);
+        // take the lane's presses. Enter starts the song from here, ` is quick retry, and the song offset keys
+        // nudge the song's offset.
+        lanes.IsReserved = key => key is Key.Enter or Key.Grave || swipes.Keys.Contains(key) || isSongOffsetKey(key);
+        swipes.IsReserved = key => key is Key.Enter or Key.Grave || lanes.Keys.Contains(key) || isSongOffsetKey(key);
 
         if (config != null)
         {
@@ -462,6 +536,9 @@ public partial class FinalSetupScreen : YuukiScreen, IHaveScreenAction
             }
         };
     }
+
+    private bool isSongOffsetKey(Key key) =>
+        config != null && (key == config.Get<Key>(YuukiSetting.SongOffsetDownKey).Value || key == config.Get<Key>(YuukiSetting.SongOffsetUpKey).Value);
 
     private Key swipeKey(YuukiSetting setting) => config?.Get<Key>(setting).Value ?? (setting == YuukiSetting.SwipeLeftKey ? Playfield.DEFAULT_SWIPE_LEFT_KEY : Playfield.DEFAULT_SWIPE_RIGHT_KEY);
 

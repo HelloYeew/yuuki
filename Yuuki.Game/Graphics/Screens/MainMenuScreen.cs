@@ -80,6 +80,13 @@ public partial class MainMenuScreen : YuukiScreen, IHaveScreenAction
     private BeatSyncingLogo logo = null!;
     private SpriteText versionText = null!;
 
+    /// <summary>
+    /// How long without input before the menu goes idle, and by touch.
+    /// </summary>
+    private const double idle_timeout = 10_000;
+
+    private const double touch_idle_timeout = 30_000;
+
     private IdleTracker idleTracker = null!;
     private Container idleLayer = null!;
     private Box idleShade = null!;
@@ -179,6 +186,7 @@ public partial class MainMenuScreen : YuukiScreen, IHaveScreenAction
                     Origin = Anchor.BottomLeft,
                     RelativeSizeAxes = Axes.X,
                     Height = 420,
+                    Bleed = Edges.Horizontal | Edges.Bottom,
                     ColorInfo = ColorInfo.GradientVertical(Color.Black.WithAlpha(0), Color.Black.WithAlpha(0.65f)),
                     Alpha = 0
                 },
@@ -215,6 +223,8 @@ public partial class MainMenuScreen : YuukiScreen, IHaveScreenAction
             RelativeSizeAxes = Axes.X,
             Position = new Vector2(0, 98),
             Size = new Vector2(1, 150),
+            // Edge to edge, under a notch or a camera cutout too.
+            Bleed = Edges.Horizontal,
             Color = ColorExtensions.FromHex("#DFCFBC")
         });
 
@@ -309,6 +319,11 @@ public partial class MainMenuScreen : YuukiScreen, IHaveScreenAction
             });
 
         BindValueChanged(idleTracker.IsIdle, e => onIdleChanged(e.NewValue));
+
+        // A mouse in a resting hand keeps the menu awake as it twitches; a phone being read gets no input at all, so
+        // by touch the menu waits longer before it goes idle.
+        if (gameLayout != null)
+            BindValueChanged(gameLayout.Touch, e => idleTracker.Timeout = e.NewValue ? touch_idle_timeout : idle_timeout, true);
     }
 
     private void onIdleChanged(bool idle)

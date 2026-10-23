@@ -129,6 +129,29 @@ public class OszImporterTest
         }
     }
 
+    /// <summary>
+    /// A file a phone hands over as a link has no path, only a stream and the name the app it came from
+    /// gives it; the set's ID still comes from that name.
+    /// </summary>
+    [Test]
+    public void ImportsFromAStreamByItsName()
+    {
+        string osz = makeOsz("archive", osu_file);
+        OszImportResult result;
+
+        using (var stream = File.OpenRead(osz))
+            result = new OszImporter(Path.Combine(tempDir, "beatmaps")).Import(stream, "999 Tester - Test Song.osz");
+
+        var library = new BeatmapsCollection();
+        new BeatmapCollectionReader(new NativeStorage(tempDir), library).Read();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.Success, Is.True, result.Error);
+            Assert.That(library.BeatmapSets.Single().ID, Is.EqualTo(999));
+        }
+    }
+
     [Test]
     public void ImportingAgainReplacesTheSet()
     {

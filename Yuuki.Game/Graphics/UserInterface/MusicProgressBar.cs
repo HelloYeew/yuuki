@@ -13,6 +13,7 @@ using Sakura.Framework.Graphics.UserInterface;
 using Sakura.Framework.Input;
 using Sakura.Framework.Maths;
 using Yuuki.Game.Audio;
+using Yuuki.Game.Graphics.Text;
 
 namespace Yuuki.Game.Graphics.UserInterface;
 
@@ -38,6 +39,11 @@ public partial class MusicProgressBar : SliderBar<double>
 
     private Container bar;
     private Box fill;
+
+    // While a finger drags the bar: the time under it, which the tooltip shows the mouse but nothing shows a finger.
+    private Container timeBubble;
+    private SpriteText timeBubbleText;
+    private bool touchDragging;
 
     // True while a programmatic display update is in flight, so it doesn't get echoed back as a seek.
     private bool applyingDisplay;
@@ -87,6 +93,32 @@ public partial class MusicProgressBar : SliderBar<double>
                 }
             }
         });
+
+        Add(timeBubble = new Container
+        {
+            Anchor = Anchor.BottomLeft,
+            Origin = Anchor.BottomCentre,
+            RelativePositionAxes = Axes.X,
+            Y = -(bar_hover_height + 8),
+            AutoSizeAxes = Axes.Both,
+            Masking = true,
+            CornerRadius = 8,
+            Alpha = 0,
+            Children = new Drawable[]
+            {
+                new Box
+                {
+                    RelativeSizeAxes = Axes.Both,
+                    Color = Color.Black.WithAlpha(0.7f)
+                },
+                timeBubbleText = new SpriteText
+                {
+                    Margin = new MarginPadding { Left = 10, Right = 10, Top = 4, Bottom = 4 },
+                    Font = YuukiFontUsage.GetFontUsage(Typeface.Quicksand, 18, FontWeight.Bold),
+                    Color = Color.White
+                }
+            }
+        });
     }
 
     public override string TooltipText
@@ -133,6 +165,9 @@ public partial class MusicProgressBar : SliderBar<double>
     {
         fill.Width = (float)Math.Clamp(value, 0, 1);
 
+        if (touchDragging)
+            updateTimeBubble();
+
         // Only user-driven changes (mouse/keyboard) after load should seek; the initial sync and
         // programmatic display updates must not.
         if (ready && !applyingDisplay)
@@ -154,12 +189,41 @@ public partial class MusicProgressBar : SliderBar<double>
     public override bool OnDragStart(MouseButtonEvent e)
     {
         dragging = true;
-        return base.OnDragStart(e);
+
+        // A finger hides what it drags, and has no hover to thicken the bar or tooltip to tell the time: the bar
+        // thickens while it's dragged, and the time rides above it.
+        if (e.MouseState.FromTouch)
+        {
+            touchDragging = true;
+            bar.ResizeTo(new Vector2(1, bar_hover_height), 150, Easing.OutQuint);
+            timeBubble.FadeIn(100, Easing.OutQuint);
+        }
+
+        bool handled = base.OnDragStart(e);
+        updateTimeBubble();
+        return handled;
     }
 
     public override bool OnDragEnd(MouseButtonEvent e)
     {
         dragging = false;
+
+        if (touchDragging)
+        {
+            touchDragging = false;
+            bar.ResizeTo(new Vector2(1, bar_base_height), 150, Easing.OutQuint);
+            timeBubble.FadeOut(200, Easing.OutQuint);
+        }
+
         return base.OnDragEnd(e);
+    }
+
+    /// <summary>The time a finger dragging the bar is on (tests); empty while none is.</summary>
+    public string TouchTimeShown => touchDragging ? timeBubbleText.Text : string.Empty;
+
+    private void updateTimeBubble()
+    {
+        timeBubble.X = (float)Math.Clamp(Current.Value, 0, 1);
+        timeBubbleText.Text = TooltipText;
     }
 }

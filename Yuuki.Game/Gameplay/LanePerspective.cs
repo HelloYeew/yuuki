@@ -62,11 +62,15 @@ public sealed class LanePerspective
     /// the lanes read as receding "endlessly" toward a far point of view; notes fade in there (see
     /// <see cref="DrawableNote"/>) rather than popping at a hard edge.
     /// </summary>
-    public void LayOut(float width, float height)
+    /// <param name="touch">
+    /// Played by touch: the player edge sits higher, so the receptors stay clear of the strip along a phone's
+    /// bottom edge, where a flick up can be taken as the system's home gesture.
+    /// </param>
+    public void LayOut(float width, float height, bool touch = false)
     {
         CentreX = width / 2;
         HorizonY = height * 0.06f;
-        PlayerY = height * 0.9f;
+        PlayerY = height * (touch ? 0.85f : 0.9f);
         BottomHalfWidth = width * 0.47f;
         PerspectiveFar = 0.14f;
     }
@@ -84,6 +88,23 @@ public sealed class LanePerspective
     /// The world X offset of the separator between lanes (0..LaneCount).
     /// </summary>
     public float EdgeOffset(int edge) => -BottomHalfWidth + laneSpacing * edge;
+
+    /// <summary>
+    /// The lane under <paramref name="position"/> (content coordinates): along the lanes' slant above the
+    /// player edge, and straight down below it. A point up to half a lane outside the highway is in the lane
+    /// beside it; one further out is in none, -1.
+    /// </summary>
+    public int LaneAt(Vector2 position)
+    {
+        float yNorm = (position.Y - HorizonY) / (PlayerY - HorizonY);
+        float persp = Math.Clamp(PerspectiveFar + yNorm * (1 - PerspectiveFar), PerspectiveFar, 1);
+        float lane = ((position.X - CentreX) / persp + BottomHalfWidth) / laneSpacing;
+
+        if (lane < -0.5f || lane >= LaneCount + 0.5f)
+            return -1;
+
+        return Math.Clamp((int)MathF.Floor(lane), 0, LaneCount - 1);
+    }
 
     /// <summary>
     /// The perspective factor at depth <paramref name="z"/> (<see cref="PerspectiveFar"/> far -> 1.0 at the player edge).

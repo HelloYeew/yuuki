@@ -4,7 +4,10 @@
 using System.Linq;
 using System.Threading.Tasks;
 using NUnit.Framework;
+using Sakura.Framework.Allocation;
 using Sakura.Framework.Graphics.Containers;
+using Sakura.Framework.Graphics.Drawables;
+using Yuuki.Game.Graphics;
 using Yuuki.Game.Graphics.UserInterface.Notifications;
 using Yuuki.Game.Graphics.UserInterface.Overlay;
 
@@ -12,6 +15,9 @@ namespace Yuuki.Game.Tests.Visuals.UserInterface.Overlay;
 
 public partial class TestNotificationOverlay : YuukiTestScene
 {
+    [Cached]
+    private readonly GameLayout gameLayout = new GameLayout();
+
     private NotificationOverlay overlay = null!;
 
     [SetUp]
@@ -41,6 +47,40 @@ public partial class TestNotificationOverlay : YuukiTestScene
 
         AddStep("close the panel", () => overlay.Hide());
         AddUntilStep("read once seen", () => overlay.UnreadCount.Value == 0 && notification.Read);
+    }
+
+    /// <summary>
+    /// The close button shows on hover, and by touch, with nothing hovered, all the time.
+    /// </summary>
+    [TestCase(false)]
+    [TestCase(true)]
+    public void TestTheCloseButtonByTouch(bool touch)
+    {
+        SimpleNotification notification = null!;
+
+        AddStep(touch ? "by touch" : "with a mouse", () => gameLayout.Touch.Value = touch);
+        AddStep("post", () => overlay.Post(notification = new SimpleNotification { Text = "Hello from the corner." }));
+        AddUntilStep("shown", () => notification.IsLoaded && notification.Alpha > 0.99f);
+        AddUntilStep(touch ? "its close button is up" : "its close button waits for hover", () =>
+        {
+            Drawable close = descendants(notification).Single(d => d.GetType().Name == "CloseButton");
+            return touch ? close.Alpha > 0.99f : close.Alpha == 0;
+        });
+        AddStep("back to a mouse", () => gameLayout.Touch.Value = false);
+    }
+
+    private static System.Collections.Generic.IEnumerable<Drawable> descendants(Drawable drawable)
+    {
+        yield return drawable;
+
+        if (drawable is Container container)
+        {
+            foreach (Drawable child in container.Children)
+            {
+                foreach (Drawable d in descendants(child))
+                    yield return d;
+            }
+        }
     }
 
     [Test]

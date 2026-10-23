@@ -8,16 +8,6 @@ using Sakura.Framework.Reactive;
 namespace Yuuki.Game.Graphics;
 
 /// <summary>
-/// Which layout the player wants (the Layout setting): picked from the window, or forced.
-/// </summary>
-public enum LayoutPreference
-{
-    Auto,
-    Desktop,
-    Phone
-}
-
-/// <summary>
 /// A layout the game can be in.
 /// </summary>
 public enum DisplayLayout
@@ -41,8 +31,8 @@ public enum DisplayLayout
 /// The canvas is <see cref="DESKTOP_CANVAS"/> divided by the zoom: the UI scale, times
 /// <see cref="PHONE_ZOOM"/> in a phone's window (one short in screen points, not pixels, and not the
 /// platform: a tablet is big), so a phone starts at 1280×720. It never zooms past <see cref="MAX_ZOOM"/>,
-/// the smallest canvas the compact layouts fit. On Auto, a phone's window or a zoom of
-/// <see cref="COMPACT_ZOOM"/> or more gets the compact layout.
+/// the smallest canvas the compact layouts fit. A phone's window or a zoom of <see cref="COMPACT_ZOOM"/>
+/// or more gets the compact layout, so a desktop previews a phone at a UI scale of 1.5.
 /// </remarks>
 public class GameLayout
 {
@@ -65,7 +55,7 @@ public class GameLayout
     public const double PHONE_ZOOM = 1.5;
 
     /// <summary>
-    /// From this zoom up, Auto uses the compact layout on a desktop too (a canvas shorter than about 770).
+    /// From this zoom up, a desktop gets the compact layout too (a canvas shorter than about 770).
     /// </summary>
     public const double COMPACT_ZOOM = 1.4;
 
@@ -88,20 +78,26 @@ public class GameLayout
 
     /// <summary>
     /// Whether the game is played by touch, so there are no keys to hint at: the footer's key actions
-    /// hide, and each screen's own buttons do their work. See <see cref="IsTouch"/>.
+    /// hide, and each screen's own buttons do their work. It follows the last pointer, a finger or a
+    /// mouse (a phone starts on touch), not the window: a small desktop screen gets the phone layout but
+    /// still has its keys, and a touchscreen laptop changes over at the first tap.
     /// </summary>
     public readonly Reactive<bool> Touch = new Reactive<bool>(false);
 
     public bool IsPhone => Current.Value == DisplayLayout.Phone;
 
     /// <summary>
-    /// Whether to take the game as played by touch. The framework doesn't tell a touch from a click yet,
-    /// so a mobile platform stands in for it (and the Layout setting forcing the phone layout, to preview
-    /// one); once it does, this follows the last input instead. Not the window: a small desktop screen
-    /// gets the phone layout but still has its keys.
+    /// Whether the window is a phone's (see <see cref="IsPhoneWindow"/>), whatever the UI scale. Gameplay, which keeps
+    /// its own canvas rather than the UI's, zooms in by <see cref="PHONE_ZOOM"/> on one as the menus do, so its HUD is
+    /// as readable there; a desktop at a large UI scale keeps gameplay as it is.
     /// </summary>
-    public static bool IsTouch(LayoutPreference preference, bool mobile) =>
-        mobile || preference == LayoutPreference.Phone;
+    public readonly Reactive<bool> PhoneWindow = new Reactive<bool>(false);
+
+    /// <summary>
+    /// The canvas gameplay is laid out on: <see cref="DESKTOP_CANVAS"/>, or <see cref="PHONE_CANVAS"/> in a phone's
+    /// window.
+    /// </summary>
+    public Vector2 GameplayCanvas => PhoneWindow.Value ? PHONE_CANVAS : DESKTOP_CANVAS;
 
     /// <summary>
     /// Whether a window <paramref name="heightPoints"/> tall is a phone's, given whether it was.
@@ -111,21 +107,14 @@ public class GameLayout
 
     /// <summary>
     /// How far the interface is zoomed at <paramref name="uiScale"/>: from the phone's start when the
-    /// window is a phone's (or the setting asks for the phone layout), capped at <see cref="MAX_ZOOM"/>.
+    /// window is a phone's, capped at <see cref="MAX_ZOOM"/>.
     /// </summary>
-    public static double Zoom(LayoutPreference preference, bool phoneWindow, double uiScale)
-    {
-        bool phoneSized = preference == LayoutPreference.Phone || (preference == LayoutPreference.Auto && phoneWindow);
-        return Math.Min((phoneSized ? PHONE_ZOOM : 1) * uiScale, MAX_ZOOM);
-    }
+    public static double Zoom(bool phoneWindow, double uiScale) =>
+        Math.Min((phoneWindow ? PHONE_ZOOM : 1) * uiScale, MAX_ZOOM);
 
     /// <summary>
-    /// The layout for <paramref name="preference"/>, the window and the <paramref name="zoom"/>.
+    /// The layout for the window and the <paramref name="zoom"/>.
     /// </summary>
-    public static DisplayLayout Choose(LayoutPreference preference, bool phoneWindow, double zoom) => preference switch
-    {
-        LayoutPreference.Desktop => DisplayLayout.Desktop,
-        LayoutPreference.Phone => DisplayLayout.Phone,
-        _ => phoneWindow || zoom >= COMPACT_ZOOM - 0.001 ? DisplayLayout.Phone : DisplayLayout.Desktop
-    };
+    public static DisplayLayout Choose(bool phoneWindow, double zoom) =>
+        phoneWindow || zoom >= COMPACT_ZOOM - 0.001 ? DisplayLayout.Phone : DisplayLayout.Desktop;
 }

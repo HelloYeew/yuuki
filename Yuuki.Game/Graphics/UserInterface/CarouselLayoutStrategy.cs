@@ -2,6 +2,7 @@
 // See the LICENSE file for full license text.
 
 using System;
+using Sakura.Framework.Graphics.Primitives;
 using Sakura.Framework.Maths;
 
 namespace Yuuki.Game.Graphics.UserInterface;
@@ -80,7 +81,7 @@ public abstract class CarouselLayoutStrategy
     /// </summary>
     public abstract SlotLayout Compute(float offset, CarouselMetrics m);
 
-    /// <summary>Converts a drag delta (screen px) into a change in the logical scroll position (index units).</summary>
+    /// <summary>Converts a drag delta (the carousel's local px) into a change in the logical scroll position (index units).</summary>
     public abstract double DragToPositionDelta(Vector2 mouseDelta, CarouselMetrics m);
 
     /// <summary>
@@ -104,6 +105,12 @@ public abstract class CarouselLayoutStrategy
     /// behind it and the window shows whichever item is at the scroll position.
     /// </summary>
     public abstract RectangleF FocusWindow(CarouselMetrics m);
+
+    /// <summary>
+    /// How far in from each end the cards fade out, cut off there by the carousel's mask, or null for
+    /// cards that aren't masked: those fade themselves, through the alpha <see cref="Compute"/> gives them.
+    /// </summary>
+    public virtual MarginPadding? MaskFade => null;
 
     protected static float SmoothStep(float t) => t * t * (3f - 2f * t);
 
@@ -171,10 +178,10 @@ public class RailCarouselLayout : CarouselLayoutStrategy
     /// <summary>Room kept clear on the right for the scrollbar (px).</summary>
     public float ScrollbarGutter { get; set; } = 28f;
 
-    /// <summary>Distance over which rows fade at the top and bottom of the list (px).</summary>
-    public float TopFade { get; set; } = 30f;
+    /// <summary>Distance over which rows fade out at the top and bottom of the list (px).</summary>
+    public float TopFade { get; set; } = 48f;
 
-    public float BottomFade { get; set; } = 60f;
+    public float BottomFade { get; set; } = 64f;
 
     /// <summary>The row pitch while skimming, or null for rows that don't compact.</summary>
     public float? SkimRowPitch { get; set; }
@@ -203,19 +210,13 @@ public class RailCarouselLayout : CarouselLayoutStrategy
     {
         float y = cue(m) + AlongAxis(offset, pitch(m), windowHeight(m));
 
-        float alpha = 1f;
-        float half = m.DrawSize.Y / 2f;
-
-        if (half > 1f)
-        {
-            float fromTop = y + half - pitch(m) / 2f;
-            float fromBottom = half - y - pitch(m) / 2f;
-            alpha = Math.Clamp(fromTop / TopFade, 0f, 1f) * Math.Clamp(fromBottom / BottomFade, 0f, 1f);
-        }
-
         // The rows are centred in the space left of the scrollbar gutter.
-        return new SlotLayout(new Vector2(-ScrollbarGutter / 2f, y), Vector2.One, alpha * UnderWindowAlpha(offset));
+        return new SlotLayout(new Vector2(-ScrollbarGutter / 2f, y), Vector2.One, UnderWindowAlpha(offset));
     }
+
+    // The rows run on to the rail's ends and fade there, rather than each fading whole before it reaches
+    // one, which left up to a row and a half empty at the top.
+    public override MarginPadding? MaskFade => new MarginPadding { Top = TopFade, Bottom = BottomFade };
 
     public override double DragToPositionDelta(Vector2 mouseDelta, CarouselMetrics m) => -mouseDelta.Y / pitch(m);
 

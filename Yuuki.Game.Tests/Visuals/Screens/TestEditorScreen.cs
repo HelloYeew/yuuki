@@ -147,6 +147,32 @@ public partial class TestEditorScreen : TestYuukiScreenStack
     /// <summary>
     /// A sprite text shows a newline as a missing glyph, so text over several lines has to be a text flow.
     /// </summary>
+    /// <summary>
+    /// What a new swipe or skill note will be is picked under its tool, in the Tools panel, and shows only
+    /// while that tool is picked.
+    /// </summary>
+    [Test]
+    public void TestNewNoteChoicesShowUnderTheirTool()
+    {
+        AddUntilStep("laid out", () => editor.Compose.DrawHeight > 0);
+        AddStep("the select tool", () => editor.Session.Tool.Value = ComposeTool.Select);
+        AddAssert("no choices showing", () => !shownOptions().Any());
+
+        AddStep("the swipe tool", () => editor.Session.Tool.Value = ComposeTool.Swipe);
+        AddAssert("its three directions show", () => shownOptions().Count() == 3);
+        AddStep("new swipes go left", () => editor.Session.NewSwipeDirection.Value = SwipeDirection.Left);
+        AddAssert("Left is lit, alone", () => shownOptions().Count(o => o.Active) == 1 && option("Left").Active);
+
+        AddStep("the skill tool", () => editor.Session.Tool.Value = ComposeTool.Skill);
+        AddAssert("its two kinds show instead", () => shownOptions().Count() == 2);
+    }
+
+    private IEnumerable<EditorOption> shownOptions() =>
+        descendants(editor.Compose).OfType<EditorOption>().Where(o => o.Parent!.Alpha > 0);
+
+    private EditorOption option(string text) =>
+        descendants(editor.Compose).OfType<EditorOption>().Single(o => descendants(o).OfType<SpriteText>().Any(t => t.Text == text));
+
     [Test]
     public void TestNoTextHasRawNewlines()
     {

@@ -92,6 +92,7 @@ public partial class NotificationOverlay : FocusedOverlayContainer
             {
                 RelativeSizeAxes = Axes.Both,
                 Size = Vector2.One,
+                Bleed = Edges.All,
                 Color = Color.Black,
                 Alpha = 0,
                 AlwaysPresent = true

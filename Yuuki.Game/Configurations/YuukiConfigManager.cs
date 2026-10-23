@@ -4,6 +4,7 @@
 using System;
 using System.Globalization;
 using Sakura.Framework.Configurations;
+using Sakura.Framework.Input;
 using Sakura.Framework.Platform;
 using Yuuki.Game.Beatmaps;
 using Yuuki.Game.Gameplay;
@@ -64,6 +65,7 @@ public class YuukiConfigManager : ConfigManager<YuukiSetting>
         Get(YuukiSetting.SongSelectSort, BeatmapSort.Added);
         Get(YuukiSetting.UIScale, 1.0);
         Get(YuukiSetting.TouchEffects, true);
+        Get(YuukiSetting.Haptics, true);
         Get(YuukiSetting.HitsoundVolume, 1.0);
         Get(YuukiSetting.InactiveVolume, 0.25);
         Get(YuukiSetting.PlayfieldSize, MAX_PLAYFIELD_SIZE);
@@ -75,6 +77,8 @@ public class YuukiConfigManager : ConfigManager<YuukiSetting>
 
         Get(YuukiSetting.SwipeLeftKey, Playfield.DEFAULT_SWIPE_LEFT_KEY);
         Get(YuukiSetting.SwipeRightKey, Playfield.DEFAULT_SWIPE_RIGHT_KEY);
+        Get(YuukiSetting.SongOffsetDownKey, Key.Minus);
+        Get(YuukiSetting.SongOffsetUpKey, Key.Plus);
 
         Get(YuukiSetting.ClockDisplayMode, ClockDisplayMode.Full);
         Get(YuukiSetting.Prefer24HourTime, !CultureInfo.CurrentCulture.DateTimeFormat.ShortTimePattern.Contains("tt"));

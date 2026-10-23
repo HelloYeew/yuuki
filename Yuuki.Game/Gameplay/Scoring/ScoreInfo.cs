@@ -41,6 +41,26 @@ public class ScoreInfo
     public string? ReplayId { get; set; }
 
     /// <summary>
+    /// How late the play's presses were on average, in ms (<see cref="GameplayResult.MeanError"/>); null for plays saved
+    /// before it was kept, and for those with too few presses for it to mean much.
+    /// </summary>
+    public double? MeanError { get; set; }
+
+    /// <summary>The audio offset the play ended on, without its song offset.</summary>
+    public int AudioOffset { get; set; }
+
+    /// <summary>The visual offset the play ended on.</summary>
+    public int VisualOffset { get; set; }
+
+    /// <summary>The difficulty's song offset the play ended on.</summary>
+    public int SongOffset { get; set; }
+
+    /// <summary>The audio device it was heard on and the display it was seen on, as the game named them then.</summary>
+    public string? AudioDevice { get; set; }
+
+    public string? Display { get; set; }
+
+    /// <summary>
     /// Whether this play may appear in rankings and as a personal best.
     /// </summary>
     [JsonIgnore]
@@ -68,6 +88,10 @@ public class ScoreInfo
         IsFullCombo = result.IsFullCombo,
         IsAllPerfect = result.IsAllPerfect,
         Failed = result.Failed,
-        Date = DateTimeOffset.Now
+        Date = DateTimeOffset.Now,
+        MeanError = result.TimingSamples >= GameplayResult.MINIMUM_OFFSET_SAMPLES ? result.MeanError : null,
+        AudioOffset = (int)Math.Round(result.AudioOffset),
+        VisualOffset = (int)Math.Round(result.VisualOffset),
+        SongOffset = (int)Math.Round(result.SongOffset)
     };
 }

@@ -72,17 +72,28 @@ public partial class DelayedLoadCover : Container
     /// </summary>
     public bool HasCover { get; private set; }
 
+    /// <summary>
+    /// Whether a cover is being decoded to show: the placeholder is up, and the cover will replace it.
+    /// </summary>
+    public bool IsLoading { get; private set; }
+
     [Resolved(canBeNull: true)]
     private ITextureManager? textureManager { get; set; }
 
     [Resolved(canBeNull: true)]
     private CoverColorStore? coverColors { get; set; }
 
+    [Resolved(canBeNull: true)]
+    private RecentCoverTextures? recentCovers { get; set; }
+
     private readonly Box placeholder;
     private readonly Container coverLayer;
 
     private int generation;
     private CancellationTokenSource? cancellation;
+
+    // The cover on display, when it's one this loaded (rather than a source's cached texture).
+    private CoverLoader? shown;
 
     public DelayedLoadCover()
     {
@@ -107,16 +118,32 @@ public partial class DelayedLoadCover : Container
     /// Point the cover at a new source (or <c>null</c> to clear back to the placeholder). Any
     /// in-flight load for a previous source is cancelled.
     /// </summary>
-    public void SetSource(ICoverSource? source)
+    /// <param name="source">The image to show.</param>
+    /// <param name="decode">False to show it only if it's at hand (on show elsewhere, or kept from a moment
+    /// ago) and otherwise stay on the placeholder, decoding nothing: for a cover that would be gone before
+    /// its decode was done. Set the source again to decode it.</param>
+    public void SetSource(ICoverSource? source, bool decode = true)
     {
         int gen = ++generation;
 
         cancellation?.Cancel();
         cancellation = null;
+        IsLoading = false;
+
+        var cached = source?.Cached;
+        string? shareKey = source?.CacheKey == null || cached != null ? null : shareKeyFor(source.CacheKey);
+
+        // Pointed again at the image it shows (a recycled card given the same song, say): it stays.
+        if (shareKey != null && shareKey == shown?.ShareKey)
+            return;
+
+        // Taken before what's on display is cleared, which may be letting go of it.
+        var held = shareKey != null ? takeHeld(source!, shareKey) : null;
 
         // Clearing disposes whatever was on display, and a CoverLoader releases its own texture on
         // disposal — so this is also what frees the cover we were showing.
         coverLayer.Clear();
+        shown = null;
         HasCover = false;
 
         placeholder.ClearTransforms();
@@ -127,7 +154,6 @@ public partial class DelayedLoadCover : Container
 
         // Already decoded elsewhere (e.g. an atlas-cached embedded texture): show it right away. We
         // don't own it, so it's never disposed here.
-        var cached = source.Cached;
         if (cached != null)
         {
             display(createSprite(cached), animateIn: false);
@@ -135,9 +161,18 @@ public partial class DelayedLoadCover : Container
             return;
         }
 
+        // Decoded at this size already: on show somewhere else, or let go of a moment ago and kept (see
+        // RecentCoverTextures). Shown at once, without the fade, as it's been on screen just now.
+        if (held != null)
+        {
+            display(held, animateIn: false);
+            CoverLoaded?.Invoke(held.Texture!);
+            return;
+        }
+
         // No renderer available (e.g. a headless context with no texture manager). Decoding now lives
         // behind the texture manager, so this no longer needs an IImageLoader of its own.
-        if (textureManager == null)
+        if (textureManager == null || !decode)
             return;
 
         // Deliberately not disposed: LoadComponentAsync hands this token to a background task and a
@@ -146,7 +181,8 @@ public partial class DelayedLoadCover : Container
         // letting it be collected is cheaper than risking an ObjectDisposedException in the TPL.
         cancellation = new CancellationTokenSource();
 
-        var loader = new CoverLoader(source, textureManager, CoverFillMode, DecodeTargetSize, coverColors);
+        var loader = new CoverLoader(source, textureManager, CoverFillMode, DecodeTargetSize, coverColors, recentCovers);
+        IsLoading = true;
 
         // No discard handler: the framework disposes a load it had to throw away, and CoverLoader releases
         // its texture on disposal. That covers cancellation, a load that faults part-built, and this cover
@@ -158,10 +194,14 @@ public partial class DelayedLoadCover : Container
             // running. Dispose rather than display: the loader owns its texture, so this releases it.
             if (gen != generation || loaded.Texture == null)
             {
+                if (gen == generation)
+                    IsLoading = false;
+
                 loaded.Dispose();
                 return;
             }
 
+            IsLoading = false;
             display(loaded, animateIn: true);
             CoverLoaded?.Invoke(loaded.Texture);
         }, cancellation.Token);
@@ -184,6 +224,7 @@ public partial class DelayedLoadCover : Container
     {
         coverLayer.Clear();
         coverLayer.Add(sprite);
+        shown = sprite as CoverLoader;
         HasCover = true;
 
         if (animateIn)
@@ -205,6 +246,24 @@ public partial class DelayedLoadCover : Container
             sprite.Alpha = 1;
             placeholder.Alpha = 0;
         }
+    }
+
+    private string shareKeyFor(string cacheKey) => TextureCreationOptions.ShareKeyFor(cacheKey, DecodeTargetSize, CoverFillMode);
+
+    /// <summary>
+    /// The cover for <paramref name="source"/> if its texture is held already at this size, taking a
+    /// reference to it: from the covers kept warm (taking theirs over), or from wherever it's on show.
+    /// </summary>
+    private CoverLoader? takeHeld(ICoverSource source, string shareKey)
+    {
+        if (textureManager == null)
+            return null;
+
+        if (recentCovers?.TryTake(shareKey, textureManager, out var texture) != true
+            && !textureManager.TryAcquireSharedTexture(shareKey, out texture))
+            return null;
+
+        return new CoverLoader(source, textureManager, CoverFillMode, DecodeTargetSize, coverColors, recentCovers, (texture, shareKey));
     }
 
     private Sprite createSprite(Texture texture) => new Sprite
@@ -234,6 +293,7 @@ public partial class DelayedLoadCover : Container
         private readonly TextureFillMode fillMode;
         private readonly Vector2? decodeTargetSize;
         private readonly CoverColorStore? coverColors;
+        private readonly RecentCoverTextures? recentCovers;
 
         /// <summary>
         /// The share key this cover's texture was acquired under, or null if it is unshared and owned
@@ -244,13 +304,23 @@ public partial class DelayedLoadCover : Container
         [Resolved(canBeNull: true)]
         private AppHost? host { get; set; }
 
-        public CoverLoader(ICoverSource source, ITextureManager textureManager, TextureFillMode fillMode, Vector2? decodeTargetSize, CoverColorStore? coverColors)
+        // held: a shared texture already acquired for this cover, and the key it's shared under, so there's
+        // nothing to decode.
+        public CoverLoader(ICoverSource source, ITextureManager textureManager, TextureFillMode fillMode, Vector2? decodeTargetSize, CoverColorStore? coverColors,
+                           RecentCoverTextures? recentCovers, (Texture Texture, string ShareKey)? held = null)
         {
             this.source = source;
             this.textureManager = textureManager;
             this.fillMode = fillMode;
             this.decodeTargetSize = decodeTargetSize;
             this.coverColors = coverColors;
+            this.recentCovers = recentCovers;
+
+            if (held is (var texture, var shareKey))
+            {
+                Texture = texture;
+                ShareKey = shareKey;
+            }
 
             Anchor = Anchor.Centre;
             Origin = Anchor.Centre;
@@ -262,6 +332,10 @@ public partial class DelayedLoadCover : Container
         [BackgroundDependencyLoader]
         private void load()
         {
+            // Made with its texture (see takeHeld).
+            if (Texture != null)
+                return;
+
             // The share key has to be built before the stream is opened: on a hit the framework returns
             // the existing texture without reading it at all, which is the whole point.
             string? shareKey = source.CacheKey == null
@@ -330,8 +404,12 @@ public partial class DelayedLoadCover : Container
                 {
                     // A shared texture may still be on screen somewhere else, so it is released by key and
                     // the framework disposes it once the last holder lets go. Disposing it directly here
-                    // would blank every other display of the same image.
-                    textureManager.ReleaseSharedTexture(shareKey);
+                    // would blank every other display of the same image. Kept a while first, when the game
+                    // keeps recent covers, so showing it again needn't decode it again.
+                    if (recentCovers != null)
+                        recentCovers.Retire(shareKey, texture, textureManager);
+                    else
+                        textureManager.ReleaseSharedTexture(shareKey);
                 }
                 else if (host != null)
                 {

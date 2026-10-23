@@ -284,6 +284,8 @@ public partial class EditorScreen : YuukiScreen
                 }
             },
             timeline = new EditorTimeline(waveform) { Height = EditorTimeline.HEIGHT },
+            // Two fingers anywhere in the editor zoom its time, as the buttons beside the timeline do.
+            new PinchZoom(Session.TimelineSpan, EditorSession.MIN_TIMELINE_SPAN, EditorSession.MAX_TIMELINE_SPAN),
             divisorControl = new BeatDivisorControl(),
             bottomBar = new EditorBottomBar(TestPlay),
             savedToast = new SavedToast

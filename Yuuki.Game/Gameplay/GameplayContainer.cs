@@ -9,6 +9,7 @@ using Sakura.Framework.Audio;
 using Sakura.Framework.Extensions.ObjectExtensions;
 using Sakura.Framework.Graphics.Drawables;
 using Sakura.Framework.Graphics.Primitives;
+using Sakura.Framework.Platform;
 using Sakura.Framework.Timing;
 using Yuuki.Game.Beatmaps;
 using Yuuki.Game.Gameplay.HUD;
@@ -77,6 +78,15 @@ public partial class GameplayContainer : Container
     /// </summary>
     public Action? PauseRequested { get; init; }
 
+    /// <summary>
+    /// Whether hits are felt: a tap through the device's motor for each one, firmer the better the hit. Never in
+    /// a replay, whose hits are nobody's to feel.
+    /// </summary>
+    public bool Haptics { get; set; }
+
+    [Resolved(canBeNull: true)]
+    private IPlatformHaptics? haptics { get; set; }
+
     private double audioOffset;
 
     /// <summary>
@@ -88,10 +98,75 @@ public partial class GameplayContainer : Container
         get => audioOffset;
         set
         {
+            if (value == audioOffset)
+                return;
+
             audioOffset = value;
-            if (clockContainer.IsNotNull())
-                clockContainer.GameplayClock.Offset = value;
+            offsetsChanged();
         }
+    }
+
+    private double songOffset;
+
+    /// <summary>
+    /// The difficulty's song offset (ms), added to <see cref="AudioOffset"/> on the gameplay clock: it moves the notes
+    /// and the judging together, for a chart out of time with its music.
+    /// </summary>
+    public double SongOffset
+    {
+        get => songOffset;
+        set
+        {
+            if (value == songOffset)
+                return;
+
+            songOffset = value;
+            offsetsChanged();
+        }
+    }
+
+    // The offsets the run started on, and where they changed since: for its replay.
+    private double runAudioOffset;
+    private double runSongOffset;
+    private readonly List<ReplayOffsetChange> offsetChanges = new List<ReplayOffsetChange>();
+
+    private void offsetsChanged()
+    {
+        // Before load the clock takes them as it's made, and the run starts on them.
+        if (clockContainer.IsNull())
+            return;
+
+        // At the song's own time, from before the clock moves (see ReplayOffsetChange).
+        if (!IsReplay)
+            offsetChanges.Add(new ReplayOffsetChange(GameplayClock.CurrentTime - GameplayClock.Offset, audioOffset, songOffset));
+
+        GameplayClock.Offset = audioOffset + songOffset;
+    }
+
+    /// <summary>
+    /// A replay's offsets as its run had them by now (see <see cref="ReplayData.OffsetChanges"/>).
+    /// </summary>
+    private void followReplayOffsets(ReplayData replay)
+    {
+        double songTime = GameplayClock.CurrentTime - GameplayClock.Offset;
+        double audio = replay.AudioOffset;
+        double song = replay.SongOffset;
+
+        foreach (ReplayOffsetChange change in replay.OffsetChanges)
+        {
+            if (change.SongTime > songTime)
+                break;
+
+            audio = change.AudioOffset;
+            song = change.SongOffset;
+        }
+
+        if (audio == audioOffset && song == songOffset)
+            return;
+
+        audioOffset = audio;
+        songOffset = song;
+        GameplayClock.Offset = audio + song;
     }
 
     private double visualOffset;
@@ -265,6 +340,8 @@ public partial class GameplayContainer : Container
         Judgements = judgements.ToArray(),
         HitWindows = playfield.HitWindows,
         AudioOffset = audioOffset,
+        VisualOffset = visualOffset,
+        SongOffset = songOffset,
         ChartLength = chart.LastNoteTime
     };
 
@@ -275,7 +352,9 @@ public partial class GameplayContainer : Container
     public ReplayData BuildReplay() => new ReplayData
     {
         ChartHash = ReplayData.ChartHashOf(chart),
-        AudioOffset = audioOffset,
+        AudioOffset = runAudioOffset,
+        SongOffset = runSongOffset,
+        OffsetChanges = offsetChanges.ToList(),
         ChartLength = chart.LastNoteTime,
         HitWindows = playfield.HitWindows,
         Inputs = recordedInputs.ToList(),
@@ -328,7 +407,9 @@ public partial class GameplayContainer : Container
             }
         };
 
-        clockContainer.GameplayClock.Offset = audioOffset;
+        clockContainer.GameplayClock.Offset = audioOffset + songOffset;
+        runAudioOffset = audioOffset;
+        runSongOffset = songOffset;
 
         Score.Prepare(chart);
 
@@ -379,6 +460,9 @@ public partial class GameplayContainer : Container
         tally(result.Result);
         judgements.Add(result);
 
+        if (Haptics && Replay.IsNull())
+            feel(result);
+
         if (Health.IsFailed && !failed)
         {
             failed = true;
@@ -389,6 +473,31 @@ public partial class GameplayContainer : Container
         // combo-break sting when a miss ends a long enough run. (Note samples fire from input timing.)
         if (!result.Result.IsHit() && comboBefore >= combo_break_threshold)
             hitSounds.PlayComboBreak();
+    }
+
+    /// <summary>
+    /// A hit felt by how good it was: a Critical firm and crisp, a Hit soft and dull. A miss, nothing, and nor a
+    /// Pass note, which nothing touched.
+    /// </summary>
+    private void feel(JudgementResult result)
+    {
+        if (result.Note.Type == NoteType.Pass)
+            return;
+
+        switch (result.Result)
+        {
+            case HitResult.Critical:
+                haptics?.PlayTap(0.75f, 0.85f);
+                break;
+
+            case HitResult.Break:
+                haptics?.PlayTap(0.5f, 0.55f);
+                break;
+
+            case HitResult.Hit:
+                haptics?.PlayTap(0.3f, 0.3f);
+                break;
+        }
     }
 
     private void tally(HitResult result)
@@ -404,6 +513,9 @@ public partial class GameplayContainer : Container
 
     public override void Update()
     {
+        if (Replay.IsNotNull() && Replay.OffsetChanges.Count > 0)
+            followReplayOffsets(Replay);
+
         base.Update();
 
         Skills.Update(GameplayClock.CurrentTime);
@@ -431,6 +543,9 @@ public partial class GameplayContainer : Container
         playfield.InputPaused = false;
         judgements.Clear();
         recordedInputs.Clear();
+        offsetChanges.Clear();
+        runAudioOffset = audioOffset;
+        runSongOffset = songOffset;
         playfield.Reset();
     }
 

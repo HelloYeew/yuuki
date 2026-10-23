@@ -3,19 +3,22 @@
 
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using NUnit.Framework;
 using Sakura.Framework.Allocation;
+using Sakura.Framework.Graphics.Drawables;
 using Sakura.Framework.Graphics.Primitives;
 using Yuuki.Game.Beatmaps;
 using Yuuki.Game.Configurations;
 using Yuuki.Game.Gameplay.Scoring;
 using Yuuki.Game.Graphics.Screens;
+using Yuuki.Game.Graphics.UserInterface;
 
 namespace Yuuki.Game.Tests.Visuals.Screens;
 
 public partial class TestScoreScreen : TestYuukiScreenStack
 {
-    // A config so the "set audio offset" suggestion shows (the built runs lean late).
+    // A config so the "shift timing" suggestion shows (the built runs lean late).
     private readonly YuukiConfigManager config = new YuukiInMemoryConfigManager();
 
     [BackgroundDependencyLoader]
@@ -42,6 +45,119 @@ public partial class TestScoreScreen : TestYuukiScreenStack
     [Test]
     public void TestEmptyRun() => showResult("empty run", new GameplayResult(), r => r.TotalNotes == 0);
 
+    /// <summary>
+    /// The offer moves the judging alone: both offsets by the run's lean, the other way about.
+    /// </summary>
+    [Test]
+    public void TestShiftingTheTimingKeepsTheNotesInPlace()
+    {
+        showResult("25 ms late, at -20 and +10", leaning(25, audio: -20, visual: 10), r => r.SuggestedOffsets == (-45, 35));
+        AddAssert("no calibrating offered", () => pillOrNull("Calibrate") == null);
+
+        AddStep("shift", () => pill("Shift timing 25 ms later · every device").Action());
+        AddAssert("audio -45, visual +35", () => config.Get<int>(YuukiSetting.AudioOffset).Value == -45 && config.Get<int>(YuukiSetting.VisualOffset).Value == 35);
+        AddAssert("says so", () => pillOrNull("Audio -45 ms · Visual +35 ms") is { Enabled.Value: false });
+    }
+
+    /// <summary>
+    /// One play leans this far by chance now and then, so on its own it isn't worth a shift.
+    /// </summary>
+    [Test]
+    public void TestOnePlaysSmallLeanOffersNothing()
+    {
+        showResult("17 ms late", leaning(17), r => r.SuggestedOffsets != null);
+        AddAssert("no shift offered", () => descendants(shown!).OfType<PillButton>().All(p => !p.Text.StartsWith("Shift timing", StringComparison.Ordinal)));
+    }
+
+    /// <summary>
+    /// A lean that cost Criticals says so, and points to how the offsets fix it; one that didn't, doesn't, and nor does
+    /// a small one, which over a long song costs a few at the window's edge.
+    /// </summary>
+    [Test]
+    public void TestALeanThatCostCriticalsPointsToTheGuide()
+    {
+        showResult("5 ms late", leaning(5), r => r.CriticalsLostToLean == 0);
+        AddAssert("no guide", () => pillOrNull("How offsets work") == null);
+
+        showResult("8 ms late over a long song", spread(8), r => r.CriticalsLostToLean == 30);
+        AddAssert("no guide", () => pillOrNull("How offsets work") == null);
+
+        showResult("60 ms late", leaning(60), r => r.CriticalsLostToLean == 30);
+        AddStep("open the guide", () => pill("How offsets work").Action());
+        AddUntilStep("the guide", () => screenStack.CurrentScreen is OffsetGuideScreen);
+        AddStep("back", () => screenStack.CurrentScreen.Exit());
+        AddUntilStep("results again", () => screenStack.CurrentScreen is ScoreScreen);
+    }
+
+    /// <summary>
+    /// An error this large is more likely a new delay than the player's lean: calibrating is offered too, and once
+    /// chosen, the shift worked out against the old offsets is withdrawn.
+    /// </summary>
+    [Test]
+    public void TestALargeErrorOffersCalibrating()
+    {
+        showResult("60 ms late", leaning(60), r => r.MeanError > 40);
+
+        AddStep("calibrate", () => pill("Calibrate").Action());
+        AddUntilStep("calibrating", () => screenStack.CurrentScreen is CalibrationScreen);
+        AddAssert("the shift withdrawn", () => !pill("Shift timing 60 ms later · every device").Enabled.Value);
+        AddStep("back", () => screenStack.CurrentScreen.Exit());
+        AddUntilStep("results again", () => screenStack.CurrentScreen is ScoreScreen);
+    }
+
+    // Thirty presses, all the same distance off.
+    private static GameplayResult leaning(double error, double audio = 0, double visual = 0) => new GameplayResult
+    {
+        CriticalCount = 30,
+        Judgements = Enumerable.Range(0, 30).Select(i => new JudgementResult(new BeatmapNote { Type = NoteType.Tap, StartTime = 1000 + i * 500 }, HitResult.Critical, error)).ToArray(),
+        AudioOffset = audio,
+        VisualOffset = visual,
+        ChartLength = 16_000
+    };
+
+    /// <summary>
+    /// 800 presses spread evenly from 40 ms before <paramref name="error"/> to 40 ms after it, as a player's spread: those
+    /// past the Critical window are Breaks.
+    /// </summary>
+    private static GameplayResult spread(double error)
+    {
+        var windows = new HitWindows();
+        var judgements = Enumerable.Range(0, 800).Select(i =>
+        {
+            double timing = error - 40 + 80.0 * i / 799;
+            var note = new BeatmapNote { Type = NoteType.Tap, StartTime = 1000 + i * 200 };
+            return new JudgementResult(note, Math.Abs(timing) <= windows.Critical ? HitResult.Critical : HitResult.Break, timing);
+        }).ToArray();
+
+        return new GameplayResult
+        {
+            CriticalCount = judgements.Count(j => j.Result == HitResult.Critical),
+            BreakCount = judgements.Count(j => j.Result == HitResult.Break),
+            Judgements = judgements,
+            ChartLength = 1000 + 800 * 200
+        };
+    }
+
+    private ScoreScreen? shown;
+
+    private PillButton pill(string text) => pillOrNull(text)!;
+
+    private PillButton? pillOrNull(string text) => shown == null ? null : descendants(shown).OfType<PillButton>().FirstOrDefault(p => p.Text == text);
+
+    private static IEnumerable<Drawable> descendants(Drawable drawable)
+    {
+        yield return drawable;
+
+        if (drawable is Container container)
+        {
+            foreach (Drawable child in container.Children)
+            {
+                foreach (Drawable d in descendants(child))
+                    yield return d;
+            }
+        }
+    }
+
     private void showResult(string name, GameplayResult result, Func<GameplayResult, bool> expectation)
     {
         AddAssert($"{name} result is as built", () => expectation(result));
@@ -50,7 +166,7 @@ public partial class TestScoreScreen : TestYuukiScreenStack
             if (screenStack.CurrentScreen is ScoreScreen previous)
                 previous.Exit();
         });
-        AddStep($"push {name}", () => screenStack.Push(new ScoreScreen(result)
+        AddStep($"push {name}", () => screenStack.Push(shown = new ScoreScreen(result)
         {
             Anchor = Anchor.Centre,
             Origin = Anchor.Centre,

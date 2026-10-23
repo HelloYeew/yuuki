@@ -276,6 +276,39 @@ public partial class SkipOverlay : Container
             };
         }
 
+        // The lanes behind the band take the fingers that land on them before a click could come of one, so the
+        // button takes its own: pressed as the finger lands, skipping as it lifts on the band.
+        private TouchSource? finger;
+
+        public override bool OnTouchDown(TouchEvent e)
+        {
+            if (!Enabled.Value || finger != null)
+                return false;
+
+            finger = e.Source;
+            square.ClearTransforms();
+            square.ScaleTo(0.75f, 2000, Easing.OutQuint);
+            return true;
+        }
+
+        public override bool OnTouchUp(TouchEvent e)
+        {
+            if (finger != e.Source)
+                return false;
+
+            finger = null;
+            square.ClearTransforms();
+            square.ScaleTo(1f, 1000, Easing.OutElastic);
+
+            if (!e.Cancelled && Enabled.Value && Contains(e.ScreenSpacePosition))
+            {
+                Confirm();
+                Action?.Invoke();
+            }
+
+            return true;
+        }
+
         /// <summary>The press feedback: the confirm sound, a white flash and the square swelling.</summary>
         public void Confirm()
         {

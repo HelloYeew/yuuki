@@ -99,7 +99,11 @@ public partial class YuukiAudioManager : Component
         if (track.IsNull())
             return null;
 
+        // None where the file can't be decoded, which runs silent too.
         gameplayChannel = track.GetChannel();
+        if (gameplayChannel.IsNull())
+            return null;
+
         gameplayChannel.Looping = false;
 
         InGameplay = true;
@@ -490,7 +494,11 @@ public partial class YuukiAudioManager : Component
         if (track.IsNull())
             return;
 
+        // None where the file can't be decoded: the set stays picked, just silent.
         channel = track.GetChannel();
+        if (channel.IsNull())
+            return;
+
         // A single advance-on-end subscription per channel. The channel is recreated on every set
         // change, so this never accumulates across sets.
         channel.OnEnd += onCurrentChannelEnded;

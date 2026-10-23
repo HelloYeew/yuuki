@@ -2,6 +2,7 @@
 // See the LICENSE file for full license text.
 
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Threading.Tasks;
 using System;
@@ -55,8 +56,16 @@ public partial class BeatmapInfoPanel : FlowContainer
     /// the tag's old fixed width, now kept for any name as the tag fits it.
     /// </summary>
     private const float tag_trailing = 46;
-    private const float title_width = 640;
+    private const float title_width = 665;
     private const float title_height = 90;
+
+    /// <summary>
+    /// The title's two lines (the title, the artist under it), and how far short of the slanted end each stops.
+    /// </summary>
+    private const float title_line_height = 40;
+    private const float artist_line_height = 27;
+    private const float title_line_spacing = 2;
+    private const float title_end_gap = 18;
     private const float row_height = 30;
     private const float content_inset = 50;
     /// <summary>The cover in the title row: 13 px clear above and below in the 90 px row.</summary>
@@ -99,11 +108,10 @@ public partial class BeatmapInfoPanel : FlowContainer
     private const float score_fade_distance = 40;
 
     /// <summary>
-    /// Each row a little shorter than the one above, cascading like the design.
+    /// How far a row's slanted right end comes in for each unit further down: the rows' shear. The rows are
+    /// sheared about their tops, so a row's top right corner is at its width.
     /// </summary>
-    private const float source_row_width = 600;
-    private const float set_row_width = 570;
-    private const float beatmap_row_width = 540;
+    private static float slant => -UserInterfaceConstant.Shear.X;
 
     private const double slide_duration = 700;
 
@@ -135,6 +143,9 @@ public partial class BeatmapInfoPanel : FlowContainer
     [Resolved(canBeNull: true)]
     private YuukiConfigManager? config { get; set; }
 
+    [Resolved(canBeNull: true)]
+    private OffsetManager? offsets { get; set; }
+
     private readonly YuukiColorPalette palette;
     private readonly PanelLayout layout;
     private readonly bool showCover;
@@ -152,6 +163,7 @@ public partial class BeatmapInfoPanel : FlowContainer
     private IconRow sourceRow = null!;
     private IconRow setRow = null!;
     private IconRow beatmapRow = null!;
+    private IconRow[] iconRows = null!;
     private PanelRow tabsRow = null!;
     private PanelRow loadingRow = null!;
     private PanelRow notesRow = null!;
@@ -216,6 +228,18 @@ public partial class BeatmapInfoPanel : FlowContainer
     /// <summary>Whether a beatmap switch is still loading its tab content (diagnostics/tests).</summary>
     public bool IsLoading => loading;
 
+    /// <summary>
+    /// The slanted shapes drawn behind the title and the rows on show under it, on screen, top to bottom (tests).
+    /// </summary>
+    public IEnumerable<Quad> RowShapes => iconRows.Where(r => r.AlwaysPresent || r.Alpha > 0)
+                                                   .Prepend<PanelRow>(titleRow)
+                                                   .Select(r => r.BackgroundShape!.Value);
+
+    /// <summary>
+    /// The same for the Detail tab's two rows, the note counts and the chart under them (tests).
+    /// </summary>
+    public IEnumerable<Quad> DetailRowShapes => new[] { notesRow, chartRow }.Select(r => r.BackgroundShape!.Value);
+
     // Bumped for every summary request so a slow read for an earlier beatmap can't land on a later one.
     private int summaryRequest;
 
@@ -246,10 +270,12 @@ public partial class BeatmapInfoPanel : FlowContainer
 
         addRow(titleRow = new PanelRow(new Vector2(title_width, title_height), palette.Surface.Lighten(0.2f), createTitle()));
 
-        // The names (source and genre; mapper and difficulty) are cut short when a row runs out of room.
-        addRow(sourceRow = new IconRow(source_row_width, palette, 0, 1));
-        addRow(setRow = new IconRow(set_row_width, palette));
-        addRow(beatmapRow = new IconRow(beatmap_row_width, palette, 0, 1));
+        // The names (source and genre; mapper and difficulty) are cut short when a row runs out of room. Their
+        // widths follow the title's slanted end (see lineUpRows).
+        addRow(sourceRow = new IconRow(title_width, palette, 0, 1));
+        addRow(setRow = new IconRow(title_width, palette));
+        addRow(beatmapRow = new IconRow(title_width, palette, 0, 1));
+        iconRows = new[] { sourceRow, setRow, beatmapRow };
 
         Add(details = new FlowContainer
         {
@@ -262,7 +288,8 @@ public partial class BeatmapInfoPanel : FlowContainer
         addRow(tabsRow = new PanelRow(new Vector2(detail_width, 40), null, createTabs()), details);
         addRow(loadingRow = new PanelRow(new Vector2(detail_width, 76), null, createLoading()), details);
         addRow(notesRow = new PanelRow(new Vector2(detail_width, 76), palette.Surface.Lighten(0.2f), notesFlow = statFlow()), details);
-        addRow(chartRow = new PanelRow(new Vector2(detail_width - 40, 96), palette.Surface.Lighten(0.2f), createChart()), details);
+        // Its width follows the note counts' slanted end above it (see lineUpRows).
+        addRow(chartRow = new PanelRow(new Vector2(detail_width, 96), palette.Surface.Lighten(0.2f), createChart()), details);
         addRow(bossRow = new PanelRow(new Vector2(detail_width, 96), palette.Surface.Lighten(0.2f),
             placeholder(IconUsage.Skull, "No boss in this beatmap", "Boss phases are on the way.")), details);
         // No shared background: each score is a panel of its own (the empty state draws its own).
@@ -318,7 +345,12 @@ public partial class BeatmapInfoPanel : FlowContainer
     {
         // The cover starts where the rows below start their icons, so the block shares one left edge.
         float textX = content_inset + (showCover ? cover_size + cover_gap : 0);
-        float textWidth = title_width - textX - 70;
+
+        // Each line scrolls in what's left of the row at its foot, short of the slanted end there: the title,
+        // higher up, has further to go than the artist under it.
+        float titleFoot = (title_height + title_line_height - title_line_spacing - artist_line_height) / 2;
+        float artistFoot = titleFoot + title_line_spacing + artist_line_height;
+        float lineWidth(float foot) => title_width - slant * foot - title_end_gap - textX;
 
         var container = new Container
         {
@@ -332,19 +364,19 @@ public partial class BeatmapInfoPanel : FlowContainer
                     X = textX,
                     AutoSizeAxes = Axes.Both,
                     Direction = FlowDirection.Vertical,
-                    Spacing = new Vector2(0, 2),
+                    Spacing = new Vector2(0, title_line_spacing),
                     Children = new Drawable[]
                     {
                         titleText = new ScrollingText
                         {
-                            Size = new Vector2(textWidth, 40),
+                            Size = new Vector2(lineWidth(titleFoot), title_line_height),
                             Font = YuukiFontUsage.GetFontUsage(Typeface.Quicksand, 32, FontWeight.Bold),
                             Color = palette.Text,
                             ScrollSpeed = 100
                         },
                         artistText = new ScrollingText
                         {
-                            Size = new Vector2(textWidth, 27),
+                            Size = new Vector2(lineWidth(artistFoot), artist_line_height),
                             Font = YuukiFontUsage.GetFontUsage(Typeface.Quicksand, 20, FontWeight.Regular),
                             Color = palette.Text
                         }
@@ -681,7 +713,11 @@ public partial class BeatmapInfoPanel : FlowContainer
             (IconUsage.Label, beatmap?.DifficultyName ?? ""),
             (IconUsage.Rocket, beatmap == null ? "" : BeatmapUtility.FormatLevel(beatmap.DifficultyRating)),
             (IconUsage.ViewColumn, beatmap == null ? "" : BeatmapUtility.FormatLanes(beatmap.LaneCount)),
-            (IconUsage.PlayArrow, beatmap == null || scoreStore == null ? "" : scoreStore.GetPlayCount(beatmap).ToString("N0")));
+            (IconUsage.PlayArrow, beatmap == null || scoreStore == null ? "" : scoreStore.GetPlayCount(beatmap).ToString("N0")),
+            // Only for a difficulty with an offset of its own, so it's never a surprise in play.
+            (IconUsage.AvTimer, beatmap == null || offsets?.GetSongOffset(beatmap.ID) is not int offset || offset == 0
+                ? ""
+                : $"offset {OffsetManager.Signed(offset)}"));
 
         // The difficulty row wears the difficulty's colour, as its card in the list does: the colour as
         // the fill, the text a deep shade of it.
@@ -874,6 +910,7 @@ public partial class BeatmapInfoPanel : FlowContainer
                             Masking = true,
                             CornerRadius = 10,
                             Shear = leaderboardShear,
+                            Bleed = Edges.Horizontal,
                             Child = new Box
                             {
                                 RelativeSizeAxes = Axes.Both,
@@ -902,8 +939,41 @@ public partial class BeatmapInfoPanel : FlowContainer
     {
         base.Update();
 
+        lineUpRows();
+
         if (rankingScroll != null)
             layoutRanking();
+    }
+
+    /// <summary>
+    /// Ends the rows under the title on one straight slanted line with it, so the block's right edge runs
+    /// unbroken: each is shorter than the title by what the slant takes in between the title's top and its own.
+    /// Worked out from the rows on show, as the flow lays them out (a hidden one takes no room), so it holds
+    /// whichever are. The chart under the note counts lines up with them the same way.
+    /// </summary>
+    private void lineUpRows()
+    {
+        float down = title_height + Spacing.Y;
+
+        foreach (IconRow row in iconRows)
+        {
+            if (!row.AlwaysPresent && row.Alpha <= 0)
+                continue;
+
+            float width = title_width - slant * down;
+
+            if (row.Width != width)
+                row.Width = width;
+
+            down += row.Height + Spacing.Y;
+        }
+
+        // Against the screen's right edge it's the left ends that show, slanting the same way: there the lower
+        // row reaches further, not less far.
+        float chartWidth = detail_width + (chartRow.Mirrored ? 1 : -1) * slant * (notesRow.Height + details.Spacing.Y);
+
+        if (chartRow.Width != chartWidth)
+            chartRow.Width = chartWidth;
     }
 
     /// <summary>
@@ -932,13 +1002,15 @@ public partial class BeatmapInfoPanel : FlowContainer
         // one width: as much as fits short of whatever is on the right, at most the full width.
         float topShift = leaderboardSlope * bestRow.Y;
         float maxRight = RankingMaxRight != null
-            ? details.ToLocalSpace(new Vector2(RankingMaxRight(), 0)).X - 16
+            ? toDetailsSpace(new Vector2(RankingMaxRight(), 0)).X - 16
             : float.MaxValue;
         float rowWidth = Math.Clamp(maxRight - topShift - leaderboardSlope * score_row_height / 2, 560, score_row_width);
 
         // How much of the list's left end is past the screen's edge (the panel tucks its left ends off it),
-        // at rest: measured on the row, not its sliding content.
-        float offscreen = details.ToLocalSpace(Vector2.Zero).X - rankingRow.X;
+        // at rest: measured on the row, not its sliding content, and from the left of what the panel's laid
+        // out in rather than the window's, so a zoom over the screen (song select's glance) doesn't move the
+        // rows' content along them.
+        float offscreen = toDetailsSpace(Parent?.ScreenSpaceDrawQuad.TopLeft ?? Vector2.Zero).X - rankingRow.X;
 
         rankingScroll.Width = rowWidth + topShift + 24;
         bestRow.Place(0, rowWidth, offscreen);
@@ -967,12 +1039,19 @@ public partial class BeatmapInfoPanel : FlowContainer
         if (RankingBottom == null)
             return fallback;
 
-        float bottom = details.ToLocalSpace(new Vector2(0, RankingBottom())).Y - ranking_bottom_margin;
+        float bottom = toDetailsSpace(new Vector2(0, RankingBottom())).Y - ranking_bottom_margin;
         float room = bottom - rankingRow.Y;
 
         // Never less than one score above the best.
         return Math.Max(best_band_height + score_row_height + score_row_gap * 2, room);
     }
+
+    /// <summary>
+    /// A screen-space point in the tabs' space, through their parent: where it is on screen is this frame's
+    /// already, while the tabs' own is the last frame's until they update. That's a frame's difference while
+    /// something above moves (song select's glance zooms the screen), enough to throw the rows about.
+    /// </summary>
+    private Vector2 toDetailsSpace(Vector2 screenSpace) => (details.Parent ?? this).ToLocalSpace(screenSpace) - details.Position;
 
     private Action selectScore(ScoreInfo score) => () => ScoreSelected?.Invoke(score);
 
@@ -988,6 +1067,8 @@ public partial class BeatmapInfoPanel : FlowContainer
         Masking = true,
         Shear = UserInterfaceConstant.Shear,
         CornerRadius = 5,
+        // Past the screen's edge, under a notch or camera cutout too, whichever edge it's tucked off.
+        Bleed = Edges.Horizontal,
         Child = new Box
         {
             RelativeSizeAxes = Axes.Both,
@@ -1169,6 +1250,11 @@ public partial class BeatmapInfoPanel : FlowContainer
 
         private readonly Container? backgroundShape;
 
+        /// <summary>
+        /// Where its slanted background is drawn on screen, if it has one.
+        /// </summary>
+        public Quad? BackgroundShape => backgroundShape?.ScreenSpaceDrawQuad;
+
         public PanelRow(Vector2 size, Color? background, Drawable content)
             : this(background, content, fitWidth: false)
         {
@@ -1207,6 +1293,8 @@ public partial class BeatmapInfoPanel : FlowContainer
                     Masking = true,
                     Shear = UserInterfaceConstant.Shear,
                     CornerRadius = 5,
+                    // Past the screen's edge, under a notch or camera cutout too.
+                    Bleed = Edges.Horizontal,
                     Child = Background = new Box
                     {
                         RelativeSizeAxes = Axes.Both,
@@ -1317,12 +1405,18 @@ public partial class BeatmapInfoPanel : FlowContainer
 
         /// <summary>
         /// Where the left-hand content sits, from the panel's left end: the position, the date under how
-        /// long ago, the badges, and the end of the personal best's wash.
+        /// long ago, and the end of the personal best's wash.
         /// </summary>
         private const float position_x = 18;
 
         private const float date_x = 84;
-        private const float badges_x = 170;
+        private const float wash_x = 170;
+
+        /// <summary>
+        /// How far into the score's block its badges sit (a full combo or all perfect, and a replay), by the
+        /// score: from the right end, like the stats, so they're clear of them at any width.
+        /// </summary>
+        private const float badges_inset = 16;
 
         private readonly Container inner;
         private readonly Box fill;
@@ -1330,7 +1424,6 @@ public partial class BeatmapInfoPanel : FlowContainer
         private readonly Drawable[] dateParts;
         private readonly Drawable positionText;
         private readonly Drawable dateText;
-        private readonly Drawable badges;
         private readonly Drawable highlight;
         private float shownInset = -1;
 
@@ -1357,7 +1450,7 @@ public partial class BeatmapInfoPanel : FlowContainer
 
             date = score.Date;
             agoText = text(ago(date), 14, FontWeight.Regular, Color.White.WithAlpha(0.7f), Anchor.CentreLeft, date_x, -11);
-            dateText = text(score.Date.LocalDateTime.ToString("d MMM yyyy, HH:mm:ss"), 18, FontWeight.Bold, Color.White, Anchor.CentreLeft, date_x, 10);
+            dateText = text(score.Date.LocalDateTime.ToString("d MMM yyyy, HH:mm:ss", CultureInfo.InvariantCulture), 18, FontWeight.Bold, Color.White, Anchor.CentreLeft, date_x, 10);
 
             Child = inner = new Container
             {
@@ -1377,7 +1470,7 @@ public partial class BeatmapInfoPanel : FlowContainer
                         {
                             RelativeSizeAxes = Axes.Both,
                             ColorInfo = ColorInfo.GradientHorizontal(palette.Accent.WithAlpha(0.9f), palette.Accent.WithAlpha(0))
-                        }, Axes.Y, width: badges_x)
+                        }, Axes.Y, width: wash_x)
                         : new Container(),
                     // The score on its own darker block, joined to the rank tab.
                     sheared(new Box
@@ -1393,12 +1486,11 @@ public partial class BeatmapInfoPanel : FlowContainer
                     }, Axes.Y, width: rank_tab_width, anchor: Anchor.CentreRight),
                     positionText = text(position, 22, FontWeight.Bold, Color.White, Anchor.CentreLeft, position_x),
                     agoText,
-                    badges = new FlowContainer
+                    new FlowContainer
                     {
-                        Anchor = Anchor.CentreLeft,
+                        Anchor = Anchor.CentreRight,
                         Origin = Anchor.CentreLeft,
-                        X = badges_x,
-                        Y = -11,
+                        X = -(rank_tab_width + score_block_width) + badges_inset,
                         AutoSizeAxes = Axes.Both,
                         Direction = FlowDirection.Horizontal,
                         Spacing = new Vector2(6, 0),
@@ -1453,8 +1545,7 @@ public partial class BeatmapInfoPanel : FlowContainer
                 shownInset = inset;
                 positionText.X = position_x + inset;
                 agoText.X = dateText.X = date_x + inset;
-                badges.X = badges_x + inset;
-                highlight.Width = badges_x + inset;
+                highlight.Width = wash_x + inset;
             }
 
             foreach (Drawable part in dateParts)
@@ -1473,6 +1564,8 @@ public partial class BeatmapInfoPanel : FlowContainer
             Masking = true,
             CornerRadius = corner_radius,
             Shear = leaderboardShear,
+            // The rows tuck their left ends past the screen's edge: under a notch or camera cutout too.
+            Bleed = Edges.Horizontal,
             Child = fill
         };
 

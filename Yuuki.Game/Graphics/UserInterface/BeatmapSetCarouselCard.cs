@@ -37,25 +37,42 @@ public partial class BeatmapSetCarouselCard : CarouselCard<BeatmapSet>
     private const float cover_load_in_scale = 1.06f;
 
     /// <summary>
+    /// Faster than this (items a second) a row has gone by before its cover could be decoded and seen, so
+    /// it comes in with its song's color and its cover follows once the list slows. A cover at hand (on
+    /// show elsewhere, or seen a moment ago) shows regardless.
+    /// </summary>
+    private const float cover_speed_limit = 40;
+
+    /// <summary>
+    /// Whether the cover on show is waiting for the list to slow before it's decoded.
+    /// </summary>
+    private bool coverDeferred;
+
+    /// <summary>
     /// The sizes of a card's faces, at rest and (Skim…) while the list skims: smaller covers, the title and
     /// artist a little smaller, the extras gone.
     /// </summary>
     private sealed record FaceSizes(
         float RowCover, float SkimRowCover, float RowTextX, float SkimRowTextX, float SkimTextScale,
         int TitleFont, int ArtistFont, float ExtrasText, float BestText, float SkylineHeight, float SkylineBar,
-        float TileCover, float SkimTileCover, int TileTitleFont, int TileArtistFont, float TileArtistOffset);
+        float TileCover, float SkimTileCover, int TileTitleFont, int TileArtistFont, float TileArtistOffset, float TileChipText);
 
     private static readonly FaceSizes desktop_sizes = new FaceSizes(
         48, 34, 74, 60, 0.86f,
         21, 15, 14, 12.5f, 26, 6,
-        120, 84, 15, 12, 28);
+        120, 84, 15, 12, 28, 11);
 
     // A phone's: a little bigger in the rail (its rows are only a little taller than the desktop's), and
     // bigger in the strip, for a thumb.
     private static readonly FaceSizes phone_sizes = new FaceSizes(
         54, 40, 80, 66, 0.85f,
         23, 17, 15, 13.5f, 28, 7,
-        132, 100, 18, 14, 31);
+        132, 100, 18, 14, 31, 12);
+
+    /// <summary>
+    /// How far up from the foot of a tile's cover its chips sit.
+    /// </summary>
+    private const float tile_chip_inset = 6;
 
     [Resolved(canBeNull: true)]
     private GameLayout? gameLayout { get; set; }
@@ -66,11 +83,6 @@ public partial class BeatmapSetCarouselCard : CarouselCard<BeatmapSet>
     /// The skim amount the faces are laid out for.
     /// </summary>
     private float laidOutSkim = -1;
-
-    private static readonly string[] placeholder_palette =
-    {
-        "#F4A6C0", "#F6C177", "#9CCFD8", "#C4A7E7", "#A3BE8C", "#EBCB8B", "#88C0D0", "#D08770"
-    };
 
     public BeatmapSet BeatmapSet { get; private set; } = null!;
 
@@ -91,6 +103,9 @@ public partial class BeatmapSetCarouselCard : CarouselCard<BeatmapSet>
 
     [Resolved(canBeNull: true)]
     private IYuukiColorProvider? colorProvider { get; set; }
+
+    [Resolved(canBeNull: true)]
+    private CoverColorStore? coverColors { get; set; }
 
     private Reactive<bool>? useUnicodeInfo;
 
@@ -113,6 +128,9 @@ public partial class BeatmapSetCarouselCard : CarouselCard<BeatmapSet>
 
     private Container? tileFace;
     private DelayedLoadCover? tileCover;
+    private Container? tileChips;
+    private BestMark? tileBest;
+    private BestMark.Blade? tileLanes;
     private ScrollingText? tileTitle;
     private ScrollingText? tileArtist;
 
@@ -241,7 +259,8 @@ public partial class BeatmapSetCarouselCard : CarouselCard<BeatmapSet>
     }
 
     /// <summary>
-    /// Builds the strip's tile on first use: the cover, with the title and artist under it.
+    /// Builds the strip's tile on first use: the cover, with your best mark and the lanes at its foot, and
+    /// the title and artist under it. The chips carry their own colors, so they read on any cover.
     /// </summary>
     private void ensureTile()
     {
@@ -250,6 +269,9 @@ public partial class BeatmapSetCarouselCard : CarouselCard<BeatmapSet>
 
         Add(tileFace = new Container
         {
+            // Centred, so a press squeezes it about its middle.
+            Anchor = Anchor.Centre,
+            Origin = Anchor.Centre,
             RelativeSizeAxes = Axes.Both,
             Alpha = vertical ? 0 : 1,
             Children = new Drawable[]
@@ -271,6 +293,24 @@ public partial class BeatmapSetCarouselCard : CarouselCard<BeatmapSet>
                     },
                     DecodeTargetSize = tile_decode_size,
                     LoadInScale = cover_load_in_scale
+                },
+                // Placed on the cover as it's sized (see layOutForSkim). Beside the cover rather than in it:
+                // the cover clears its children for each new source.
+                tileChips = new Container
+                {
+                    RelativeSizeAxes = Axes.Both,
+                    Children = new Drawable[]
+                    {
+                        tileBest = new BestMark(sizes.TileChipText)
+                        {
+                            Origin = Anchor.BottomLeft
+                        },
+                        tileLanes = new BestMark.Blade(sizes.TileChipText)
+                        {
+                            Anchor = Anchor.TopLeft,
+                            Origin = Anchor.BottomRight
+                        }
+                    }
                 },
                 tileTitle = new ScrollingText
                 {
@@ -301,7 +341,6 @@ public partial class BeatmapSetCarouselCard : CarouselCard<BeatmapSet>
     public override void Apply(BeatmapSet set, int index)
     {
         BeatmapSet = set;
-        placeholderColor = ColorExtensions.FromHex(placeholder_palette[index % placeholder_palette.Length]);
 
         // Orientation is assigned by the pool right before Apply (but OnOrientationChanged, which sets
         // `vertical`, only runs later on attach), so read it here to build the correct face straight away.
@@ -309,6 +348,19 @@ public partial class BeatmapSetCarouselCard : CarouselCard<BeatmapSet>
 
         ensureActiveFace();
         populate();
+
+        // A card back from the pool may have gone mid-flash.
+        if (rowHover != null)
+        {
+            rowHover.ClearTransforms();
+            rowHover.Alpha = 0;
+        }
+
+        if (tileFace != null)
+        {
+            tileFace.ClearTransforms();
+            tileFace.Scale = Vector2.One;
+        }
     }
 
     /// <summary>
@@ -323,6 +375,10 @@ public partial class BeatmapSetCarouselCard : CarouselCard<BeatmapSet>
 
         var beatmaps = beatmapsCollection?.GetBeatmapsFromBeatmapSet(BeatmapSet) ?? Array.Empty<Beatmap>();
 
+        // Until the cover's in (or for good, with none), the song's own color, as its window wears: a row
+        // coming in reads as that song still loading rather than a colored square standing in for it.
+        placeholderColor = SetlistColors.ForSong(BeatmapSet, beatmaps, coverColors).Fill.Darken(0.15f);
+
         if (rowFace != null)
         {
             rowLanes!.Text = BeatmapUtility.FormatLaneRange(beatmaps);
@@ -331,8 +387,17 @@ public partial class BeatmapSetCarouselCard : CarouselCard<BeatmapSet>
             rowCover!.PlaceholderColor = placeholderColor;
         }
 
-        if (tileCover != null)
-            tileCover.PlaceholderColor = placeholderColor;
+        if (tileFace != null)
+        {
+            tileCover!.PlaceholderColor = placeholderColor;
+            tileBest!.SetBest(scoreStore?.GetBestMark(BeatmapSet));
+
+            // Plain, against the best mark's colors: white's tone-on-tone.
+            tileLanes!.Apply(new BestMark.Piece(BeatmapUtility.FormatLaneRange(beatmaps), SetlistColors.TierFill(Color.White), SetlistColors.TierInk(Color.White)));
+
+            // Laid out again, as whether the lanes fit beside the best mark is up to both.
+            laidOutSkim = -1;
+        }
 
         updateCoverSources();
     }
@@ -380,9 +445,18 @@ public partial class BeatmapSetCarouselCard : CarouselCard<BeatmapSet>
             ? null
             : new BeatmapSetCoverSource(BeatmapSet, storage);
 
-        rowCover?.SetSource(vertical ? source : null);
-        tileCover?.SetSource(vertical ? null : source);
+        bool decode = (Motion?.Speed ?? 0) <= cover_speed_limit;
+
+        rowCover?.SetSource(vertical ? source : null, decode);
+        tileCover?.SetSource(vertical ? null : source, decode);
+
+        coverDeferred = source != null && !decode && (vertical ? rowCover : tileCover)?.HasCover != true;
     }
+
+    /// <summary>
+    /// Ready once the face on show has its cover, or has none coming.
+    /// </summary>
+    public override bool IsReady => !((vertical ? rowCover : tileCover)?.IsLoading ?? false);
 
     protected override void OnOrientationChanged(CarouselOrientation orientation)
     {
@@ -407,6 +481,9 @@ public partial class BeatmapSetCarouselCard : CarouselCard<BeatmapSet>
 
         if (wanted != sizes)
             rebuildFaces(wanted);
+
+        if (coverDeferred && (Motion?.Speed ?? 0) <= cover_speed_limit)
+            updateCoverSources();
 
         float skim = Motion?.Skim ?? 0;
 
@@ -449,11 +526,47 @@ public partial class BeatmapSetCarouselCard : CarouselCard<BeatmapSet>
             tileTitle.Width = cover + 10;
             tileArtist!.Y = cover + sizes.TileArtistOffset;
             tileArtist.Width = cover + 10;
+
+            // In the foot's corners, stepping aside with the rest while skimming. Each is in from its edge as
+            // far as the best mark's margin keeps it, clear of the blades' slanted ends. The lanes give way on
+            // a cover too narrow for both (a long range beside a medal).
+            float edge = sizes.TileChipText * 0.6f;
+
+            tileBest!.Position = new Vector2(6, cover - tile_chip_inset);
+            tileLanes!.Position = new Vector2(6 + cover - edge, cover - tile_chip_inset);
+            tileChips!.Alpha = 1 - skim;
+
+            float best = tileBest.Alpha > 0 ? tileBest.DrawWidth + edge : 0;
+            tileLanes.Alpha = !string.IsNullOrEmpty(tileLanes.Text) && best + tileLanes.DrawWidth + edge * 2 <= cover ? 1 : 0;
         }
     }
 
+    /// <summary>
+    /// A press shows on the card at once, a moment before the list moves to it: a row darkens a little more
+    /// than on hover, a tile gives a little. On its own, since the release goes to the carousel, which
+    /// takes the press in case it's a drag.
+    /// </summary>
+    public override bool OnMouseDown(MouseButtonEvent e)
+    {
+        if (rowHover != null && vertical)
+        {
+            rowHover.ClearTransforms();
+            rowHover.FadeTo(0.14f, 60, Easing.OutQuint).Then().FadeTo(IsHovered ? 0.06f : 0, 450, Easing.OutQuint);
+        }
+
+        if (tileFace != null && !vertical)
+        {
+            tileFace.ClearTransforms();
+            tileFace.ScaleTo(0.96f, 70, Easing.OutQuint).Then().ScaleTo(1, 500, Easing.OutQuint);
+        }
+
+        return base.OnMouseDown(e);
+    }
+
+    // Cleared first, so a press's flash doesn't fade back to how the row was hovered when it was pressed.
     public override bool OnHover(MouseEvent e)
     {
+        rowHover?.ClearTransforms();
         rowHover?.FadeTo(0.06f, 150, Easing.OutQuint);
 
         if (tileCover != null)
@@ -464,6 +577,7 @@ public partial class BeatmapSetCarouselCard : CarouselCard<BeatmapSet>
 
     public override bool OnHoverLost(MouseEvent e)
     {
+        rowHover?.ClearTransforms();
         rowHover?.FadeOut(300, Easing.OutQuint);
 
         if (tileCover != null)
@@ -475,7 +589,7 @@ public partial class BeatmapSetCarouselCard : CarouselCard<BeatmapSet>
     /// <summary>
     /// The lane counts on show ("4K", "4-7K"), from whichever face is built.
     /// </summary>
-    public string LaneText => rowLanes?.Text ?? BeatmapUtility.FormatLaneRange(beatmapsCollection?.GetBeatmapsFromBeatmapSet(BeatmapSet) ?? Array.Empty<Beatmap>());
+    public string LaneText => rowLanes?.Text ?? tileLanes?.Text ?? BeatmapUtility.FormatLaneRange(beatmapsCollection?.GetBeatmapsFromBeatmapSet(BeatmapSet) ?? Array.Empty<Beatmap>());
 
     private void updateText()
     {

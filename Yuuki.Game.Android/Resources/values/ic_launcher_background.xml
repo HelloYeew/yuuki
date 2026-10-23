@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <!-- Behind the launcher icon's petal; tools/make_android_icons.py draws the plain icon on the same. -->
+  <color name="ic_launcher_background">#FFFFFF</color>
+</resources>

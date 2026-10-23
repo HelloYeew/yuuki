@@ -98,6 +98,7 @@ public partial class HoldToExitGameOverlay : Container
         Child = box = new Box
         {
             RelativeSizeAxes = Axes.Both,
+            Bleed = Edges.All,
             Color = Color.Black,
             Alpha = 0
         };

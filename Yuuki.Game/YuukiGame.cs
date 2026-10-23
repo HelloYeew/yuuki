@@ -63,6 +63,7 @@ public partial class YuukiGame : App
     private DialogOverlay dialogOverlay = null!;
 
     private NotificationOverlay notificationOverlay = null!;
+    private OffsetManager offsetManager = null!;
 
     private BeatmapImportManager importManager = null!;
     private HoldToExitGameOverlay holdToExit = null!;
@@ -121,6 +122,9 @@ public partial class YuukiGame : App
         Cache(new CoverColorStore());
         Cache(layout);
 
+        // The device's motor, felt during a song (tests give their own).
+        Cache(Host.Haptics);
+
         config = new YuukiConfigManager(Host.Storage);
         config.Load();
         Cache(config);
@@ -131,6 +135,9 @@ public partial class YuukiGame : App
 
         Cache(new ScoreStore(Host.Storage));
         Cache(workingBeatmap);
+
+        offsetManager = new OffsetManager(new OffsetStore(Host.Storage));
+        Cache(offsetManager);
 
         Cache(new EditorClipboard());
 
@@ -210,6 +217,10 @@ public partial class YuukiGame : App
         notificationOverlay = new NotificationOverlay();
         Cache(notificationOverlay);
 
+        // Once the notifications and the screens it tells of a new device and opens calibrating on are there to find,
+        // and before what shows the offsets loads.
+        mainContainer.Add(offsetManager);
+
         footer = new ScreenFooter()
         {
             Y = 150
@@ -230,6 +241,13 @@ public partial class YuukiGame : App
             toggleFooter();
         };
 
+        if (ExternalFiles != null)
+            Cache(ExternalFiles);
+
+        // Before the settings, whose import button looks it up as they load: cached after, it was never found there.
+        importManager = new BeatmapImportManager();
+        Cache(importManager);
+
         settingsOverlay = new SettingsOverlay()
         {
             Anchor = Anchor.Centre,
@@ -241,12 +259,6 @@ public partial class YuukiGame : App
         mainContainer.Add(settingsOverlay);
 
         mainContainer.Add(notificationOverlay);
-
-        if (ExternalFiles != null)
-            Cache(ExternalFiles);
-
-        importManager = new BeatmapImportManager();
-        Cache(importManager);
         mainContainer.Add(importManager);
 
         dialogOverlay = new DialogOverlay();
@@ -339,6 +351,7 @@ public partial class YuukiGame : App
     private bool updateLayout()
     {
         phoneWindow = GameLayout.IsPhoneWindow(Window?.Height ?? GameLayout.DESKTOP_ABOVE + 1, phoneWindow);
+        layout.PhoneWindow.Value = phoneWindow;
         layout.Touch.Value = InputManager.CurrentState.LastPointerWasTouch;
 
         var chosen = GameLayout.Choose(phoneWindow, targetZoom);

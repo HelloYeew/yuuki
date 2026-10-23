@@ -85,18 +85,45 @@ public abstract partial class CarouselFocusFace<TModel> : Container
 /// <summary>
 /// The fixed window on a carousel's cue, and the only solid thing in the list. The cards slide behind it,
 /// and it shows whichever item is at the scroll position in a large layout. Between two items it doesn't
-/// grow or slide continuously: it holds still for most of each step and then clicks over to the next one,
-/// so a fast scroll reads as a flip counter rather than two half-faded cards smeared across it. When the
-/// list comes to rest on an item, a streak of light crosses the window at the blade's angle: a wink. And
-/// while it shows what's playing, it flashes on the beat.
+/// grow or slide continuously: it holds still until the list is halfway to the next one, then clicks over.
+/// The item shown slides out and is all but gone before the next slides in from the side the list is
+/// coming from, so a fast scroll reads as a flip counter and the window never shows two items at once. The
+/// items either side are made ready out of sight, so their covers are in by the time they come in. When
+/// the list comes to rest on an item, a streak of light crosses the window at the blade's angle: a wink.
+/// And while it shows what's playing, it flashes on the beat.
 /// </summary>
 public abstract partial class CarouselFocusWindow<TModel> : Container
     where TModel : class
 {
     /// <summary>
-    /// How far (as a share of the window's length on the scroll axis) a face slides as it swaps.
+    /// How far (as a share of the window's length on the scroll axis) a face slides as it comes in, and as
+    /// it leaves.
     /// </summary>
-    private const float swap_travel = 0.4f;
+    private const float enter_travel = 0.3f;
+
+    private const float leave_travel = 0.18f;
+
+    /// <summary>
+    /// How long (ms) a face takes to leave and to come in, and how long after the one leaving starts the
+    /// next comes in: by then the one leaving is nearly gone.
+    /// </summary>
+    private const double leave_duration = 110;
+
+    private const double enter_duration = 280;
+    private const double enter_delay = 50;
+
+    /// <summary>
+    /// A swap coming sooner than this (ms) after the last is quicker, in proportion, so the window keeps up
+    /// with the list: clicked through quickly, it clicks over quickly.
+    /// </summary>
+    private const double relaxed_swap_interval = 400;
+
+    /// <summary>
+    /// A swap this soon (ms) after the last cuts straight to the next item: the list is flying past (a long
+    /// jump, a fling), faster than any face could come in, and the window shows each item it passes rather
+    /// than faces that never got the time to appear.
+    /// </summary>
+    private const double cut_swap_interval = 60;
 
     private const double fill_fade_duration = 180;
 
@@ -126,9 +153,14 @@ public abstract partial class CarouselFocusWindow<TModel> : Container
     private readonly Box beatFlash;
     private readonly Container sweep;
 
-    private readonly List<(int Index, CarouselFocusFace<TModel> Face)> live = new List<(int, CarouselFocusFace<TModel>)>();
-    private readonly Stack<CarouselFocusFace<TModel>> spare = new Stack<CarouselFocusFace<TModel>>();
-    private readonly List<(int Index, CarouselFocusFace<TModel> Face)> stillShown = new List<(int, CarouselFocusFace<TModel>)>();
+    private readonly List<LiveFace> live = new List<LiveFace>();
+
+    // Faces not in use. Each still holds the item it last showed (and its cover), for when that comes back.
+    private readonly List<CarouselFocusFace<TModel>> spare = new List<CarouselFocusFace<TModel>>();
+
+    private LiveFace? shown;
+
+    private double lastSwap = double.MinValue;
 
     private CarouselOrientation orientation = CarouselOrientation.Horizontal;
     private TModel? colouredFor;
@@ -262,8 +294,8 @@ public abstract partial class CarouselFocusWindow<TModel> : Container
     {
         phone = value;
 
-        foreach (var (_, face) in live)
-            face.SetPhone(value);
+        foreach (var f in live)
+            f.Face.SetPhone(value);
         foreach (var face in spare)
             face.SetPhone(value);
     }
@@ -283,23 +315,26 @@ public abstract partial class CarouselFocusWindow<TModel> : Container
         orientation = value;
         body.CornerRadius = value == CarouselOrientation.Vertical ? 16f : 20f;
 
-        foreach (var (_, face) in live)
-            face.SetOrientation(value);
+        foreach (var f in live)
+            f.Face.SetOrientation(value);
         foreach (var face in spare)
             face.SetOrientation(value);
     }
 
     /// <summary>
     /// Lays the window out for this frame: <paramref name="position"/> is the carousel's (continuous)
-    /// scroll position over <paramref name="items"/>.
+    /// scroll position over <paramref name="items"/>. <paramref name="instant"/> for a list put somewhere
+    /// rather than moved there: the item there shows at once.
     /// </summary>
-    public void Display(IReadOnlyList<TModel> items, double position)
+    public void Display(IReadOnlyList<TModel> items, double position, bool instant = false)
     {
         if (items.Count == 0)
         {
             body.Alpha = 0;
-            stillShown.Clear();
-            releaseAllBut(stillShown);
+
+            for (int i = live.Count - 1; i >= 0; i--)
+                release(i);
+
             colouredFor = null;
             sweptFor = null;
             lastPosition = double.NaN;
@@ -308,16 +343,54 @@ public abstract partial class CarouselFocusWindow<TModel> : Container
 
         body.Alpha = 1;
 
-        int first = (int)Math.Floor(position);
-        float t = smoothStep(Math.Clamp(((float)(position - first) - 0.3f) / 0.4f, 0f, 1f));
-        float travel = (orientation == CarouselOrientation.Vertical ? DrawHeight : DrawWidth) * swap_travel;
+        double now = IsLoaded ? Clock.CurrentTime : 0;
+        int index = Math.Clamp((int)Math.Round(position), 0, items.Count - 1);
+        var current = items[index];
 
-        stillShown.Clear();
-        place(items, first, -t * travel, 1f - t);
-        place(items, first + 1, (1f - t) * travel, t);
-        releaseAllBut(stillShown);
+        if (shown == null || shown.Index != index || !ReferenceEquals(shown.Face.Model, current))
+            swapTo(index, current, now, instant || shown == null || !IsLoaded);
 
-        var current = items[Math.Clamp((int)Math.Round(position), 0, items.Count - 1)];
+        // Not while the list flies past: those it passes are gone again a frame later.
+        if (now - lastSwap >= cut_swap_interval)
+        {
+            prepare(items, index - 1);
+            prepare(items, index + 1);
+        }
+
+        float skim = Motion?.Skim ?? 0;
+
+        for (int i = live.Count - 1; i >= 0; i--)
+        {
+            var f = live[i];
+            f.Step(now);
+
+            bool neighbour = Math.Abs(f.Index - index) == 1 && f.Index < items.Count && ReferenceEquals(items[f.Index], f.Face.Model);
+
+            // Gone. The one just left is next door, so it usually stays on hand, ready to come back.
+            if (f.Role == FaceRole.Leaving && !f.Moving)
+            {
+                if (!neighbour)
+                {
+                    release(i);
+                    continue;
+                }
+
+                f.Role = FaceRole.Ready;
+                f.Set(0, 0);
+            }
+            else if (f.Role == FaceRole.Ready && !neighbour)
+            {
+                release(i);
+                continue;
+            }
+
+            f.Face.Position = orientation == CarouselOrientation.Vertical ? new Vector2(0f, f.Offset) : new Vector2(f.Offset, 0f);
+
+            // Snapped at the ends: the alpha setter ignores the last tiny step of an ease, which would leave a
+            // face that's gone still drawn, faintly.
+            f.Face.Alpha = f.Alpha < 0.002f ? 0 : f.Alpha > 0.998f ? 1 : f.Alpha;
+            f.Face.SetSkim(skim);
+        }
 
         if (!ReferenceEquals(current, colouredFor))
         {
@@ -334,6 +407,84 @@ public abstract partial class CarouselFocusWindow<TModel> : Container
             sweptFor = current;
             wink();
         }
+    }
+
+    /// <summary>
+    /// Clicks over to the item at <paramref name="index"/>: the face shown leaves against the direction of
+    /// travel, and the item's comes in from it. One already leaving (the list turned back) comes straight
+    /// back from where it is.
+    /// </summary>
+    private void swapTo(int index, TModel model, double now, bool instant)
+    {
+        var previous = shown;
+        int direction = previous == null || previous.Index == index ? 1 : Math.Sign(index - previous.Index);
+        float length = orientation == CarouselOrientation.Vertical ? DrawHeight : DrawWidth;
+
+        double sinceLast = now - lastSwap;
+        double pace = Math.Clamp(sinceLast / relaxed_swap_interval, 0, 1);
+        lastSwap = now;
+
+        var next = find(index, model);
+        bool turningBack = next?.Role == FaceRole.Leaving;
+
+        if (next == null)
+            live.Add(next = new LiveFace(take(model), index));
+
+        next.Role = FaceRole.Shown;
+        shown = next;
+
+        // Put there rather than moved there, or flying past: nothing on its way out stays.
+        if (instant || sinceLast < cut_swap_interval)
+        {
+            next.Set(0, 1);
+
+            for (int i = live.Count - 1; i >= 0; i--)
+            {
+                if (live[i] != next && (live[i] == previous || live[i].Role == FaceRole.Leaving))
+                    release(i);
+            }
+
+            return;
+        }
+
+        if (previous != null && previous != next)
+        {
+            previous.Role = FaceRole.Leaving;
+            previous.MoveTo(-direction * leave_travel * length, 0, now, leave_duration * pace, Easing.OutCubic);
+        }
+
+        if (turningBack)
+            next.MoveTo(0, 1, now, enter_duration * pace, Easing.OutQuint);
+        else
+        {
+            next.Set(direction * enter_travel * length, 0);
+            next.MoveTo(0, 1, now + enter_delay * pace, enter_duration * pace, Easing.OutQuint);
+        }
+    }
+
+    /// <summary>
+    /// Makes the item at <paramref name="index"/> ready, out of sight, if it isn't on hand already: its face
+    /// filled in and its cover loading, for when it comes in.
+    /// </summary>
+    private void prepare(IReadOnlyList<TModel> items, int index)
+    {
+        if (index < 0 || index >= items.Count || find(index, items[index]) != null)
+            return;
+
+        var face = new LiveFace(take(items[index]), index) { Role = FaceRole.Ready };
+        face.Set(0, 0);
+        live.Add(face);
+    }
+
+    private LiveFace? find(int index, TModel model)
+    {
+        foreach (var f in live)
+        {
+            if (f.Index == index && ReferenceEquals(f.Face.Model, model))
+                return f;
+        }
+
+        return null;
     }
 
     private void onNewBeat(int beat, double beatLength, ChannelAmplitudes amplitudes)
@@ -381,8 +532,8 @@ public abstract partial class CarouselFocusWindow<TModel> : Container
                 fadeFill(color, fill_fade_duration);
         }
 
-        foreach (var (_, face) in live)
-            face.RefreshColors();
+        foreach (var f in live)
+            f.Face.RefreshColors();
     }
 
     private void fadeFill(Color color, double duration)
@@ -391,31 +542,29 @@ public abstract partial class CarouselFocusWindow<TModel> : Container
         fillColor = color;
     }
 
-    private void place(IReadOnlyList<TModel> items, int index, float offset, float alpha)
+    /// <summary>
+    /// A face for <paramref name="model"/>: a spare one that last showed it if there is one (its cover is
+    /// still held, so it's back at once), or else any spare one, or else a new one.
+    /// </summary>
+    private CarouselFocusFace<TModel> take(TModel model)
     {
-        if (index < 0 || index >= items.Count || alpha <= 0.001f)
-            return;
+        int at = spare.FindIndex(f => ReferenceEquals(f.Model, model));
 
-        var face = faceFor(index, items[index]);
-        face.Position = orientation == CarouselOrientation.Vertical ? new Vector2(0f, offset) : new Vector2(offset, 0f);
-        face.Alpha = alpha;
-        face.SetSkim(Motion?.Skim ?? 0);
-        stillShown.Add((index, face));
-    }
+        if (at < 0)
+            at = spare.Count - 1;
 
-    private CarouselFocusFace<TModel> faceFor(int index, TModel model)
-    {
-        foreach (var (i, face) in live)
+        CarouselFocusFace<TModel> face;
+
+        if (at >= 0)
         {
-            if (i == index && ReferenceEquals(face.Model, model))
-                return face;
+            face = spare[at];
+            spare.RemoveAt(at);
         }
+        else
+            face = createFace();
 
-        var fresh = spare.Count > 0 ? spare.Pop() : createFace();
-        fresh.Apply(model);
-        fresh.Alpha = 1;
-        live.Add((index, fresh));
-        return fresh;
+        face.Apply(model);
+        return face;
     }
 
     private CarouselFocusFace<TModel> createFace()
@@ -423,22 +572,104 @@ public abstract partial class CarouselFocusWindow<TModel> : Container
         var face = CreateFace();
         face.SetOrientation(orientation);
         face.SetPhone(phone);
+        face.Alpha = 0;
         faceLayer.Add(face);
         return face;
     }
 
-    private void releaseAllBut(List<(int Index, CarouselFocusFace<TModel> Face)> keep)
+    private void release(int liveIndex)
     {
-        for (int i = live.Count - 1; i >= 0; i--)
-        {
-            if (keep.Contains(live[i]))
-                continue;
+        var f = live[liveIndex];
 
-            live[i].Face.Alpha = 0;
-            spare.Push(live[i].Face);
-            live.RemoveAt(i);
-        }
+        if (f == shown)
+            shown = null;
+
+        f.Face.Alpha = 0;
+        spare.Add(f.Face);
+        live.RemoveAt(liveIndex);
     }
 
-    private static float smoothStep(float x) => x * x * (3f - 2f * x);
+    private enum FaceRole
+    {
+        /// <summary>
+        /// The item at the scroll position, on show or on its way in.
+        /// </summary>
+        Shown,
+
+        /// <summary>
+        /// On its way out.
+        /// </summary>
+        Leaving,
+
+        /// <summary>
+        /// Next door to the one shown, out of sight, ready to come in.
+        /// </summary>
+        Ready
+    }
+
+    /// <summary>
+    /// A face in use, with where it is along the scroll axis (px) and how opaque, eased between the two.
+    /// </summary>
+    private sealed class LiveFace
+    {
+        public readonly CarouselFocusFace<TModel> Face;
+        public readonly int Index;
+        public FaceRole Role;
+
+        public float Offset { get; private set; }
+        public float Alpha { get; private set; }
+        public bool Moving { get; private set; }
+
+        private float offsetFrom, offsetTo, alphaFrom, alphaTo;
+        private double start, duration;
+        private Easing easing;
+
+        public LiveFace(CarouselFocusFace<TModel> face, int index)
+        {
+            Face = face;
+            Index = index;
+        }
+
+        public void Set(float offset, float alpha)
+        {
+            Offset = offset;
+            Alpha = alpha;
+            Moving = false;
+        }
+
+        /// <summary>
+        /// Eases from where the face is to <paramref name="offset"/> and <paramref name="alpha"/>, starting
+        /// at <paramref name="at"/> (it holds still until then).
+        /// </summary>
+        public void MoveTo(float offset, float alpha, double at, double length, Easing easing)
+        {
+            offsetFrom = Offset;
+            alphaFrom = Alpha;
+            offsetTo = offset;
+            alphaTo = alpha;
+            start = at;
+            duration = Math.Max(1, length);
+            this.easing = easing;
+            Moving = true;
+        }
+
+        public void Step(double now)
+        {
+            if (!Moving)
+                return;
+
+            double p = Math.Clamp((now - start) / duration, 0, 1);
+
+            if (p >= 1)
+            {
+                Set(offsetTo, alphaTo);
+                return;
+            }
+
+            float e = (float)EasingFunctions.Apply(easing, p);
+
+            Offset = offsetFrom + (offsetTo - offsetFrom) * e;
+            Alpha = alphaFrom + (alphaTo - alphaFrom) * e;
+        }
+    }
 }

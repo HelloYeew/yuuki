@@ -19,7 +19,7 @@ public enum YuukiSetting
     UseUnicodeInfo,
 
     /// <summary>
-    /// Whether to play the bundled Yuuki theme on the menu.
+    /// Whether to play the bundled yuuki. theme on the menu.
     /// </summary>
     UseYuukiTheme,
 
@@ -153,5 +153,18 @@ public enum YuukiSetting
     /// it moves what's seen without moving the judging, which <see cref="AudioOffset"/> sets. Notes reaching the line
     /// after the music says they should means it should go up; before, down. The calibration screen sets both.
     /// </summary>
-    VisualOffset
+    VisualOffset,
+
+    /// <summary>
+    /// The keys that lower and raise the song's own offset during play (<see cref="OffsetManager.SetSongOffset"/>),
+    /// 5 ms a press, 1 ms with Alt. Never a lane key.
+    /// </summary>
+    SongOffsetDownKey,
+    SongOffsetUpKey,
+
+    /// <summary>
+    /// Whether the device's motor taps for each note hit during a song, firmer the better the hit, and buzzes for a
+    /// full combo or a fail. Offered only where there's a motor (<c>IPlatformHaptics.IsSupported</c>).
+    /// </summary>
+    Haptics
 }

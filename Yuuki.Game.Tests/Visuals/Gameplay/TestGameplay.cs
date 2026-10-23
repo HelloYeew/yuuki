@@ -469,22 +469,16 @@ public partial class TestGameplay : YuukiManualInputManagerTestScene
     }
 
     [Test]
-    public void TestLaneChangingHoldIsFollowedOnTheKeyboard()
+    public void TestLaneChangingHoldIsANormalHoldOnTheKeyboard()
     {
-        // Lane 1 to lane 3: D at the head, then J (lane 3's key) by the end, letting go of D.
+        // Lane 1 to lane 3: D at the head, held to the end and let go of there, wherever it's drifted.
         AddStep("build drifting hold", () => buildChart(4,
             new BeatmapNote { Lane = NoteLane.Lane1, EndLane = NoteLane.Lane3, Type = NoteType.Hold, StartTime = 1000, EndTime = 1500 }));
         AddStep("start", () => gameplay.Restart());
         AddStep("seek to the head", () => gameplay.GameplayClock.Seek(1000));
         AddStep("press the start lane", () => InputManager.PressKey(Key.D));
-        AddStep("seek near the end", () => gameplay.GameplayClock.Seek(1400));
-        AddStep("follow onto the end lane", () =>
-        {
-            InputManager.PressKey(Key.J);
-            InputManager.ReleaseKey(Key.D);
-        });
         AddStep("seek to the end", () => gameplay.GameplayClock.Seek(1490));
-        AddStep("let go from the end lane", () => InputManager.ReleaseKey(Key.J));
+        AddStep("let go of the same key", () => InputManager.ReleaseKey(Key.D));
         AddAssert("press and release judged, no miss", () => gameplay.BuildResult().TotalNotes == 2 && gameplay.BuildResult().MissCount == 0);
     }
 

@@ -34,6 +34,13 @@ public abstract partial class CarouselCard<TModel> : PoolableDrawable
     public abstract void Apply(TModel model, int index);
 
     /// <summary>
+    /// Whether what the card shows at a glance is in (a song's cover, say), so the carousel can bring it in
+    /// whole. The carousel only waits a moment for it before bringing the card in regardless (see
+    /// <see cref="Carousel{TModel,TCard}.RevealWait"/>).
+    /// </summary>
+    public virtual bool IsReady => true;
+
+    /// <summary>
     /// Called when the owning carousel's orientation changes (and once on attach). Subclasses reshape
     /// their internal layout here — e.g. swapping a strip tile for a rail row.
     /// </summary>

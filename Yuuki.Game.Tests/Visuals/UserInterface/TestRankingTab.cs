@@ -185,6 +185,57 @@ public partial class TestRankingTab : YuukiManualInputManagerTestScene
             float bottom = TestContent.ToLocalSpace(new Vector2(0, best.DrawRectangle.Y + best.DrawRectangle.Height)).Y;
             return bottom > 850 && bottom <= 900;
         });
+
+        // The panel tucks its left ends past the screen's edge; the best, against that edge, keeps its
+        // position in view all the same.
+        AddWaitStep("let the rows settle", 1500);
+        // Where each text starts, not its rectangle: headless, a text has no size.
+        AddAssert("every position starts on screen", () =>
+            descendants(panel).OfType<SpriteText>().Where(t => t.Text.StartsWith('#')).All(t => TestContent.ToLocalSpace(t.ScreenSpaceDrawQuad.TopLeft).X >= 0));
+    }
+
+    /// <summary>
+    /// A score's badges (a full combo, a replay) sit by the score, clear of its stats however narrow the
+    /// panels get (beside a phone's rail they're as narrow as they go).
+    /// </summary>
+    [Test]
+    public void TestBadgesKeepClearOfTheStats()
+    {
+        var played = new Beatmap { ID = 8, BeatmapSet = set, DifficultyName = "Expert", Creator = "HelloYeew" };
+
+        AddStep("a full combo with a replay", () => scores.Add(new ScoreInfo
+        {
+            BeatmapId = played.ID,
+            BeatmapSetId = set.ID,
+            Score = 967_807,
+            Accuracy = 0.9642,
+            Rank = ScoreRank.S,
+            MaxCombo = 848,
+            IsFullCombo = true,
+            ReplayId = "replay",
+            Date = DateTimeOffset.Now.AddDays(-1)
+        }));
+        AddStep("show it on panels as narrow as they go", () =>
+        {
+            TestContent.Add(panel = new BeatmapInfoPanel("Solo Play", DefaultYuukiColorProvider.GetDefaultPaletteForPart(YuukiScreenPart.Play))
+            {
+                Anchor = Anchor.TopLeft,
+                Origin = Anchor.TopLeft,
+                Position = new Vector2(-30, 48),
+                RankingMaxRight = () => TestContent.ToScreenSpace(new Vector2(300, 0)).X
+            });
+            panel.ShowBeatmap(played);
+            panel.SelectTab(BeatmapInfoPanel.InfoTab.Ranking);
+            panel.AnimateIn();
+        });
+        AddWaitStep("let the rows settle", 1500);
+        // Where the badges start, not their rectangle: headless, a text has no size. The stats' boxes do.
+        AddAssert("the badges start past the accuracy", () => rowsOf(panel).Count() == 2 && rowsOf(panel).All(row =>
+        {
+            Drawable badges = descendants(row).OfType<SpriteText>().Single(t => t.Text == "FC").Parent!;
+            Drawable accuracy = descendants(row).OfType<SpriteText>().Single(t => t.Text == "ACCURACY").Parent!;
+            return badges.ScreenSpaceDrawQuad.TopLeft.X >= accuracy.DrawRectangle.X + accuracy.DrawRectangle.Width;
+        }));
     }
 
     // Each score panel's visible part, top to bottom (the pinned best last): the parent of its "#n".

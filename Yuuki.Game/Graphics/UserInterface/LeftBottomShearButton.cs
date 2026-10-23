@@ -1,6 +1,7 @@
 // This code is part of yuuki. project. Licensed under the MIT License.
 // See the LICENSE file for full license text.
 
+using System;
 using Sakura.Framework.Allocation;
 using Sakura.Framework.Extensions.ColorExtensions;
 using Sakura.Framework.Extensions.DrawableExtensions;
@@ -33,6 +34,12 @@ public partial class LeftBottomShearButton : ShearButton
 
     protected override bool IsLocked => Locked || base.IsLocked;
 
+    // As wide as the short labels make it, and wider for a longer one, with the room they have either side.
+    private const float min_width = 240;
+    private const float label_room = 48;
+
+    private FlowContainer label = null!;
+
     public static readonly Vector2 DEFAULT_POSITION = new Vector2(-32, -16);
 
     [BackgroundDependencyLoader]
@@ -52,6 +59,8 @@ public partial class LeftBottomShearButton : ShearButton
                 Masking = true,
                 Shear = UserInterfaceConstant.Shear,
                 CornerRadius = 5,
+                // Its slanted end goes past the screen's edge, under a notch or camera cutout too.
+                Bleed = Edges.Left,
                 Child = BackgroundBox = new Box()
                 {
                     Anchor = Anchor.Centre,
@@ -60,7 +69,7 @@ public partial class LeftBottomShearButton : ShearButton
                     Color = BackgroundColor
                 }
             },
-            new FlowContainer()
+            label = new FlowContainer()
             {
                 Anchor = Anchor.Centre,
                 Origin = Anchor.Centre,
@@ -99,6 +108,13 @@ public partial class LeftBottomShearButton : ShearButton
             FlashToBeat = false;
             BackgroundBox.Alpha = 0.45f;
         }
+    }
+
+    public override void Update()
+    {
+        // Before the children update, so it's the right width the frame the label's measured.
+        Width = Math.Max(min_width, label.DrawWidth + 2 * label_room);
+        base.Update();
     }
 
     public override bool OnHover(MouseEvent e)

@@ -96,6 +96,9 @@ public partial class CalibrationScreen : YuukiScreen, IHaveScreenAction
     private YuukiConfigManager? config { get; set; }
 
     [Resolved(canBeNull: true)]
+    private OffsetManager? offsets { get; set; }
+
+    [Resolved(canBeNull: true)]
     private SettingsOverlay? settings { get; set; }
 
     private YuukiColorPalette palette;
@@ -148,7 +151,11 @@ public partial class CalibrationScreen : YuukiScreen, IHaveScreenAction
     private void load()
     {
         ScreenName.Value = "Calibrate";
-        ScreenHelperText.Value = "Tap along to work out your offsets.";
+
+        // What it's for: each audio device and display keeps the offsets worked out on it.
+        ScreenHelperText.Value = offsets is { PerDevice: true }
+            ? $"Tap along to work out the offsets for {OffsetManager.AudioDeviceLabel(offsets.AudioDevice)} and {OffsetManager.DisplayLabel(offsets.Display)}."
+            : "Tap along to work out your offsets.";
 
         palette = Palette;
 
@@ -190,17 +197,18 @@ public partial class CalibrationScreen : YuukiScreen, IHaveScreenAction
                             stepText = new SpriteText
                             {
                                 Font = YuukiFontUsage.GetFontUsage(Typeface.Quicksand, 18, FontWeight.Bold),
-                                Color = palette.Accent
+                                // The dark roles: the light ones are the card's own color.
+                                Color = palette.Control
                             },
                             instructionText = new SpriteText
                             {
                                 Font = YuukiFontUsage.GetFontUsage(Typeface.Quicksand, 26, FontWeight.Bold),
-                                Color = palette.TextLight
+                                Color = palette.Text
                             },
                             progressText = new SpriteText
                             {
                                 Font = YuukiFontUsage.GetFontUsage(Typeface.Quicksand, 20, FontWeight.Medium),
-                                Color = palette.TextMuted
+                                Color = palette.Text
                             },
                             startOverButton = new PillButton(palette.Control, palette.TextLight)
                             {
@@ -296,7 +304,8 @@ public partial class CalibrationScreen : YuukiScreen, IHaveScreenAction
 
     private void onInput(ReplayInput input)
     {
-        if (input.Kind != ReplayInputKind.LanePress || measuring == null)
+        // A tap, by key or by finger.
+        if (input.Kind is not (ReplayInputKind.LanePress or ReplayInputKind.TouchDown) || measuring == null)
             return;
 
         measuring.Add(input.Time);

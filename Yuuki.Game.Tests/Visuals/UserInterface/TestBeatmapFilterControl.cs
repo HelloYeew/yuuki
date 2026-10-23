@@ -1,6 +1,7 @@
 // This code is part of yuuki. project. Licensed under the MIT License.
 // See the LICENSE file for full license text.
 
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using NUnit.Framework;
@@ -134,6 +135,106 @@ public partial class TestBeatmapFilterControl : YuukiManualInputManagerTestScene
         AddStep("a lane picked", () => clickOn(control("7K")));
         AddStep("37 of them pass", () => filters.SetCounts(37, 360));
         AddAssert("37 of 360", () => countText() == "37 of 360");
+    }
+
+    /// <summary>
+    /// On a phone the header is just the search bar; its button opens a sheet with the filters, at sizes for
+    /// a thumb, and shows a dot while any of them is on.
+    /// </summary>
+    [Test]
+    public void TestPhoneBarAndSheet()
+    {
+        AddStep("as a phone", () =>
+        {
+            filters.SetPhone(true);
+            filters.SetLayout(CarouselOrientation.Vertical, 640);
+        });
+        AddUntilStep("a bar", () => filters.DrawSize.Y == BeatmapFilterControl.PHONE_BAR_HEIGHT);
+        AddAssert("the sheet's closed", () => !filters.SheetOpen);
+        AddAssert("nothing filtered, no dot", () => !filters.FilterDotShown);
+
+        AddStep("tap the filter button", () => clickOn(filters.FilterButton));
+        AddUntilStep("the sheet's open", () => filters.SheetOpen && descendants(filters).OfType<Container>().Any(c => c.Y == BeatmapFilterControl.PHONE_BAR_HEIGHT && c.Alpha > 0.99f));
+
+        AddStep("pick 7K in the sheet", () => clickOn(control("7K")));
+        AddAssert("only 7K", () => filters.Filter.Lanes.SetEquals(new[] { 7 }));
+        AddAssert("the button says a filter is on", () => filters.FilterDotShown);
+
+        AddStep("tap the button again", () => clickOn(filters.FilterButton));
+        AddAssert("the sheet's closed", () => !filters.SheetOpen);
+
+        AddStep("back to the desktop", () => filters.SetPhone(false));
+        AddUntilStep("the full header again", () => filters.DrawSize.Y == BeatmapFilterControl.HEIGHT);
+        AddAssert("the lanes are still picked", () => filters.Filter.Lanes.SetEquals(new[] { 7 }));
+        AddAssert("the chips and sort words are back on the header's last row", () =>
+        {
+            var header = filters.DrawRectangle;
+            var chip = control("7K").DrawRectangle;
+            var sort = control("title").DrawRectangle;
+
+            return chip.Y + chip.Height <= header.Y + header.Height + 1
+                   && sort.Y + sort.Height <= header.Y + header.Height + 1
+                   && Math.Abs(chip.Y + chip.Height / 2 - (sort.Y + sort.Height / 2)) < 2;
+        });
+    }
+
+    /// <summary>
+    /// By touch the phone's bar has a random button (the footer, which offers it on a keyboard, shows no
+    /// actions there); not on the desktop's header.
+    /// </summary>
+    [Test]
+    public void TestRandomButtonByTouch()
+    {
+        int randoms = 0;
+
+        AddStep("a desktop header, asked for random", () =>
+        {
+            filters.RandomRequested = () => randoms++;
+            filters.ShowRandom(true);
+        });
+        AddAssert("no random button", () => filters.RandomButton == null);
+
+        AddStep("as a phone", () =>
+        {
+            filters.SetPhone(true);
+            filters.SetLayout(CarouselOrientation.Vertical, 640);
+        });
+        AddUntilStep("a random button", () => filters.RandomButton != null);
+        AddStep("tap it", () => clickOn(filters.RandomButton!));
+        AddAssert("random asked for", () => randoms == 1);
+
+        AddStep("not by touch", () => filters.ShowRandom(false));
+        AddAssert("gone", () => filters.RandomButton == null);
+        AddStep("back to the desktop", () => filters.SetPhone(false));
+    }
+
+    /// <summary>
+    /// Escape in the search with something typed clears it as it leaves the box; with nothing typed it
+    /// just leaves.
+    /// </summary>
+    [Test]
+    public void TestEscapeClearsTheSearch()
+    {
+        AddStep("type a search", () =>
+        {
+            filters.FocusSearch();
+            filters.SetSearch("song");
+        });
+        AddAssert("in the box", () => filters.IsSearchFocused);
+        AddStep("escape", () =>
+        {
+            InputManager.PressKey(Key.Escape);
+            InputManager.ReleaseKey(Key.Escape);
+        });
+        AddAssert("cleared and out of the box", () => filters.SearchText.Length == 0 && !filters.IsSearchFocused);
+
+        AddStep("back in, nothing typed", () => filters.FocusSearch());
+        AddStep("escape", () =>
+        {
+            InputManager.PressKey(Key.Escape);
+            InputManager.ReleaseKey(Key.Escape);
+        });
+        AddAssert("just out of the box", () => !filters.IsSearchFocused);
     }
 
     private (int, int) range() => (filters.Filter.MinLevel, filters.Filter.MaxLevel);

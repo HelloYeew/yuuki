@@ -96,6 +96,8 @@ public partial class PlayScreen : YuukiScreen, IHaveScreenAction
                     Masking = true,
                     Shear = UserInterfaceConstant.Shear,
                     CornerRadius = 5,
+                    // Its slanted end goes past the screen's edge, under a notch or camera cutout too.
+                    Bleed = Edges.Left,
                     Child = new Box()
                     {
                         Anchor = Anchor.Centre,
@@ -123,6 +125,8 @@ public partial class PlayScreen : YuukiScreen, IHaveScreenAction
             Position = new Vector2(2000, -98),
             Size = new Vector2(1, 150),
             Alpha = 0,
+            // Edge to edge, under a notch or a camera cutout too.
+            Bleed = Edges.Horizontal,
             Color = ColorExtensions.FromHex("#DFCFBC")
         });
 

@@ -67,16 +67,20 @@ public partial class YuukiScreen : Screen
     /// </summary>
     public virtual bool InterceptGameExit(Action resume) => false;
 
-    // For a screen that doesn't scale with the UI: its own 1920×1080 canvas, which undoes the UI scale.
-    private readonly Container? fixedCanvas;
+    // For a screen that doesn't scale with the UI: its own canvas, which undoes the UI scale. 1920×1080, zoomed in
+    // as the menus are in a phone's window (see GameLayout.GameplayCanvas).
+    private readonly DrawSizePreservingFillContainer? fixedCanvas;
 
-    protected override Container Content => fixedCanvas ?? this;
+    protected override Container Content => (Container?)fixedCanvas ?? this;
 
     public YuukiScreen()
     {
         if (!ScalesWithUI)
             AddInternal(fixedCanvas = new DrawSizePreservingFillContainer { RelativeSizeAxes = Axes.Both });
     }
+
+    [Resolved(canBeNull: true)]
+    private GameLayout? gameLayout { get; set; }
 
     /// <summary>
     /// This screen's colors, from <see cref="ScreenPart"/>. Everything on the screen gets them too, as a
@@ -90,6 +94,9 @@ public partial class YuukiScreen : Screen
         // The base loads before the screen itself, so this is cached before anything on the screen loads.
         Palette = colorProvider?.GetPalette(ScreenPart) ?? DefaultYuukiColorProvider.GetDefaultPaletteForPart(ScreenPart);
         Cache(new ScreenPalette(ScreenPart, Palette));
+
+        if (fixedCanvas != null && gameLayout != null)
+            BindValueChanged(gameLayout.PhoneWindow, _ => fixedCanvas.TargetDrawSize = gameLayout.GameplayCanvas, true);
     }
 
     protected override void LoadComplete()

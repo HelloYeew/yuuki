@@ -122,7 +122,7 @@ public partial class TestEditorMenuInput : YuukiManualInputManagerTestScene
         AddAssert("and hangs below the compose area", () =>
         {
             var drum = menu.Submenu!.DrawableItems[2];
-            return drum.ToScreenSpace(drum.DrawSize / 2).Y > editor.Compose.ToScreenSpace(new Vector2(0, editor.Compose.DrawHeight)).Y;
+            return drum.ToScreenSpace(drum.DrawSize / 2).Y > editor.Compose.ScreenSpaceDrawQuad.BottomLeft.Y;
         });
         AddStep("pick Drum", () =>
         {

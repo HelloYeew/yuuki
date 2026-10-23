@@ -7,7 +7,7 @@
   <ItemGroup Label="Package References">
     <!-- TODO: Remove when not needed anymore. -->
     <PackageReference Include="OsuParsers" Version="1.7.2" />
-    <PackageReference Include="Sakura.Framework" Version="2026.1019.0" />
+    <PackageReference Include="Sakura.Framework" Version="2026.1024.0" />
     <PackageReference Include="z440.atl.core" Version="7.18.0" />
   </ItemGroup>
   <ItemGroup Label="Project References">

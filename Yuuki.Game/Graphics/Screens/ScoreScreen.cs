@@ -2,6 +2,7 @@
 // See the LICENSE file for full license text.
 
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System;
 using Sakura.Framework.Allocation;
@@ -67,8 +68,22 @@ public partial class ScoreScreen : YuukiScreen, IHaveScreenAction
     // Set once the screen starts leaving, so the delayed music start can tell not to.
     private bool exiting;
 
-    /// <summary>Suggestions closer than this to the offset already in use aren't worth offering.</summary>
-    private const int minimum_offset_change = 3;
+    /// <summary>
+    /// A mean error past this is more likely a new delay (other headphones, another screen) than the player's own lean,
+    /// so calibrating is offered too: only that puts the notes back in time with the music.
+    /// </summary>
+    private const double calibrate_error_ms = 40;
+
+    /// <summary>
+    /// Criticals a run's lean cost before it's worth saying so, and pointing to how the offsets fix it.
+    /// </summary>
+    private const int criticals_worth_mentioning = 3;
+
+    /// <summary>
+    /// How far a run has to lean, in ms, before what it cost is worth pointing out. A smaller lean comes and goes from
+    /// play to play with the song and the player, and over a long song still costs a few Criticals at the window's edge.
+    /// </summary>
+    private const double lean_worth_mentioning = 15;
 
     public IReadOnlyList<ScreenAction> ScreenActions { get; }
 
@@ -88,6 +103,12 @@ public partial class ScoreScreen : YuukiScreen, IHaveScreenAction
 
     [Resolved(canBeNull: true)]
     private YuukiAudioManager? audioManager { get; set; }
+
+    [Resolved(canBeNull: true)]
+    private OffsetManager? offsets { get; set; }
+
+    [Resolved(canBeNull: true)]
+    private ScoreStore? scoreStore { get; set; }
 
     private readonly GameplayResult result;
 
@@ -269,7 +290,7 @@ public partial class ScoreScreen : YuukiScreen, IHaveScreenAction
     private void load([CanBeNull] IYuukiColorProvider? colorProvider)
     {
         ScreenName.Value = "Results";
-        ScreenHelperText.Value = savedScore != null ? $"Played {savedScore.Date.LocalDateTime:d MMM yyyy, HH:mm}"
+        ScreenHelperText.Value = savedScore != null ? string.Create(CultureInfo.InvariantCulture, $"Played {savedScore.Date.LocalDateTime:d MMM yyyy, HH:mm}")
             : result.IsAllPerfect ? "All Perfect!"
             : result.IsFullCombo ? "Full Combo!"
             : "Nice play!";
@@ -283,6 +304,7 @@ public partial class ScoreScreen : YuukiScreen, IHaveScreenAction
             dim = new Box
             {
                 RelativeSizeAxes = Axes.Both,
+                Bleed = Edges.All,
                 Color = palette.Backdrop,
                 Alpha = 0
             },
@@ -577,9 +599,56 @@ public partial class ScoreScreen : YuukiScreen, IHaveScreenAction
     };
 
     /// <summary>
-    /// Offers to correct the audio offset from this run's mean error
+    /// Offers to centre this run's taps by moving the judging (<see cref="GameplayResult.SuggestedOffsets"/>), and for a
+    /// large error, to calibrate. Where a lean past <see cref="lean_worth_mentioning"/> cost Criticals, says how many, and
+    /// offers the guide to the offsets.
     /// </summary>
     private Drawable createOffsetSuggestion()
+    {
+        Drawable suggestion = createOffsetButtons();
+
+        int lost = viewing || config == null || Math.Abs(result.MeanError ?? 0) < lean_worth_mentioning ? 0 : result.CriticalsLostToLean;
+
+        if (lost < criticals_worth_mentioning)
+            return suggestion;
+
+        return new FlowContainer
+        {
+            AutoSizeAxes = Axes.Both,
+            Direction = FlowDirection.Vertical,
+            Spacing = new Vector2(0, 10),
+            Children = new[]
+            {
+                suggestion,
+                new FlowContainer
+                {
+                    AutoSizeAxes = Axes.Both,
+                    Direction = FlowDirection.Horizontal,
+                    Spacing = new Vector2(16, 0),
+                    Children = new Drawable[]
+                    {
+                        new SpriteText
+                        {
+                            Anchor = Anchor.CentreLeft,
+                            Origin = Anchor.CentreLeft,
+                            Text = $"On time on average, {lost} more would have been Critical. A lean this big every play is your device's delay, not you.",
+                            Font = YuukiFontUsage.GetFontUsage(Typeface.Nunito, 16, FontWeight.Regular),
+                            Color = palette.Text
+                        },
+                        new PillButton(palette.Control, palette.TextLight)
+                        {
+                            Anchor = Anchor.CentreLeft,
+                            Origin = Anchor.CentreLeft,
+                            Text = "How offsets work",
+                            Action = openOffsetGuide
+                        }
+                    }
+                }
+            }
+        };
+    }
+
+    private Drawable createOffsetButtons()
     {
         var row = new FlowContainer
         {
@@ -588,46 +657,134 @@ public partial class ScoreScreen : YuukiScreen, IHaveScreenAction
             Spacing = new Vector2(16, 0)
         };
 
-        // A saved score's offset is history; only the play just finished is worth calibrating from.
-        if (viewing || config == null || result.SuggestedOffset is not double suggested || result.MeanError is not double mean)
+        // A saved score's offsets are history; only the play just finished is worth calibrating from.
+        if (viewing || config == null || result.SuggestedOffsets == null || result.MeanError is not double mean)
             return row;
 
-        int target = (int)Math.Clamp(suggested, YuukiConfigManager.MIN_AUDIO_OFFSET, YuukiConfigManager.MAX_AUDIO_OFFSET);
-        if (Math.Abs(target - result.AudioOffset) < minimum_offset_change)
+        OffsetSuggestion suggestion = suggestOffset(mean);
+        bool offerCalibration = Math.Abs(mean) > calibrate_error_ms;
+
+        if (suggestion.Kind == OffsetSuggestionKind.None && !offerCalibration)
             return row;
 
-        var offset = config.Get<int>(YuukiSetting.AudioOffset);
+        PillButton? apply = null;
+        int lean = suggestion.Lean;
 
-        PillButton apply = null!;
-
-        row.Children = new Drawable[]
+        row.Add(new SpriteText
         {
-            new SpriteText
+            Anchor = Anchor.CentreLeft,
+            Origin = Anchor.CentreLeft,
+            Text = suggestion switch
             {
-                Anchor = Anchor.CentreLeft,
-                Origin = Anchor.CentreLeft,
-                Text = $"You hit {Math.Abs(mean):0} ms {(mean > 0 ? "late" : "early")} on average.",
-                Font = YuukiFontUsage.GetFontUsage(Typeface.Nunito, 16, FontWeight.Regular),
-                Color = palette.Text
+                { Kind: OffsetSuggestionKind.Song, Plays: 1 } => $"You hit this song {describeLean(lean)} compared with your other songs.",
+                { Kind: OffsetSuggestionKind.Song } => $"Over {suggestion.Plays} plays you hit this song {describeLean(lean)} compared with your other songs.",
+                { Kind: OffsetSuggestionKind.Timing, Plays: > 1 } => $"Over your last {suggestion.Plays} plays you hit {describeLean(lean)}.",
+                _ => $"You hit {describeLean(mean)}."
             },
-            apply = new PillButton(palette.Control, palette.TextLight)
+            Font = YuukiFontUsage.GetFontUsage(Typeface.Nunito, 16, FontWeight.Regular),
+            Color = palette.Text
+        });
+
+        if (suggestion.Kind == OffsetSuggestionKind.Timing)
+        {
+            row.Add(apply = new PillButton(palette.Control, palette.TextLight)
             {
                 Anchor = Anchor.CentreLeft,
                 Origin = Anchor.CentreLeft,
-                Text = $"Set audio offset to {formatOffset(target)}",
+                Text = $"Shift timing {Math.Abs(lean)} ms {(lean > 0 ? "later" : "earlier")} · every device",
                 Action = () =>
                 {
-                    offset.Value = target;
-                    apply.Text = $"Audio offset set to {formatOffset(target)}";
+                    shiftTiming(lean);
+                    apply!.Text = $"Audio {formatOffset(config.Get<int>(YuukiSetting.AudioOffset).Value)} · Visual {formatOffset(config.Get<int>(YuukiSetting.VisualOffset).Value)}";
                     apply.Enabled.Value = false;
                 }
-            }
-        };
+            });
+        }
+        else if (suggestion.Kind == OffsetSuggestionKind.Song && offsets != null && savedScore != null)
+        {
+            int beatmapId = savedScore.BeatmapId;
+            string? difficulty = workingBeatmap?.Beatmap is { ID: var id } beatmap && id == beatmapId ? beatmap.DifficultyName : null;
+
+            // A song hit late has its notes early against the music: lowering its offset moves them later.
+            row.Add(apply = new PillButton(palette.Control, palette.TextLight)
+            {
+                Anchor = Anchor.CentreLeft,
+                Origin = Anchor.CentreLeft,
+                Text = $"Fix this song: notes {Math.Abs(lean)} ms {(lean > 0 ? "later" : "earlier")} · "
+                       + (string.IsNullOrEmpty(difficulty) ? "this difficulty only" : $"{difficulty} only"),
+                Action = () =>
+                {
+                    offsets.SetSongOffset(beatmapId, offsets.GetSongOffset(beatmapId) - lean);
+                    apply!.Text = $"Song offset {formatOffset(offsets.GetSongOffset(beatmapId))}";
+                    apply.Enabled.Value = false;
+                }
+            });
+        }
+
+        if (offerCalibration)
+        {
+            row.Add(new PillButton(palette.Control, palette.TextLight)
+            {
+                Anchor = Anchor.CentreLeft,
+                Origin = Anchor.CentreLeft,
+                Text = "Calibrate",
+                Action = () =>
+                {
+                    // Calibrating sets both offsets afresh, and this run's figures were taken against the old ones.
+                    if (apply != null)
+                        apply.Enabled.Value = false;
+
+                    calibrate();
+                }
+            });
+        }
 
         return row;
     }
 
     private static string formatOffset(int ms) => ms > 0 ? $"+{ms} ms" : $"{ms} ms";
+
+    private static string describeLean(double ms) => $"{Math.Abs(ms):0} ms {(ms > 0 ? "late" : "early")} on average";
+
+    /// <summary>
+    /// What this play says against the plays before it (<see cref="TimingHistory"/>). Without the score history, or
+    /// for a play that wasn't saved, it's this play alone.
+    /// </summary>
+    private OffsetSuggestion suggestOffset(double mean)
+    {
+        // Without the devices' offsets there's only this play, taken as it was played.
+        var history = new TimingHistory(device => offsets?.AudioOffsetFor(device) ?? (int)Math.Round(result.AudioOffset),
+            id => offsets?.GetSongOffset(id) ?? (int)Math.Round(result.SongOffset));
+
+        ScoreInfo play = savedScore ?? new ScoreInfo
+        {
+            MeanError = mean,
+            AudioOffset = (int)Math.Round(result.AudioOffset),
+            VisualOffset = (int)Math.Round(result.VisualOffset),
+            SongOffset = (int)Math.Round(result.SongOffset),
+            AudioDevice = offsets?.AudioDevice
+        };
+
+        IEnumerable<ScoreInfo> earlier = savedScore != null && scoreStore != null ? scoreStore.Scores : Array.Empty<ScoreInfo>();
+        return history.Suggest(play, earlier);
+    }
+
+    /// <summary>
+    /// Moves the judging <paramref name="shift"/> ms later on every device, the notes kept where they're seen.
+    /// </summary>
+    private void shiftTiming(int shift)
+    {
+        if (offsets != null)
+        {
+            offsets.ShiftTiming(shift);
+            return;
+        }
+
+        // Without the devices' offsets, the settings' own, from the run's.
+        (int audio, int visual) = result.OffsetsShiftedBy(shift);
+        config!.Get<int>(YuukiSetting.AudioOffset).Value = audio;
+        config.Get<int>(YuukiSetting.VisualOffset).Value = visual;
+    }
 
     /// <summary>
     /// Hits per note type, e.g. "Tap 120/124 · Hold 30/32 · Release 27/32", for the types the chart
@@ -943,6 +1100,29 @@ public partial class ScoreScreen : YuukiScreen, IHaveScreenAction
     {
         backButton.Flash(Color.White);
         Exit();
+    }
+
+    private void openOffsetGuide()
+    {
+        if (screenStack == null)
+            return;
+
+        // Coming back, the results music starts again, as from calibrating, which the guide leads to.
+        audioManager?.EndResultsMusic();
+        screenStack.Push(new OffsetGuideScreen());
+    }
+
+    private void calibrate()
+    {
+        if (screenStack == null)
+            return;
+
+        // The clicks are all there is to hear: the song playing out, or the results music, would be heard over them.
+        // Coming back, the results music starts again.
+        audioManager?.EndResultsMusic();
+        audioManager?.GameplayChannel?.Stop();
+
+        screenStack.Push(new CalibrationScreen());
     }
 
     private void retry()

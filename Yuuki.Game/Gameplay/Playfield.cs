@@ -15,6 +15,7 @@ using Sakura.Framework.Graphics.Rendering;
 using Sakura.Framework.Graphics.Transforms;
 using Sakura.Framework.Input;
 using Sakura.Framework.Maths;
+using Sakura.Framework.Platform;
 using Sakura.Framework.Timing;
 using Yuuki.Game.Beatmaps;
 using Yuuki.Game.Gameplay.Replays;
@@ -59,18 +60,31 @@ public partial class Playfield : Container
     /// </summary>
     public bool AllowJudgement { get; set; } = true;
 
-    // What the notes are drawn on: the field's own clock, VisualOffset along.
+    // What the notes are drawn on: the field's own clock, as far along as they're drawn (drawnAhead).
     private readonly OffsetClock displayClock;
 
     /// <summary>
     /// How far along the notes are drawn from the time they're judged at, in ms: the player's visual offset. Positive
     /// draws them further along, for a screen that shows them late. Taps are judged where they were.
     /// </summary>
-    public double VisualOffset
-    {
-        get => displayClock.Offset;
-        set => displayClock.Offset = value;
-    }
+    /// <remarks>
+    /// On top of <see cref="DisplayLatency"/>, which the renderer measures, so this is only what that can't see: the
+    /// panel's response, and the tap's own delay.
+    /// </remarks>
+    public double VisualOffset { get; set; }
+
+    /// <summary>
+    /// How long the screen takes to show a frame from its update, in ms, which the notes are drawn further along by
+    /// too: as the renderer measures it (<see cref="IRenderer.DisplayLatencyMilliseconds"/>), read each frame, or 0
+    /// where it can't. Set, it's taken as given instead (tests).
+    /// </summary>
+    public double? DisplayLatency { get; set; }
+
+    [Resolved(canBeNull: true)]
+    private AppHost? host { get; set; }
+
+    // How far along the notes are drawn this frame: the visual offset and the screen's measured delay together.
+    private double drawnAhead => displayClock.Offset;
 
     private readonly HitWindows hitWindows = new HitWindows();
 
@@ -139,8 +153,10 @@ public partial class Playfield : Container
 
     // Hold state: a hold is judged twice, at the press (head) and at the release
     // (tail). Transient play state, gated by AllowJudgement like the rest of judging.
-    // Per lane: the index of the hold currently held there, or −1 for none.
-    private readonly int[] activeHoldByLane;
+    // By slot, what holds a hold: a lane's key (slots 0 to laneCount - 1) or a finger (laneCount plus the
+    // finger). The index of the hold it's holding, or −1. A hold is held by one at a time: the key or the
+    // finger that took it, so two holds crossing each other's lanes (an X) never get mixed up.
+    private readonly int[] holdBySlot;
 
     // Per note: the hold's head has been judged (hit or missed) and only its tail is left.
     private readonly bool[] holdHeadJudged;
@@ -164,8 +180,9 @@ public partial class Playfield : Container
     // Lanes pressed since the last frame — a tap shorter than a frame still counts for Touch notes.
     private readonly bool[] laneTapped;
 
-    // By finger (TouchSource): the lane it's in (-1 when it isn't on the lanes), and where (screen space) and
-    // when (input time) the stroke it's making started, for telling a flick.
+    // By finger (TouchSource): whether it's down on the lanes, the lane it's in (or was last), and where
+    // (screen space) and when (input time) the stroke it's making started, for telling a flick.
+    private readonly bool[] fingerDown = new bool[InputState.MAX_TOUCHES];
     private readonly int[] fingerLane = new int[InputState.MAX_TOUCHES];
     private readonly Vector2[] strokeStart = new Vector2[InputState.MAX_TOUCHES];
     private readonly double[] strokeStartTime = new double[InputState.MAX_TOUCHES];
@@ -310,6 +327,9 @@ public partial class Playfield : Container
 
     private Vector2 lastSize;
 
+    // Whether it's played by touch, which lays the highway out a little higher.
+    private bool touch;
+
     public Playfield(PlayableBeatmap chart, HitSoundPlayer? hitSounds = null)
     {
         displayClock = new OffsetClock(() => Clock);
@@ -317,8 +337,8 @@ public partial class Playfield : Container
         this.hitSounds = hitSounds;
         laneCount = Math.Max(1, chart.LaneCount);
         receptors = new Drawable[laneCount];
-        activeHoldByLane = new int[laneCount];
-        Array.Fill(activeHoldByLane, -1);
+        holdBySlot = new int[laneCount + InputState.MAX_TOUCHES];
+        Array.Fill(holdBySlot, -1);
         holdHeadJudged = new bool[chart.Notes.Length];
         holdBroken = new bool[chart.Notes.Length];
         lastSlideTick = new int[chart.Notes.Length];
@@ -353,9 +373,19 @@ public partial class Playfield : Container
     }
 
     [BackgroundDependencyLoader]
-    private void load([CanBeNull] IYuukiColorProvider? colorProvider, [CanBeNull] ScreenPalette? screenPalette)
+    private void load([CanBeNull] IYuukiColorProvider? colorProvider, [CanBeNull] ScreenPalette? screenPalette, [CanBeNull] GameLayout? gameLayout)
     {
         palette = ScreenPalette.Resolve(screenPalette, colorProvider);
+
+        // Laid out again on the next frame whenever it changes, as for a new size.
+        if (gameLayout != null)
+        {
+            BindValueChanged(gameLayout.Touch, e =>
+            {
+                touch = e.NewValue;
+                lastSize = Vector2.Zero;
+            }, true);
+        }
 
         Color[] cycle = { palette.Accent, palette.TextLight, palette.TextMuted, palette.Surface, palette.Control, palette.TextLight, palette.Accent };
         laneColors = new Color[laneCount];
@@ -393,7 +423,17 @@ public partial class Playfield : Container
             },
             judgementPopup = new JudgementPopup()
         };
+
+        // In a phone's window, as much bigger as the HUD around the field, which is zoomed in to read there (see
+        // GameLayout.GameplayCanvas) while the field keeps its size.
+        if (gameLayout != null)
+            BindValueChanged(gameLayout.PhoneWindow, e => judgementPopup.Scale = new Vector2(e.NewValue ? (float)GameLayout.PHONE_ZOOM : 1), true);
     }
+
+    /// <summary>
+    /// How big the judgement is drawn, against the field (tests).
+    /// </summary>
+    public float JudgementScale => judgementPopup.Scale.X;
 
     /// <summary>
     /// Recomputes the projection and rebuilds lane visuals for the field's current size.
@@ -405,7 +445,7 @@ public partial class Playfield : Container
         if (width <= 0 || height <= 0)
             return;
 
-        perspective.LayOut(width, height);
+        perspective.LayOut(width, height, touch);
 
         noteWidth = 2 * perspective.BottomHalfWidth / laneCount * note_lane_fill;
 
@@ -482,6 +522,7 @@ public partial class Playfield : Container
         float edgeX = edgeTop.X + (edgeBottom.X - edgeTop.X) * along;
 
         ComboPosition = new Vector2((edgeX + width) / 2, comboY);
+        ComboHighwayEdge = new Vector2(edgeX, comboY);
     }
 
     /// <summary>
@@ -495,6 +536,11 @@ public partial class Playfield : Container
     /// draws it there (<see cref="HUD.GameplayHud.ComboSpace"/>), so it follows the playfield's size and place.
     /// </summary>
     public Vector2 ComboPosition { get; private set; }
+
+    /// <summary>
+    /// The highway's right edge at the combo's height, in this playfield's space: where the combo's room begins.
+    /// </summary>
+    public Vector2 ComboHighwayEdge { get; private set; }
 
     /// <summary>
     /// Moves the character to <paramref name="lane"/>. While a hold is held the character stays
@@ -520,10 +566,10 @@ public partial class Playfield : Container
     /// </summary>
     private int anchoringHold()
     {
-        for (int lane = 0; lane < laneCount; lane++)
+        foreach (int index in holdBySlot)
         {
-            if (activeHoldByLane[lane] >= 0)
-                return activeHoldByLane[lane];
+            if (index >= 0)
+                return index;
         }
 
         return -1;
@@ -539,49 +585,56 @@ public partial class Playfield : Container
     }
 
     /// <summary>
+    /// The lanes a hold passes through, start to end, lowest first.
+    /// </summary>
+    private (int Low, int High) lanesOf(int index)
+    {
+        int start = laneIndex(chart.Notes[index].Lane);
+        int end = endLaneOf(index);
+        return (Math.Min(start, end), Math.Max(start, end));
+    }
+
+    /// <summary>
     /// Whether <paramref name="lane"/> is one of the lanes a hold passes through, start to end.
     /// </summary>
     private bool covers(int index, int lane)
     {
-        int start = laneIndex(chart.Notes[index].Lane);
-        int end = endLaneOf(index);
-        return lane >= Math.Min(start, end) && lane <= Math.Max(start, end);
+        (int low, int high) = lanesOf(index);
+        return lane >= low && lane <= high;
     }
 
     /// <summary>
-    /// The lowest lane whose key is holding the hold <paramref name="index"/>, or −1 if none is.
+    /// The slot holding the hold <paramref name="index"/>: its key's or its finger's, or −1 if nothing is.
     /// </summary>
-    private int firstLaneHolding(int index)
+    private int slotHolding(int index) => Array.IndexOf(holdBySlot, index);
+
+    private bool isActiveHold(int index) => slotHolding(index) >= 0;
+
+    private int fingerSlot(int finger) => laneCount + finger;
+
+    /// <summary>
+    /// The lane a slot is in: a key's own, or the one its finger is in (or was last in).
+    /// </summary>
+    private int laneOfSlot(int slot) => slot < laneCount ? slot : fingerLane[slot - laneCount];
+
+    /// <summary>
+    /// The slot of a finger down in <paramref name="lane"/> that isn't holding a hold, or −1.
+    /// </summary>
+    private int freeFingerIn(int lane)
     {
-        for (int lane = 0; lane < laneCount; lane++)
+        for (int finger = 0; finger < fingerDown.Length; finger++)
         {
-            if (activeHoldByLane[lane] == index)
-                return lane;
+            if (fingerDown[finger] && fingerLane[finger] == lane && holdBySlot[fingerSlot(finger)] < 0)
+                return fingerSlot(finger);
         }
 
         return -1;
     }
 
     /// <summary>
-    /// A press in a lane a held hold passes through joins it: following a lane-changing hold means
-    /// pressing the lanes it moves into (rolling across, or jumping to its end lane) before letting go
-    /// of the earlier ones. A finger sliding across lanes on a touch screen does the same.
+    /// Whether what's in a slot is still down: a key, or a finger.
     /// </summary>
-    private void joinActiveHold(int lane)
-    {
-        if (activeHoldByLane[lane] >= 0)
-            return;
-
-        for (int other = 0; other < laneCount; other++)
-        {
-            int index = activeHoldByLane[other];
-            if (index >= 0 && covers(index, lane))
-            {
-                activeHoldByLane[lane] = index;
-                return;
-            }
-        }
-    }
+    private bool slotDown(int slot) => slot < laneCount ? laneHeld[slot] : fingerDown[slot - laneCount];
 
     private LaneBeam laneBeam(int lane, Color color, float depth)
     {
@@ -635,7 +688,7 @@ public partial class Playfield : Container
         Array.Clear(holdHeadJudged, 0, holdHeadJudged.Length);
         Array.Clear(holdBroken, 0, holdBroken.Length);
 
-        Array.Fill(activeHoldByLane, -1);
+        Array.Fill(holdBySlot, -1);
         hitSounds?.StopAllSlides();
         Array.Clear(looks);
         replayIndex = 0;
@@ -664,19 +717,23 @@ public partial class Playfield : Container
         }
 
         // Cancel any hold whose head is in the reset range so it doesn't resolve against a stale press.
-        for (int lane = 0; lane < laneCount; lane++)
+        for (int slot = 0; slot < holdBySlot.Length; slot++)
         {
-            int idx = activeHoldByLane[lane];
+            int idx = holdBySlot[slot];
             if (idx >= 0 && chart.Notes[idx].StartTime >= fromTime)
             {
-                activeHoldByLane[lane] = -1;
-                sounds?.StopSlide(lane);
+                holdBySlot[slot] = -1;
+                sounds?.StopSlide(slot);
             }
         }
     }
 
     public override void Update()
     {
+        // Before the notes update, which are drawn on it.
+        double measured = DisplayLatency ?? host?.Renderer?.DisplayLatencyMilliseconds ?? double.NaN;
+        displayClock.Offset = VisualOffset + (double.IsNaN(measured) ? 0 : measured);
+
         base.Update();
 
         if (DrawSize.X != lastSize.X || DrawSize.Y != lastSize.Y)
@@ -694,7 +751,7 @@ public partial class Playfield : Container
     private void advance(double time)
     {
         applyReplayInputs(time);
-        reconcileNotes(time + VisualOffset);
+        reconcileNotes(time + drawnAhead);
 
         if (!Silent)
             updateEffects(time);
@@ -777,10 +834,10 @@ public partial class Playfield : Container
     /// </summary>
     public void ResumeHeldSlides()
     {
-        for (int lane = 0; lane < laneCount; lane++)
+        for (int slot = 0; slot < holdBySlot.Length; slot++)
         {
-            if (activeHoldByLane[lane] is int index and >= 0)
-                sounds?.StartSlide(lane, chart.Notes[index].Bank);
+            if (holdBySlot[slot] is int index and >= 0)
+                sounds?.StartSlide(slot, chart.Notes[index].Bank);
         }
     }
 
@@ -806,6 +863,18 @@ public partial class Playfield : Container
 
                 case ReplayInputKind.LaneRelease:
                     ReleaseLane(input.Lane, input.Time);
+                    break;
+
+                case ReplayInputKind.TouchDown:
+                    TouchDown(input.Finger ?? 0, input.Lane, input.Time);
+                    break;
+
+                case ReplayInputKind.TouchSlide:
+                    TouchSlide(input.Finger ?? 0, input.Lane, input.Time);
+                    break;
+
+                case ReplayInputKind.TouchUp:
+                    TouchUp(input.Finger ?? 0, input.Time);
                     break;
 
                 case ReplayInputKind.SwipeLeft:
@@ -995,15 +1064,14 @@ public partial class Playfield : Container
     /// </summary>
     private void updateHolds(double time)
     {
-        for (int lane = 0; lane < laneCount; lane++)
+        for (int slot = 0; slot < holdBySlot.Length; slot++)
         {
-            int index = activeHoldByLane[lane];
-
-            // Once per hold, however many keys are holding it (a lane-changing hold being followed).
-            if (index < 0 || firstLaneHolding(index) != lane)
+            int index = holdBySlot[slot];
+            if (index < 0)
                 continue;
 
             BeatmapNote note = chart.Notes[index];
+            int lane = laneOfSlot(slot);
 
             if (time - note.EndTime > hitWindows.ReleaseWindow)
             {
@@ -1079,8 +1147,10 @@ public partial class Playfield : Container
         return false;
     }
 
-    // Touch is another: each finger on the lanes holds the lane it's in, and hands it over as it slides
-    // into another (following a hold that drifts across), and a quick stroke is a flick.
+    // Touch is another. Every finger touching down presses the lane it's in, and a hold it takes is its own
+    // till it lifts, judged by where the finger is then: a hold that drifts across has to be followed there,
+    // each finger with its own, so two crossing in an X are played one finger each. Sliding into a lane holds
+    // that one without pressing it. A quick stroke by a finger that isn't on a hold is a flick.
 
     public override bool OnTouchDown(TouchEvent e)
     {
@@ -1093,28 +1163,28 @@ public partial class Playfield : Container
             return false;
 
         int finger = (int)e.Source;
-        fingerLane[finger] = lane;
         fingerFlicked[finger] = false;
         startStroke(finger, e);
 
-        if (laneFingers[lane]++ == 0)
-            PressLane(lane, pressTime(e.Timestamp));
-
+        TouchDown(finger, lane, pressTime(e.Timestamp));
         return true;
     }
 
     public override bool OnTouchMove(TouchEvent e)
     {
         int finger = (int)e.Source;
-        int from = fingerLane[finger];
-        if (from < 0)
+        if (!fingerDown[finger])
             return false;
 
         double time = pressTime(e.Timestamp);
+        int hold = holdBySlot[fingerSlot(finger)];
 
         // A flick is a stroke the length of flick_distance in under flick_time; a finger that's been at it
-        // longer (holding, sliding) measures from where it was then. One flick a touch.
-        if (!fingerFlicked[finger])
+        // longer (holding, sliding) measures from where it was then. One flick a touch, and none while it's
+        // following a hold, which can drift across the lanes as fast as any flick.
+        if (hold >= 0)
+            startStroke(finger, e);
+        else if (!fingerFlicked[finger])
         {
             if (inputTime(e) - strokeStartTime[finger] > flick_time)
                 startStroke(finger, e);
@@ -1126,15 +1196,19 @@ public partial class Playfield : Container
         }
 
         int to = perspective.LaneAt(ToLocalSpace(e.ScreenSpacePosition));
-        if (to < 0 || to == from)
+        if (to < 0)
             return true;
 
-        fingerLane[finger] = to;
+        // A thumb drifts: on a hold, a finger is in the lanes the hold covers however it wanders, and past
+        // the hold's end lane it's still at its end.
+        if (hold >= 0)
+        {
+            (int low, int high) = lanesOf(hold);
+            to = Math.Clamp(to, low, high);
+        }
 
-        if (--laneFingers[from] == 0)
-            ReleaseLane(from, time);
-        if (laneFingers[to]++ == 0)
-            PressLane(to, time);
+        if (to != fingerLane[finger])
+            TouchSlide(finger, to, time);
 
         return true;
     }
@@ -1142,15 +1216,10 @@ public partial class Playfield : Container
     public override bool OnTouchUp(TouchEvent e)
     {
         int finger = (int)e.Source;
-        int lane = fingerLane[finger];
-        if (lane < 0)
+        if (!fingerDown[finger])
             return false;
 
-        fingerLane[finger] = -1;
-
-        if (--laneFingers[lane] == 0)
-            ReleaseLane(lane, pressTime(e.Timestamp));
-
+        TouchUp(finger, pressTime(e.Timestamp));
         return true;
     }
 
@@ -1200,7 +1269,8 @@ public partial class Playfield : Container
     }
 
     /// <summary>
-    /// A lane was pressed at gameplay <paramref name="time"/>: hits that lane's nearest note.
+    /// A lane's key was pressed at gameplay <paramref name="time"/>: hits that lane's nearest note. A hold it
+    /// takes is the key's till it's let go.
     /// </summary>
     public void PressLane(int lane, double time)
     {
@@ -1218,14 +1288,11 @@ public partial class Playfield : Container
         setLanePressed(lane, true);
         moveCharacter(lane, time);
         if (AllowJudgement)
-        {
-            tryHit(time, swipeSide: null, lane: lane);
-            joinActiveHold(lane);
-        }
+            tryHit(time, swipeSide: null, lane: lane, slot: lane);
     }
 
     /// <summary>
-    /// A lane was released at gameplay <paramref name="time"/>: resolves its active hold, if any.
+    /// A lane's key was let go of at gameplay <paramref name="time"/>: lets go of its hold, if it has one.
     /// </summary>
     public void ReleaseLane(int lane, double time)
     {
@@ -1239,9 +1306,94 @@ public partial class Playfield : Container
         if (InputPaused)
             return;
 
-        // Releasing a lane resolves that lane's active hold against the tail timing.
-        if (AllowJudgement && activeHoldByLane[lane] >= 0)
+        if (AllowJudgement && holdBySlot[lane] >= 0)
             releaseHold(lane, time);
+    }
+
+    /// <summary>
+    /// A finger touched down in <paramref name="lane"/> at gameplay <paramref name="time"/>: a press of the
+    /// lane of its own, though another finger's in it already (a jack played with two fingers). A hold it
+    /// takes is the finger's till it lifts.
+    /// </summary>
+    public void TouchDown(int finger, int lane, double time)
+    {
+        if (lane < 0 || lane >= laneCount || finger < 0 || finger >= InputState.MAX_TOUCHES || fingerDown[finger])
+            return;
+
+        InputReceived?.Invoke(new ReplayInput(time, ReplayInputKind.TouchDown, lane, finger));
+        fingerDown[finger] = true;
+        fingerLane[finger] = lane;
+        laneFingers[lane]++;
+        laneHeld[lane] = true;
+
+        if (InputPaused)
+            return;
+
+        laneTapped[lane] = true;
+        flashReceptor(lane);
+        setLanePressed(lane, true);
+        moveCharacter(lane, time);
+        if (AllowJudgement)
+            tryHit(time, swipeSide: null, lane: lane, slot: fingerSlot(finger));
+    }
+
+    /// <summary>
+    /// A finger slid into <paramref name="lane"/> at gameplay <paramref name="time"/> rather than touching it.
+    /// The lane is held, so the character goes there and a Touch note in it is caught, and a finger without a
+    /// hold takes up a dropped one there again. But no note is hit: only a fresh touch hits one, or a finger
+    /// swept across the lanes would hit everything in them.
+    /// </summary>
+    public void TouchSlide(int finger, int lane, double time)
+    {
+        if (lane < 0 || lane >= laneCount || finger < 0 || finger >= InputState.MAX_TOUCHES || !fingerDown[finger])
+            return;
+
+        InputReceived?.Invoke(new ReplayInput(time, ReplayInputKind.TouchSlide, lane, finger));
+        leaveLane(fingerLane[finger]);
+        fingerLane[finger] = lane;
+        laneFingers[lane]++;
+        laneHeld[lane] = true;
+
+        if (InputPaused)
+            return;
+
+        setLanePressed(lane, true);
+        moveCharacter(lane, time);
+
+        int slot = fingerSlot(finger);
+        if (AllowJudgement && holdBySlot[slot] < 0)
+            tryGrabHold(lane, slot, time);
+    }
+
+    /// <summary>
+    /// A finger lifted at gameplay <paramref name="time"/>: lets go of its hold, if it has one, in the lane
+    /// it was in.
+    /// </summary>
+    public void TouchUp(int finger, double time)
+    {
+        if (finger < 0 || finger >= InputState.MAX_TOUCHES || !fingerDown[finger])
+            return;
+
+        InputReceived?.Invoke(new ReplayInput(time, ReplayInputKind.TouchUp, fingerLane[finger], finger));
+        fingerDown[finger] = false;
+        leaveLane(fingerLane[finger]);
+
+        if (InputPaused)
+            return;
+
+        int slot = fingerSlot(finger);
+        if (AllowJudgement && holdBySlot[slot] >= 0)
+            releaseHold(slot, time);
+    }
+
+    // A finger's left a lane: let go of if it was the last in it.
+    private void leaveLane(int lane)
+    {
+        if (--laneFingers[lane] > 0)
+            return;
+
+        laneHeld[lane] = false;
+        setLanePressed(lane, false);
     }
 
     /// <summary>
@@ -1278,8 +1430,8 @@ public partial class Playfield : Container
     }
 
     /// <summary>
-    /// After a pause: any hold whose lane was let go while input was paused is released now, as if
-    /// the release happened at the moment play resumes.
+    /// After a pause: any hold whose key or finger was let go while input was paused is released now, as
+    /// if the release happened at the moment play resumes.
     /// </summary>
     public void ReleaseHoldsNotHeld() => ReleaseHoldsNotHeld(now);
 
@@ -1287,25 +1439,26 @@ public partial class Playfield : Container
     /// <param name="time">The gameplay time play resumes at.</param>
     public void ReleaseHoldsNotHeld(double time)
     {
-        for (int lane = 0; lane < laneCount; lane++)
+        for (int slot = 0; slot < holdBySlot.Length; slot++)
         {
-            int index = activeHoldByLane[lane];
+            int index = holdBySlot[slot];
             if (index < 0)
                 continue;
 
-            if (!laneHeld[lane])
-                releaseHold(lane, time);
-            else if (firstLaneHolding(index) == lane)
-                sounds?.StartSlide(lane, chart.Notes[index].Bank); // pausing stopped the loop
+            if (!slotDown(slot))
+                releaseHold(slot, time);
+            else
+                sounds?.StartSlide(slot, chart.Notes[index].Bank); // pausing stopped the loop
         }
     }
 
     /// <summary>
     /// Resolves a press: finds the nearest in-window unjudged note — for a swipe input, a swipe that
     /// accepts <paramref name="swipeSide"/>; otherwise a note in <paramref name="lane"/>. A tap or swipe
-    /// is graded immediately; a hold's head instead begins a sustain, resolved later on release.
+    /// is graded immediately; a hold's head instead begins a sustain, held by <paramref name="slot"/> (the
+    /// key's or the finger's) and resolved later on release.
     /// </summary>
-    private void tryHit(double time, SwipeDirection? swipeSide, int lane)
+    private void tryHit(double time, SwipeDirection? swipeSide, int lane, int slot = -1)
     {
         bool swipe = swipeSide.IsNotNull();
 
@@ -1349,7 +1502,7 @@ public partial class Playfield : Container
         {
             // Nothing to hit — but a lane press may be grabbing a dropped hold's body again.
             if (!swipe)
-                tryGrabHold(lane, time);
+                tryGrabHold(lane, slot, time);
 
             return; // otherwise an empty or wrong-way press: no penalty, just the lane/swipe flash.
         }
@@ -1375,7 +1528,7 @@ public partial class Playfield : Container
                 looks[bestIndex] = NoteLook.Missed;
             }
 
-            beginHold(bestIndex, lane, time);
+            beginHold(bestIndex, slot, time);
         }
         else
         {
@@ -1396,27 +1549,27 @@ public partial class Playfield : Container
     }
 
     /// <summary>
-    /// Starts holding a hold in <paramref name="lane"/>: its head lands on the line and the slide loop
-    /// runs until it's let go. Also a re-grab, so a dropped hold lights up again while held.
+    /// Starts holding a hold by <paramref name="slot"/>, a key or a finger: its head lands on the line and the
+    /// slide loop runs until it's let go. Also a re-grab, so a dropped hold lights up again while held.
     /// </summary>
-    private void beginHold(int index, int lane, double time)
+    private void beginHold(int index, int slot, double time)
     {
-        moveCharacter(lane, time);
-        activeHoldByLane[lane] = index;
+        moveCharacter(laneOfSlot(slot), time);
+        holdBySlot[slot] = index;
 
         if (visibleNotes.TryGetValue(index, out DrawableNote? drawable))
             drawable.Grab(animate: !Silent);
 
         // The next tick is the next grid step; a late press (or a re-grab) doesn't catch up on missed ones.
         lastSlideTick[index] = Math.Max(0, slideTickAt(index, time));
-        sounds?.StartSlide(lane, chart.Notes[index].Bank);
+        sounds?.StartSlide(slot, chart.Notes[index].Bank);
     }
 
     /// <summary>
-    /// Re-grabs a hold in <paramref name="lane"/> whose head is already judged but whose tail is still
-    /// open — after missing the head, or letting go early. Its tail is then capped at Hit.
+    /// Re-grabs, by <paramref name="slot"/>, a hold through <paramref name="lane"/> whose head is already judged
+    /// but whose tail is still open — after missing the head, or letting go early. Its tail is then capped at Hit.
     /// </summary>
-    private void tryGrabHold(int lane, double time)
+    private void tryGrabHold(int lane, int slot, double time)
     {
         foreach (KeyValuePair<int, DrawableNote> kv in visibleNotes)
         {
@@ -1429,31 +1582,31 @@ public partial class Playfield : Container
             if (time - note.EndTime > hitWindows.ReleaseWindow)
                 continue;
 
-            beginHold(index, lane, time);
+            beginHold(index, slot, time);
             return;
         }
     }
 
     /// <summary>
-    /// Lets go of <paramref name="lane"/>'s key on the hold it's holding. Near the end, letting go from
-    /// the hold's end lane judges the tail. A hold that changes lanes has to be followed there, so
-    /// letting go of its last key anywhere else near the end is a Miss. Another key still down in the
-    /// hold's lanes carries it on. Letting go of the last key well before the end is a hold break: combo
-    /// lost, tail still open.
+    /// Lets go of the hold <paramref name="slot"/>'s key or finger is holding. Near the end, that judges the
+    /// tail: a key's wherever the hold has drifted to (keys can't follow one across, so on a keyboard it's
+    /// played as a normal hold), a finger's only in the hold's end lane, as a finger has to follow it there.
+    /// One let go anywhere else at the end didn't, a Miss. A finger let go well before the end hands it to
+    /// another still on it, if there is one; otherwise that's a hold break: combo lost, tail still open.
     /// </summary>
-    private void releaseHold(int lane, double time)
+    private void releaseHold(int slot, double time)
     {
-        int index = activeHoldByLane[lane];
+        int index = holdBySlot[slot];
         if (index < 0)
             return;
 
         BeatmapNote note = chart.Notes[index];
         double releaseError = time - note.EndTime;
-        bool atTail = releaseError >= -hitWindows.ReleaseWindow;
 
-        if (atTail && lane == endLaneOf(index))
+        if (releaseError >= -hitWindows.ReleaseWindow)
         {
-            HitResult result = releaseError > hitWindows.ReleaseWindow
+            bool followed = slot < laneCount || laneOfSlot(slot) == endLaneOf(index);
+            HitResult result = !followed || releaseError > hitWindows.ReleaseWindow
                 ? HitResult.Miss
                 : hitWindows.ResultForRelease(releaseError);
 
@@ -1461,21 +1614,15 @@ public partial class Playfield : Container
             return;
         }
 
-        activeHoldByLane[lane] = -1;
-        sounds?.StopSlide(lane);
+        holdBySlot[slot] = -1;
+        sounds?.StopSlide(slot);
 
-        // Still held by another key in its lanes: the hold goes on (the slide moves to that key).
-        int carrier = firstLaneHolding(index);
-        if (carrier >= 0)
+        // Another finger still on it, in the lane this one lifted from and holding nothing of its own, carries
+        // it on.
+        if (slot >= laneCount && freeFingerIn(laneOfSlot(slot)) is int carrier and >= 0)
         {
+            holdBySlot[carrier] = index;
             sounds?.StartSlide(carrier, note.Bank);
-            return;
-        }
-
-        // Let go at the end, but not where the hold ended up: it wasn't followed.
-        if (atTail)
-        {
-            judgeTail(index, HitResult.Miss, releaseError);
             return;
         }
 
@@ -1497,13 +1644,13 @@ public partial class Playfield : Container
     /// </summary>
     private void judgeTail(int index, HitResult result, double releaseError)
     {
-        for (int lane = 0; lane < laneCount; lane++)
+        for (int slot = 0; slot < holdBySlot.Length; slot++)
         {
-            if (activeHoldByLane[lane] != index)
+            if (holdBySlot[slot] != index)
                 continue;
 
-            activeHoldByLane[lane] = -1;
-            sounds?.StopSlide(lane);
+            holdBySlot[slot] = -1;
+            sounds?.StopSlide(slot);
         }
 
         if (holdBroken[index] && result.IsHit() && result < HitResult.Hit)
@@ -1527,17 +1674,6 @@ public partial class Playfield : Container
             sounds?.PlayNote(note); // tail hitsound
 
         emitJudgement(new JudgementResult(note, result, releaseError, isHoldTail: true));
-    }
-
-    private bool isActiveHold(int index)
-    {
-        for (int lane = 0; lane < laneCount; lane++)
-        {
-            if (activeHoldByLane[lane] == index)
-                return true;
-        }
-
-        return false;
     }
 
     /// <summary>
@@ -1641,7 +1777,7 @@ public partial class Playfield : Container
 
         // Pulse the judgement line on each beat of the chart's timing, as the notes are drawn: it's what they're seen
         // to reach the line on.
-        double shown = time + VisualOffset;
+        double shown = time + drawnAhead;
 
         if (!chart.ControlPoints.HasTiming || judgementLine.IsNull() || shown < 0)
             return;

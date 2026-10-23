@@ -91,9 +91,9 @@ public partial class BestMark : FlowContainer
     }
 
     /// <summary>
-    /// A label on a sheared fill.
+    /// A label on a sheared fill: one blade of the chip. A strip's tile prints its lanes on one too.
     /// </summary>
-    private partial class Blade : Container
+    public partial class Blade : Container
     {
         private readonly Box fill;
         private readonly SpriteText label;
@@ -127,6 +127,11 @@ public partial class BestMark : FlowContainer
                 }
             };
         }
+
+        /// <summary>
+        /// What the blade says.
+        /// </summary>
+        public string Text => label.Text;
 
         public void Apply(Piece piece)
         {

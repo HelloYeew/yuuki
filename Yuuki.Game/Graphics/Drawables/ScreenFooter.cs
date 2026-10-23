@@ -81,6 +81,8 @@ public partial class ScreenFooter : Container
             Origin = Anchor.BottomCentre,
             RelativeSizeAxes = Axes.X,
             Size = new Vector2(1, 60),
+            // The bar runs on under the system bars and a notch; what's on it stays clear of them.
+            Bleed = Edges.Horizontal | Edges.Bottom,
             Alpha = 0.75f
         });
 
@@ -90,7 +92,8 @@ public partial class ScreenFooter : Container
             Origin = Anchor.BottomCentre,
             RelativeSizeAxes = Axes.X,
             Size = new Vector2(1, 8),
-            Position = new Vector2(0, -60)
+            Position = new Vector2(0, -60),
+            Bleed = Edges.Horizontal
         });
 
         Add(footerBackgroundBoxUpper = new Box()
@@ -100,6 +103,7 @@ public partial class ScreenFooter : Container
             RelativeSizeAxes = Axes.X,
             Size = new Vector2(1, 34),
             Position = new Vector2(0, -68),
+            Bleed = Edges.Horizontal,
             Alpha = 0.5f
         });
 
@@ -124,6 +128,8 @@ public partial class ScreenFooter : Container
                     Shear = new Vector2(-0.67f, 0),
                     CornerRadius = 5,
                     Position = new Vector2(28, 0),
+                    // Its slanted end goes past the screen's edge, under a notch or camera cutout too.
+                    Bleed = Edges.Right,
                     Child = screenNameBackground = new Box()
                     {
                         Anchor = Anchor.Centre,

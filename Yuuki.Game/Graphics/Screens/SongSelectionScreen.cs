@@ -66,6 +66,9 @@ public partial class SongSelectionScreen : YuukiScreen, IHaveScreenAction
     private const double peek_fade_duration = 300;
 
     private double? pressStartTime;
+
+    // A glance a long press started, which ends as the last finger lifts.
+    private bool peekingByTouch;
     private Vector2 pressStartPosition;
     private bool peeking;
 
@@ -169,8 +172,8 @@ public partial class SongSelectionScreen : YuukiScreen, IHaveScreenAction
         infoPanel.ScoreSelected += score => screenStack?.Push(ScoreScreen.ForSavedScore(score, scoreStore));
         // The Ranking tab reaches down to the back button or the strip, and right to the list or the edge,
         // as laid out (see layOutInfoPanel).
-        infoPanel.RankingBottom = () => float.IsInfinity(rankingBottom) ? backButton.DrawRectangle.Y : rankingBottom;
-        infoPanel.RankingMaxRight = () => float.IsInfinity(rankingMaxRight) ? selector.SideAreaLeft : rankingMaxRight;
+        infoPanel.RankingBottom = () => float.IsInfinity(rankingBottom) ? backButton.DrawRectangle.Y : screen(0, rankingBottom).Y;
+        infoPanel.RankingMaxRight = () => float.IsInfinity(rankingMaxRight) ? selector.SideAreaLeft : screen(rankingMaxRight, 0).X;
 
         content.Add(backButton = new LeftBottomShearButton()
         {
@@ -330,6 +333,12 @@ public partial class SongSelectionScreen : YuukiScreen, IHaveScreenAction
         if (pressStartTime != null && !peeking && Clock.CurrentTime - pressStartTime >= peek_hold_duration)
             setPeek(true);
 
+        if (peekingByTouch && GetContainingInputManager()?.CurrentState.ActiveTouchCount is null or 0)
+        {
+            peekingByTouch = false;
+            setPeek(false);
+        }
+
         layOutInfoPanel();
     }
 
@@ -354,7 +363,7 @@ public partial class SongSelectionScreen : YuukiScreen, IHaveScreenAction
 
     private const float details_tuck = 40;
 
-    // How far the Ranking tab may reach, in screen space, as last laid out.
+    // How far the Ranking tab may reach, in the content's space (a glance zooms it), as last laid out.
     private float rankingBottom = float.PositiveInfinity;
     private float rankingMaxRight = float.PositiveInfinity;
 
@@ -369,6 +378,11 @@ public partial class SongSelectionScreen : YuukiScreen, IHaveScreenAction
     /// </remarks>
     private void layOutInfoPanel()
     {
+        // Held as it is through a glance: hiding the footer gives the screen more room, which the panel
+        // would fill (more scores, say) as it fades out, and give back as it fades in.
+        if (peeking)
+            return;
+
         bool phone = gameLayout?.IsPhone == true;
         float largest = phone ? 1.25f : 1;
         Vector2 at = infoPanel.Position;
@@ -379,8 +393,8 @@ public partial class SongSelectionScreen : YuukiScreen, IHaveScreenAction
             setScale(infoPanel, phone ? Math.Clamp((railLeft - 24 - Math.Max(0, at.X)) / info_panel_width, 0.5f, largest) : 1);
 
             infoPanel.DetailsHost = null;
-            rankingBottom = backButton.DrawRectangle.Y;
-            rankingMaxRight = selector.SideAreaLeft;
+            rankingBottom = local(0, backButton.DrawRectangle.Y).Y;
+            rankingMaxRight = railLeft;
             return;
         }
 
@@ -401,8 +415,8 @@ public partial class SongSelectionScreen : YuukiScreen, IHaveScreenAction
         if (at.Y + (info_panel_head_height + info_panel_gap + info_panel_details_height) * headScale <= headLimit)
         {
             infoPanel.DetailsHost = null;
-            rankingBottom = Math.Min(backButton.DrawRectangle.Y, screen(0, headLimit).Y);
-            rankingMaxRight = headBesideHero ? screen(heroTopLeft.X - 12, 0).X : selector.SideAreaLeft;
+            rankingBottom = Math.Min(local(0, backButton.DrawRectangle.Y).Y, headLimit);
+            rankingMaxRight = headBesideHero ? heroTopLeft.X - 12 : searchLeft;
             return;
         }
 
@@ -415,8 +429,8 @@ public partial class SongSelectionScreen : YuukiScreen, IHaveScreenAction
         infoPanel.DetailsHost = detailsArea;
 
         bool detailsBesideHero = right - info_panel_width * detailsScale >= heroBottomRight.X + 12;
-        rankingBottom = screen(0, (detailsBesideHero ? bandTop : heroTopLeft.Y) - 12).Y;
-        rankingMaxRight = screen(content.DrawWidth, 0).X;
+        rankingBottom = (detailsBesideHero ? bandTop : heroTopLeft.Y) - 12;
+        rankingMaxRight = content.DrawWidth;
     }
 
     private Vector2 local(float screenX, float screenY) => content.ToLocalSpace(new Vector2(screenX, screenY));
@@ -437,6 +451,15 @@ public partial class SongSelectionScreen : YuukiScreen, IHaveScreenAction
         {
             pressStartTime = Clock.CurrentTime;
             pressStartPosition = e.ScreenSpaceMousePosition;
+            return true;
+        }
+
+        // By touch nothing is held down (a finger only clicks as it lifts), but a finger held still is a right
+        // click: the glance, for as long as a finger stays down.
+        if (State == ScreenState.Active && e.Button == MouseButton.Right && e.MouseState.FromTouch)
+        {
+            peekingByTouch = true;
+            setPeek(true);
             return true;
         }
 
@@ -693,6 +716,7 @@ public partial class SongSelectionScreen : YuukiScreen, IHaveScreenAction
     private void playShowAnimation()
     {
         peeking = false;
+        peekingByTouch = false;
         pressStartTime = null;
         content.Alpha = 1;
         background?.SetBlurSuppressed(false);

@@ -32,6 +32,17 @@ public class ReplayData
     /// </summary>
     public double AudioOffset { get; set; }
 
+    /// <summary>
+    /// The difficulty's song offset the run started on, added to <see cref="AudioOffset"/> on the gameplay clock.
+    /// </summary>
+    public double SongOffset { get; set; }
+
+    /// <summary>
+    /// Where either offset changed during the run (a song offset nudged, a device changed), in order, so playback
+    /// moves the music against the inputs as the run did. Empty where neither did.
+    /// </summary>
+    public List<ReplayOffsetChange> OffsetChanges { get; set; } = new List<ReplayOffsetChange>();
+
     public double ChartLength { get; set; }
 
     public HitWindows HitWindows { get; set; } = new HitWindows();

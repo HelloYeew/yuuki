@@ -14,6 +14,7 @@ using Sakura.Framework.Graphics.Transforms;
 using Sakura.Framework.Input;
 using Sakura.Framework.Maths;
 using Yuuki.Game.Audio;
+using Yuuki.Game.Graphics;
 using Yuuki.Game.Graphics.Colors;
 
 namespace Yuuki.Game.Graphics.UserInterface.Notifications;
@@ -266,9 +267,18 @@ public abstract partial class Notification : Container
         Height = cardHeight;
     }
 
+    [Resolved(canBeNull: true)]
+    private GameLayout? gameLayout { get; set; }
+
+    // By touch nothing's hovered, so the close button stays up rather than waiting for a pointer to come over.
+    private bool closeAlwaysShown => gameLayout?.Touch.Value == true;
+
     protected override void LoadComplete()
     {
         base.LoadComplete();
+
+        if (gameLayout != null)
+            BindValueChanged(gameLayout.Touch, e => closeButton.FadeTo(e.NewValue || IsHovered ? 1 : 0, 150, Easing.OutQuint), true);
 
         this.FadeInFromZero(250, Easing.OutQuint);
         card.X = 40;
@@ -291,7 +301,10 @@ public abstract partial class Notification : Container
     public override bool OnHoverLost(MouseEvent e)
     {
         background.FadeToColor(Colors.Card, 150, Easing.OutQuint);
-        closeButton.FadeOut(150, Easing.OutQuint);
+
+        if (!closeAlwaysShown)
+            closeButton.FadeOut(150, Easing.OutQuint);
+
         updateDot();
         return true;
     }

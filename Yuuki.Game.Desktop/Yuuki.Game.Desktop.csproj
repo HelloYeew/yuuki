@@ -5,6 +5,12 @@
     <ImplicitUsings>disable</ImplicitUsings>
     <Nullable>enable</Nullable>
   </PropertyGroup>
+  <PropertyGroup Label="Windows executable">
+    <!-- The .exe's icon, which the window, the taskbar and the shortcuts take too, and the name its details show. -->
+    <ApplicationIcon>icon.ico</ApplicationIcon>
+    <Product>yuuki.</Product>
+    <AssemblyTitle>yuuki.</AssemblyTitle>
+  </PropertyGroup>
   <ItemGroup Label="Project References">
     <ProjectReference Include="..\Yuuki.Game\Yuuki.Game.csproj" />
   </ItemGroup>

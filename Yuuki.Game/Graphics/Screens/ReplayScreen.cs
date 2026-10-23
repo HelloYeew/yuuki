@@ -3,6 +3,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using Sakura.Framework.Allocation;
 using Sakura.Framework.Audio;
 using Sakura.Framework.Extensions.ColorExtensions;
@@ -133,7 +134,7 @@ public partial class ReplayScreen : YuukiScreen, IHaveScreenAction
     private void load([CanBeNull] IYuukiColorProvider? colorProvider)
     {
         ScreenName.Value = "Replay";
-        ScreenHelperText.Value = $"Played {score.Date.LocalDateTime:d MMM yyyy, HH:mm}";
+        ScreenHelperText.Value = string.Create(CultureInfo.InvariantCulture, $"Played {score.Date.LocalDateTime:d MMM yyyy, HH:mm}");
 
         palette = Palette;
 
@@ -163,6 +164,9 @@ public partial class ReplayScreen : YuukiScreen, IHaveScreenAction
                 Replay = replay,
                 // Played back as it was played: the same offset lines the inputs up with the music.
                 AudioOffset = replay.AudioOffset,
+                SongOffset = replay.SongOffset,
+                // Only where the notes are drawn, which judged nothing: this screen's, not the play's.
+                VisualOffset = config?.Get(YuukiSetting.VisualOffset, 0).Value ?? 0,
                 Preempt = GameplayScreen.ScrollPreempt(config, chart),
                 LeadInTime = GameplayScreen.LeadInFor(chart),
                 SongLength = channel != null && channel.Length > 0 ? channel.Length : null

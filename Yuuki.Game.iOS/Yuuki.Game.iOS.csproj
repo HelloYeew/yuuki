@@ -1,5 +1,4 @@
 <Project Sdk="Microsoft.NET.Sdk">
-  <Import Project="..\..\sakura\Sakura.Framework.iOS\buildTransitive\Sakura.Framework.iOS.props" />
   <PropertyGroup>
     <OutputType>Exe</OutputType>
     <TargetFramework>net11.0-ios</TargetFramework>
@@ -10,6 +9,7 @@
     <ApplicationTitle>yuuki.</ApplicationTitle>
     <ApplicationVersion>1</ApplicationVersion>
     <ApplicationDisplayVersion>1.0</ApplicationDisplayVersion>
+    <AppIcon>AppIcon</AppIcon>
   </PropertyGroup>
   <PropertyGroup Label="Toolchain">
     <!-- .NET 11 RC 2's iOS workload is made for Xcode 27.0 and refuses any other, but builds and runs with 27.1. Remove
@@ -20,15 +20,10 @@
     <!-- Resources/ is where iOS keeps the bundle's own resources, so it isn't embedded the way it is elsewhere. -->
     <EmbeddedResource Remove="Resources\**" />
   </ItemGroup>
+  <ItemGroup Label="Package References">
+    <PackageReference Include="Sakura.Framework.iOS" Version="2026.1024.0" />
+  </ItemGroup>
   <ItemGroup Label="Project References">
     <ProjectReference Include="..\Yuuki.Game\Yuuki.Game.csproj" />
-    <ProjectReference Include="..\..\sakura\Sakura.Framework\Sakura.Framework.csproj" SetConfiguration="Configuration=Release" />
-    <ProjectReference Include="..\..\sakura\Sakura.Framework.iOS\Sakura.Framework.iOS.csproj" SetConfiguration="Configuration=Release" />
   </ItemGroup>
-  <ItemGroup Label="Native Libraries">
-    <!-- libpng, which FreeTypeSharp's iOS FreeType needs and doesn't ship, from the framework's native libraries until a
-         Sakura.Framework.NativeLibraries release carries it. -->
-    <NativeReference Include="..\..\sakura\Sakura.Framework.NativeLibraries\runtimes\ios\native\libpng16.xcframework" Kind="Static" />
-  </ItemGroup>
-  <Import Project="..\..\sakura\Sakura.Framework.iOS\buildTransitive\Sakura.Framework.iOS.targets" />
 </Project>

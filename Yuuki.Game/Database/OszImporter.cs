@@ -46,16 +46,28 @@ public class OszImporter
         if (!File.Exists(oszPath))
             return OszImportResult.Failed("The file isn't there any more.");
 
+        return import(Path.GetFileName(oszPath), extractPath => ZipFile.ExtractToDirectory(oszPath, extractPath));
+    }
+
+    /// <summary>
+    /// Imports one .osz read from <paramref name="osz"/>, for a file with no path of its own (one a phone hands
+    /// over as a link). <paramref name="fileName"/> is its name, with its extension.
+    /// </summary>
+    public OszImportResult Import(Stream osz, string fileName) =>
+        import(fileName, extractPath => ZipFile.ExtractToDirectory(osz, extractPath));
+
+    private OszImportResult import(string fileName, Action<string> extract)
+    {
         string extractPath = Path.Combine(Path.GetTempPath(), "yuuki-osz-" + Guid.NewGuid().ToString("N"));
 
         try
         {
-            ZipFile.ExtractToDirectory(oszPath, extractPath);
-            return importExtracted(extractPath, Path.GetFileNameWithoutExtension(oszPath));
+            extract(extractPath);
+            return importExtracted(extractPath, Path.GetFileNameWithoutExtension(fileName));
         }
         catch (Exception e)
         {
-            Logger.Error($"Couldn't import {Path.GetFileName(oszPath)}.", e);
+            Logger.Error($"Couldn't import {fileName}.", e);
             return OszImportResult.Failed(e.Message);
         }
         finally

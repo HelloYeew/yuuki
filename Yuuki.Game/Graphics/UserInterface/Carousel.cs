@@ -34,28 +34,55 @@ public abstract partial class Carousel<TModel, TCard> : Container
     public double FlingProjection { get; set; } = 180;
 
     /// <summary>
-    /// Continuous on-screen time (ms) a slot must accumulate before its card is built. This is the
-    /// floor, paid by the card at the centre of the carousel; cards further out additionally wait
-    /// <see cref="LoadDelayPerSlot"/> per slot of distance.
+    /// Continuous on-screen time (ms) a slot must accumulate before its card is built. "On screen"
+    /// reaches a little way past the carousel's ends, and further ahead of a moving list (see
+    /// <see cref="PreloadSlots"/>), so a card is usually built before it comes into view.
     /// </summary>
-    public double TimeBeforeLoad { get; set; } = 100;
+    public double TimeBeforeLoad { get; set; } = 30;
 
     /// <summary>
-    /// Extra on-screen time (ms) required per slot of distance from the centre before a card is built,
-    /// so the selection loads first and the periphery follows.
+    /// Extra on-screen time (ms) required per slot of distance from the centre before a card is built
+    /// while the list moves faster than <see cref="BuildVelocity"/>, so the cards it passes aren't all
+    /// built.
     /// </summary>
     /// <remarks>
-    /// This replaces a single flat delay tuned for the worst case. A flat delay has to be large enough
-    /// to stop a fast scroll from building every card it flies past, which also makes the card you are
-    /// actually looking at slow to appear. Scaling by distance separates the two: the centre can load
-    /// promptly while distant slots become progressively harder to trigger. Set to 0 for a flat delay.
+    /// Building a card is cheap (it comes from a pool, and a card's cover waits for the list to slow; see
+    /// <see cref="CarouselMotion.Speed"/>), so up to a fast scroll every card on the way is built. Past
+    /// that (a long jump, the scrubber, a hard fling) a card is gone before it could be seen; scaling the
+    /// wait by distance still lets the ones near the centre in, and the ones where the list is going (a
+    /// jump's landing) don't wait at all. Eased in with the speed, up to twice <see cref="BuildVelocity"/>.
+    /// Set to 0 to build at any speed.
     /// </remarks>
     public double LoadDelayPerSlot { get; set; } = 60;
 
     /// <summary>
-    /// Continuous off-screen time (ms) a slot must accumulate before its card is returned to the pool.
+    /// The fastest (items a second) the list can move and still build every card it passes: a held key
+    /// or a spun wheel is well under it.
     /// </summary>
-    public double TimeBeforeUnload { get; set; } = 3000;
+    public double BuildVelocity { get; set; } = 120;
+
+    /// <summary>
+    /// How many slots ahead of a moving list its cards are built, before they come into view: as many as
+    /// it covers in <see cref="preload_time"/>, up to this. A built card is kept as far past the screen,
+    /// either way (see <see cref="isKept"/>).
+    /// </summary>
+    public double PreloadSlots { get; set; } = 4;
+
+    private const double preload_time = 250;
+
+    /// <summary>
+    /// Continuous time (ms) a built card must spend more than <see cref="PreloadSlots"/> past the screen
+    /// before it's returned to the pool. None: past there it's out of sight, a card back from the pool
+    /// comes back as it was, its cover kept (see <see cref="RecentCoverTextures"/>), and a fast scroll
+    /// passes a lot of cards, which held on to for any time outnumber the pool (see <see cref="PoolSize"/>).
+    /// </summary>
+    public double TimeBeforeUnload { get; set; }
+
+    /// <summary>
+    /// How many cards the pool keeps to hand out again. Any more built at once are made new, and thrown
+    /// away when they're let go.
+    /// </summary>
+    public const int PoolSize = 48;
 
     /// <summary>
     /// Maximum pointer travel (screen px) for a press to still count as a click rather than a drag.
@@ -94,11 +121,66 @@ public abstract partial class Carousel<TModel, TCard> : Container
     public double EntranceStagger { get; set; } = 34;
 
     /// <summary>
-    /// When true, a card plays its entrance the moment it finishes loading (so cards streamed in after
-    /// the region is shown, or scrolled into view, ease in instead of popping). Toggled by the host via
+    /// When true, a card eases in once it has loaded instead of popping: with the entrance while the
+    /// region's own entrance is still playing (<see cref="AnimateEntrance"/>), and after that, when it's a
+    /// card scrolled or jumped into view, with a quick fade in place (see <see cref="LoadFadeDuration"/>).
+    /// Either way it waits for its cover first (see <see cref="RevealWait"/>). Toggled by the host via
     /// <see cref="AnimateEntrance"/> / <see cref="AnimateExit"/>.
     /// </summary>
     public bool PlayLoadEntrance { get; set; }
+
+    /// <summary>
+    /// Duration (ms) of the fade a card loaded while browsing comes in with. Short, and without the
+    /// entrance's slide, so a list that's just jumped fills in place rather than flying in row by row.
+    /// </summary>
+    public double LoadFadeDuration { get; set; } = 240;
+
+    /// <summary>
+    /// Duration (ms) of the fade a card comes in with when it's built in view while the list moves (one
+    /// built ahead of it comes in already there).
+    /// </summary>
+    public double MovingFadeDuration { get; set; } = 120;
+
+    /// <summary>
+    /// How far (px) a card loaded while browsing drifts out from the focus window as it fades in, so the
+    /// list unfolds from the window as it fills in.
+    /// </summary>
+    public float RevealDrift { get; set; } = 10;
+
+    /// <summary>
+    /// How long (ms) a loaded card waits, hidden, for what it shows at a glance (its cover; see
+    /// <see cref="CarouselCard{TModel}.IsReady"/>) before coming in without it. A row then comes in whole
+    /// rather than with a placeholder its cover fades over a moment later.
+    /// </summary>
+    public double RevealWait { get; set; } = 150;
+
+    /// <summary>
+    /// Delay (ms) per slot further from the window between cards coming in together, so a list filling in
+    /// after a jump ripples out from the window rather than appearing all at once.
+    /// </summary>
+    public double RevealStagger { get; set; } = 18;
+
+    /// <summary>
+    /// When (clock time) the ripple cards are coming in on would have been at the window: a card <c>d</c>
+    /// slots out comes in at <c>rippleStart + d × RevealStagger</c>, or straight away once that's passed. A
+    /// ripple runs on while cards keep coming in (see <see cref="ripple_gap"/>).
+    /// </summary>
+    private double rippleStart = double.MinValue;
+
+    private double lastReveal = double.MinValue;
+
+    /// <summary>
+    /// How long (ms) after the last card came in another one still joins its ripple.
+    /// </summary>
+    private const double ripple_gap = 200;
+
+    private readonly List<(CarouselCardWrapper Wrapper, bool InView)> revealing = new List<(CarouselCardWrapper, bool)>();
+
+    /// <summary>
+    /// Until when (clock time) a card that finishes loading joins the region's entrance rather than
+    /// fading in place: the entrance's length, its last card's stagger included.
+    /// </summary>
+    private double entranceUntil = double.MinValue;
 
     /// <summary>
     /// Cards further than this many slots from the centre all share the maximum stagger delay.
@@ -178,6 +260,16 @@ public abstract partial class Carousel<TModel, TCard> : Container
     /// </summary>
     private CarouselLayoutStrategy layout;
 
+    /// <summary>
+    /// Holds the cards, behind the focus window: the carousel's height, and wider than it by
+    /// <see cref="row_bleed"/> each side, so a card sliding in from the side or its shadow isn't cut.
+    /// Masked, fading the cards at its ends, when the layout asks for that (see
+    /// <see cref="CarouselLayoutStrategy.MaskFade"/>).
+    /// </summary>
+    private Container rows = null!;
+
+    private const float row_bleed = 120;
+
     // The focus window sits in a host the carousel moves to the strategy's window rectangle every frame;
     // the window itself is free to animate inside it (entrance and exit).
     private Container focusHost = null!;
@@ -202,6 +294,9 @@ public abstract partial class Carousel<TModel, TCard> : Container
     private double lastFramePosition;
     private float pressTravel;
 
+    // A trackpad's scroll so far towards the next card, in cards (+ on, - back).
+    private double scrollRemainder;
+
     /// <summary>
     /// Whether moving fast through the list compacts it (skim mode). Song lists do; a difficulty list,
     /// a handful of items, doesn't.
@@ -217,6 +312,11 @@ public abstract partial class Carousel<TModel, TCard> : Container
     /// Steps faster than this (items a second, over the last <see cref="step_window"/>) skim.
     /// </summary>
     private const double skim_steps_per_second = 7;
+
+    /// <summary>
+    /// Items a second past which the list skims.
+    /// </summary>
+    private const double skim_velocity = 9;
 
     private const double step_window = 400;
 
@@ -259,6 +359,41 @@ public abstract partial class Carousel<TModel, TCard> : Container
         }
     }
 
+    /// <summary>
+    /// How far the card for the item at <paramref name="index"/> is from its slot right now (an
+    /// entrance's slide, say), or null while it isn't built.
+    /// </summary>
+    public Vector2? CardOffset(int index) =>
+        index >= 0 && index < wrappers.Count && wrappers[index].DelayedLoadCompleted
+            ? new Vector2(wrappers[index].AnimX, wrappers[index].AnimY)
+            : null;
+
+    /// <summary>
+    /// How opaque the card for the item at <paramref name="index"/> is drawn right now, or null while it
+    /// isn't built.
+    /// </summary>
+    public float? CardAlpha(int index) =>
+        index >= 0 && index < wrappers.Count && wrappers[index].DelayedLoadCompleted ? wrappers[index].Alpha : null;
+
+    /// <summary>
+    /// How many cards are built right now.
+    /// </summary>
+    public int CardsBuilt
+    {
+        get
+        {
+            int built = 0;
+
+            foreach (var w in wrappers)
+            {
+                if (w.DelayedLoadCompleted)
+                    built++;
+            }
+
+            return built;
+        }
+    }
+
     [Resolved(canBeNull: true)]
     private GameLayout? gameLayout { get; set; }
 
@@ -273,6 +408,7 @@ public abstract partial class Carousel<TModel, TCard> : Container
         RelativeSizeAxes = Axes.Both;
         layout = CreateLayout(Orientation.Value);
         Orientation.BindValueChanged(_ => rebuildLayout());
+        createRows();
         createFocusWindow();
         createScrollbar();
     }
@@ -320,6 +456,16 @@ public abstract partial class Carousel<TModel, TCard> : Container
     /// without entrance animation).
     /// </summary>
     public Vector2 SlotCentre(int index) => DrawSize / 2f + layout.Compute((float)(index - position), metrics()).Position;
+
+    /// <summary>
+    /// Builds the cards' layer (see <see cref="rows"/>). Recreated by <see cref="SetItems"/> because
+    /// <c>Clear()</c> tears down all children.
+    /// </summary>
+    private void createRows() => Add(rows = new Container
+    {
+        Anchor = Anchor.Centre,
+        Origin = Anchor.Centre
+    });
 
     /// <summary>
     /// Builds the focus window (if any) in front of the cards. Recreated by <see cref="SetItems"/>
@@ -502,10 +648,12 @@ public abstract partial class Carousel<TModel, TCard> : Container
         items.Clear();
         exitingWrappers.Clear();
 
-        pool = new DrawablePool<TCard>(12, 48);
+        pool = new DrawablePool<TCard>(12, PoolSize);
         Add(pool);
 
-        // Clear() above tore down the previous focus window and scrollbar, so rebuild them.
+        // Clear() above tore down the cards' layer, the previous focus window and the scrollbar, so
+        // rebuild them.
+        createRows();
         createFocusWindow();
         createScrollbar();
 
@@ -644,8 +792,10 @@ public abstract partial class Carousel<TModel, TCard> : Container
                 c.Apply(wrapper.Model, wrapper.Index);
             }),
             () => isOnScreen(wrapper.Index),
-            () => wrapper.Index - position,
-            () => LoadDelayPerSlot,
+            () => isKept(wrapper.Index),
+            // None where the list is going: a long jump builds where it lands as it gets there.
+            () => isAroundTarget(wrapper.Index, metrics()) ? 0 : wrapper.Index - position,
+            () => LoadDelayPerSlot * rush,
             TimeBeforeLoad,
             TimeBeforeUnload)
         {
@@ -656,16 +806,18 @@ public abstract partial class Carousel<TModel, TCard> : Container
             Index = index
         };
 
-        // Ease each card in the moment its content loads, so cards that stream in after the region is
-        // shown (or are scrolled into view) don't just pop. Batch (re)shows drive this via AnimateEntrance.
+        // Ease each card in once its content loads, so cards that stream in after the region is shown (or
+        // are scrolled into view) don't just pop. It waits, hidden, for its cover first: see revealReadyCards.
+        // Batch (re)shows drive this via AnimateEntrance.
         wrapper.DelayedLoadComplete += _ =>
         {
             if (PlayLoadEntrance)
-                playEntrance(wrapper, Clock.CurrentTime);
+                cardLoaded(wrapper);
         };
+        wrapper.ContentUnloaded += () => wrapper.RevealSince = null;
 
         wrappers.Add(wrapper);
-        Add(wrapper);
+        rows.Add(wrapper);
         return wrapper;
     }
 
@@ -687,7 +839,7 @@ public abstract partial class Carousel<TModel, TCard> : Container
         if (pool != null)
             return;
 
-        pool = new DrawablePool<TCard>(12, 48);
+        pool = new DrawablePool<TCard>(12, PoolSize);
         Add(pool);
     }
 
@@ -712,9 +864,9 @@ public abstract partial class Carousel<TModel, TCard> : Container
             position = clamped;
             lastFramePosition = clamped;
 
-            // Put there, not moved there: no speed to skim on or lead with.
+            // Put there, not moved there: no speed to skim on or lead with, and the window shows it at once.
             motionFrom = clamped;
-            updateLayout();
+            updateLayout(instant: true);
         }
     }
 
@@ -737,6 +889,17 @@ public abstract partial class Carousel<TModel, TCard> : Container
     }
 
     private void recordStep() => stepTimes.Enqueue(Clock.CurrentTime);
+
+    /// <summary>
+    /// How fast the list is moving, 0 (settled) to 1 (as fast as skimming, or faster).
+    /// </summary>
+    private double flight => Math.Clamp(Math.Abs(smoothedVelocity) / skim_velocity, 0, 1);
+
+    /// <summary>
+    /// How far past <see cref="BuildVelocity"/> the list is moving, 0 to 1 (at twice it): how much of
+    /// <see cref="LoadDelayPerSlot"/> a card waits.
+    /// </summary>
+    private double rush => Math.Clamp((Math.Abs(smoothedVelocity) - BuildVelocity) / BuildVelocity, 0, 1);
 
     /// <summary>
     /// The index of <paramref name="item"/> in the carousel, or -1 if it is not currently present.
@@ -773,6 +936,7 @@ public abstract partial class Carousel<TModel, TCard> : Container
     public void AnimateEntrance()
     {
         PlayLoadEntrance = true;
+        entranceUntil = Clock.CurrentTime + EntranceDuration + max_stagger_steps * EntranceStagger;
         animateCards(entering: true);
     }
 
@@ -799,6 +963,9 @@ public abstract partial class Carousel<TModel, TCard> : Container
             // own entrance the moment its content finishes loading (see PlayLoadEntrance).
             if (!w.DelayedLoadCompleted)
                 continue;
+
+            // This takes over from a card still waiting to come in.
+            w.RevealSince = null;
 
             int steps = Math.Min(max_stagger_steps, (int)Math.Round(Math.Abs(i - position)));
             double at = now + steps * EntranceStagger;
@@ -867,16 +1034,54 @@ public abstract partial class Carousel<TModel, TCard> : Container
         if (items.Count == 0)
             return false;
 
-        int direction = e.ScrollDelta.Y < 0 ? 1 : e.ScrollDelta.Y > 0 ? -1 : 0;
-        if (direction == 0)
+        int steps = scrollSteps(e);
+        if (steps == 0)
             return true;
 
         int before = currentIndex;
-        recordStep();
-        SetIndex(currentIndex + direction);
-        Scrolled?.Invoke(direction, currentIndex != before);
+        for (int i = 0; i < Math.Abs(steps); i++)
+            recordStep();
+        SetIndex(currentIndex + steps);
+        Scrolled?.Invoke(Math.Sign(steps), currentIndex != before);
 
         return true;
+    }
+
+    /// <summary>
+    /// How many cards a scroll moves on (+) or back (-): one a wheel's notch, with a trackpad's fractions of one
+    /// added up until they make a whole. A trackpad that says how far its fingers moved moves a card each time they
+    /// cover one, as a drag would, rather than one an event (it sends many small ones).
+    /// </summary>
+    private int scrollSteps(ScrollEvent e)
+    {
+        double cards;
+
+        if (e.AbsoluteDelta is Vector2 absolute)
+        {
+            Vector2 local = toLocalDelta(e.ScreenSpaceMousePosition, absolute);
+
+            // Up and down move the strip on too, as a wheel does.
+            if (Orientation.Value == CarouselOrientation.Horizontal && Math.Abs(local.Y) > Math.Abs(local.X))
+                local = new Vector2(local.Y, 0);
+
+            cards = layout.DragToPositionDelta(local, metrics());
+        }
+        else
+            cards = -e.ScrollDelta.Y;
+
+        if (cards == 0)
+            return 0;
+
+        // What's left over counts towards the next card in the same direction only.
+        if (Math.Sign(cards) != Math.Sign(scrollRemainder))
+            scrollRemainder = 0;
+
+        scrollRemainder += cards;
+
+        // Fractions that make a whole (ten tenths, say) can add up to a hair short of it.
+        int steps = (int)Math.Truncate(scrollRemainder + Math.Sign(scrollRemainder) * 1e-6);
+        scrollRemainder -= steps;
+        return steps;
     }
 
     public override bool OnDragStart(MouseButtonEvent e)
@@ -898,7 +1103,7 @@ public abstract partial class Carousel<TModel, TCard> : Container
 
         pressTravel += Math.Abs(e.Delta.X) + Math.Abs(e.Delta.Y);
 
-        position += layout.DragToPositionDelta(e.Delta, metrics());
+        position += layout.DragToPositionDelta(toLocalDelta(e.ScreenSpaceMousePosition, e.Delta), metrics());
         position = clampWithOverscroll(position);
         updateLayout();
         return true;
@@ -938,6 +1143,13 @@ public abstract partial class Carousel<TModel, TCard> : Container
     /// end it is a slot with no card.
     /// </summary>
     private int slotAt(Vector2 screenSpacePosition) => layout.IndexAtLocal(ToLocalSpace(screenSpacePosition), position, metrics());
+
+    /// <summary>
+    /// A screen-space distance at a point, in the carousel's own units: smaller on screen where the game is scaled
+    /// down (a phone), so a card's pitch is as far as the finger has to go.
+    /// </summary>
+    private Vector2 toLocalDelta(Vector2 screenSpacePosition, Vector2 screenSpaceDelta) =>
+        ToLocalSpace(screenSpacePosition) - ToLocalSpace(screenSpacePosition - screenSpaceDelta);
 
     #endregion
 
@@ -979,6 +1191,8 @@ public abstract partial class Carousel<TModel, TCard> : Container
                 position += diff * (1 - Math.Exp(-SnapStiffness * dt));
         }
 
+        revealReadyCards(now);
+
         for (int i = 0; i < wrappers.Count; i++)
             wrappers[i].StepAnimation(now);
 
@@ -1004,7 +1218,7 @@ public abstract partial class Carousel<TModel, TCard> : Container
         {
             bool fast = stepTimes.Count / (step_window / 1000) > skim_steps_per_second
                         || Math.Abs(currentIndex - position) > 3
-                        || Math.Abs(smoothedVelocity) > 9;
+                        || Math.Abs(smoothedVelocity) > skim_velocity;
 
             if (fast)
                 skimUntil = now + skim_hold;
@@ -1015,8 +1229,142 @@ public abstract partial class Carousel<TModel, TCard> : Container
         float skim = Motion.Skim + (skimTarget - Motion.Skim) * (float)(1 - Math.Exp(-dt / (skimTarget > 0 ? 70 : 140)));
         Motion.Skim = skim < 0.002f ? 0 : skim > 0.998f ? 1 : skim;
 
+        Motion.Speed = (float)Math.Abs(smoothedVelocity);
+
         float lead = Motion.Lead + ((float)Math.Clamp(smoothedVelocity / 12, -1, 1) - Motion.Lead) * (float)(1 - Math.Exp(-dt / 260));
         Motion.Lead = Math.Abs(lead) < 0.001f ? 0 : lead;
+    }
+
+    /// <summary>
+    /// A card has loaded. Out of view (built ahead of the list, or past the fade at its ends), it comes in
+    /// already there once its cover's in, and scrolls into view whole. In view while the list moves, it
+    /// comes in at once rather than leave a gap. Otherwise it waits, hidden, for its cover (see
+    /// <see cref="revealReadyCards"/>).
+    /// </summary>
+    /// <remarks>
+    /// Decided straight away: this frame's layout is done, and would show the card as it laid it out (in
+    /// full) until the next.
+    /// </remarks>
+    private void cardLoaded(CarouselCardWrapper wrapper)
+    {
+        double now = Clock.CurrentTime;
+        var m = metrics();
+
+        bool inView = isInView(wrapper.Index, m);
+        bool moving = flight >= 0.5;
+
+        if (inView ? moving : isReady(wrapper))
+            comeIn(wrapper, inView, moving, now, now);
+        else
+            wrapper.RevealSince = now;
+
+        wrapper.Alpha = wrapper.RevealSince != null ? 0 : layout.Compute((float)(wrapper.Index - position), m).Alpha * wrapper.AnimAlpha;
+    }
+
+    /// <summary>
+    /// Brings in the cards waiting for their covers: once the cover's in; as one comes into view while the
+    /// list moves; or, in view at rest, after <see cref="RevealWait"/> without it. Cards coming in together
+    /// at rest ripple out from the window (see <see cref="RevealStagger"/>).
+    /// </summary>
+    private void revealReadyCards(double now)
+    {
+        revealing.Clear();
+
+        var m = metrics();
+        bool moving = flight >= 0.5;
+
+        foreach (var w in wrappers)
+        {
+            if (w.RevealSince is not double since)
+                continue;
+
+            bool inView = isInView(w.Index, m);
+
+            if (isReady(w) || (inView && (moving || now - since >= RevealWait)))
+                revealing.Add((w, inView));
+        }
+
+        if (revealing.Count == 0)
+            return;
+
+        if (now - lastReveal > ripple_gap)
+        {
+            double nearest = double.MaxValue;
+
+            foreach (var (w, _) in revealing)
+                nearest = Math.Min(nearest, Math.Abs(w.Index - position));
+
+            rippleStart = now - nearest * RevealStagger;
+        }
+
+        lastReveal = now;
+
+        foreach (var (w, inView) in revealing)
+            comeIn(w, inView, moving, now, Math.Max(now, rippleStart + Math.Min(max_stagger_steps, Math.Abs(w.Index - position)) * RevealStagger));
+    }
+
+    private bool isReady(CarouselCardWrapper wrapper) => wrapper.Content is not TCard card || card.IsReady;
+
+    /// <summary>
+    /// Brings a loaded card in: out of view, already there; with the entrance while the region's is playing;
+    /// with a quick fade while the list moves; and otherwise in place at <paramref name="at"/>, drifting out
+    /// from the window.
+    /// </summary>
+    private void comeIn(CarouselCardWrapper w, bool inView, bool moving, double now, double at)
+    {
+        w.RevealSince = null;
+
+        // Nothing to see it come in.
+        if (!inView)
+        {
+            w.AnimAlpha = 1f;
+            return;
+        }
+
+        if (now < entranceUntil)
+        {
+            playEntrance(w, at);
+            return;
+        }
+
+        w.AnimAlpha = 0f;
+
+        if (moving)
+        {
+            w.AnimateTo(0f, 0f, 1f, MovingFadeDuration, now);
+            return;
+        }
+
+        // A little nearer the window than its slot: whatever glide it's in the middle of carries on.
+        var m = metrics();
+        var away = layout.Compute((float)(w.Index - position), m).Position - layout.Compute(0, m).Position;
+        float distance = MathF.Sqrt(away.X * away.X + away.Y * away.Y);
+
+        if (distance > 1)
+        {
+            w.AnimX -= away.X / distance * RevealDrift;
+            w.AnimY -= away.Y / distance * RevealDrift;
+        }
+
+        w.AnimateTo(0f, 0f, 1f, LoadFadeDuration, at);
+    }
+
+    /// <summary>
+    /// Whether the card for the item at <paramref name="index"/> shows clearly right now: inside the
+    /// carousel and past the fade at its ends, and not under the focus window.
+    /// </summary>
+    private bool isInView(int index, CarouselMetrics m)
+    {
+        var l = layout.Compute((float)(index - position), m);
+
+        if (l.Alpha < 0.25f)
+            return false;
+
+        var size = layout.SlotSize(m);
+        var fade = layout.MaskFade ?? default;
+
+        return l.Position.X + size.X / 2 > -DrawWidth / 2 + fade.Left && l.Position.X - size.X / 2 < DrawWidth / 2 - fade.Right
+               && l.Position.Y + size.Y / 2 > -DrawHeight / 2 + fade.Top && l.Position.Y - size.Y / 2 < DrawHeight / 2 - fade.Bottom;
     }
 
     private void updateExitingWrappers(double now)
@@ -1035,7 +1383,7 @@ public abstract partial class Carousel<TModel, TCard> : Container
                 // Detach the finished wrapper, which disposes it. Its pooled card is not disposed with
                 // it — pooled drawables opt out of removal disposal — so the cascade returns the card to
                 // the pool, which owns its lifetime.
-                Remove(w);
+                rows.Remove(w);
                 exitingWrappers.RemoveAt(i);
             }
         }
@@ -1047,10 +1395,17 @@ public abstract partial class Carousel<TModel, TCard> : Container
         return Math.Clamp(value, -overscroll, items.Count - 1 + overscroll);
     }
 
-    private void updateLayout()
+    /// <param name="instant">The list was put where it is rather than moved there: the focus window shows
+    /// the item there at once.</param>
+    private void updateLayout(bool instant = false)
     {
         var m = metrics();
         var slotSize = layout.SlotSize(m);
+
+        var fade = layout.MaskFade;
+        rows.Size = new Vector2(DrawWidth + row_bleed * 2, DrawHeight);
+        rows.Masking = fade != null;
+        rows.MaskingFade = fade ?? default;
 
         for (int i = 0; i < wrappers.Count; i++)
         {
@@ -1066,7 +1421,9 @@ public abstract partial class Carousel<TModel, TCard> : Container
             // resting layout so add/remove animations survive this every-frame reposition.
             w.Position = new Vector2(l.Position.X + w.AnimX, l.Position.Y + w.AnimY);
             w.Scale = l.Scale;
-            w.Alpha = l.Alpha * w.AnimAlpha;
+
+            // Loaded, but waiting for its cover: hidden until it comes in.
+            w.Alpha = w.RevealSince != null ? 0 : l.Alpha * w.AnimAlpha;
 
             w.Depth = -Math.Abs((float)(i - position));
         }
@@ -1074,15 +1431,46 @@ public abstract partial class Carousel<TModel, TCard> : Container
         var window = layout.FocusWindow(m);
         focusHost.Position = window.Location;
         focusHost.Size = window.Size;
-        focusWindow?.Display(items, position);
+        focusWindow?.Display(items, position, instant);
 
         updateScrollbar();
     }
 
     /// <summary>
-    /// Whether the slot for the given index is close enough to the centre to be worth loading.
+    /// Whether the slot for the given index is close enough to the centre to be worth loading: on screen
+    /// now, or where the list's speed takes it in <see cref="preload_time"/> (up to
+    /// <see cref="PreloadSlots"/> on), so a moving list's cards are built before they come into view.
     /// </summary>
-    private bool isOnScreen(int index) => layout.IsOnScreen((float)(index - position), metrics());
+    private bool isOnScreen(int index)
+    {
+        var m = metrics();
+
+        if (layout.IsOnScreen((float)(index - position), m))
+            return true;
+
+        double ahead = Math.Clamp(smoothedVelocity * preload_time / 1000, -PreloadSlots, PreloadSlots);
+        return Math.Abs(ahead) > 0.01 && layout.IsOnScreen((float)(index - position - ahead), m);
+    }
+
+    /// <summary>
+    /// Whether the built card for the given index is kept: while it's on screen, or would be with the list
+    /// up to <see cref="PreloadSlots"/> nearer it, so a card built ahead of the list isn't let go as the
+    /// list slows short of it, nor one just scrolled off as the list turns back. However fast the list
+    /// moves, only the cards around the screen are built.
+    /// </summary>
+    private bool isKept(int index)
+    {
+        float offset = (float)(index - position);
+        float nearer = Math.Clamp(offset, -(float)PreloadSlots, (float)PreloadSlots);
+        return layout.IsOnScreen(offset - nearer, metrics());
+    }
+
+    /// <summary>
+    /// Whether the slot for the given index is on screen where the list is going (the item it's moving to),
+    /// which is known before it gets there, except while it's dragged or scrubbed.
+    /// </summary>
+    private bool isAroundTarget(int index, CarouselMetrics m) =>
+        !isDragging && !scrollbarScrubbing && layout.IsOnScreen(index - currentIndex, m);
 
     /// <summary>
     /// The interactive position scrollbar: a rounded track with a thumb that reflects the scroll
@@ -1318,6 +1706,12 @@ public abstract partial class Carousel<TModel, TCard> : Container
         /// </summary>
         public Vector2 FrozenPosition;
 
+        /// <summary>
+        /// When (clock time) the card loaded, while it waits hidden for its cover before coming in; null
+        /// once it has come in, or when it isn't to ease in at all.
+        /// </summary>
+        public double? RevealSince;
+
         public bool IsAnimating { get; private set; }
 
         private double animStart;
@@ -1325,13 +1719,15 @@ public abstract partial class Carousel<TModel, TCard> : Container
         private float xFrom, xTo, yFrom, yTo, aFrom, aTo;
 
         private readonly Func<bool> onScreen;
+        private readonly Func<bool> kept;
         private readonly Func<double> slotsFromCentre;
         private readonly Func<double> loadDelayPerSlot;
 
-        public CarouselCardWrapper(Func<Drawable> createContent, Func<bool> onScreen, Func<double> slotsFromCentre, Func<double> loadDelayPerSlot, double timeBeforeLoad, double timeBeforeUnload)
+        public CarouselCardWrapper(Func<Drawable> createContent, Func<bool> onScreen, Func<bool> kept, Func<double> slotsFromCentre, Func<double> loadDelayPerSlot, double timeBeforeLoad, double timeBeforeUnload)
             : base(createContent, timeBeforeLoad, timeBeforeUnload)
         {
             this.onScreen = onScreen;
+            this.kept = kept;
             this.slotsFromCentre = slotsFromCentre;
             this.loadDelayPerSlot = loadDelayPerSlot;
         }
@@ -1372,13 +1768,23 @@ public abstract partial class Carousel<TModel, TCard> : Container
                 IsAnimating = false;
         }
 
-        protected override bool IsOnScreen => onScreen();
+        // Built, a card stays on screen a few slots further than it had to come to be built (see isKept).
+        protected override bool IsOnScreen => DelayedLoadCompleted ? kept() : onScreen();
 
         /// <summary>
-        /// Scales the required visible time by distance from the centre, so the selected card loads
-        /// first and the periphery follows. Re-evaluated per frame by the base container, so a card
-        /// scrolling towards the centre gets progressively easier to trigger.
+        /// Scales the required visible time by distance from the centre while the list moves too fast to
+        /// build every card (see <see cref="Carousel{TModel,TCard}.LoadDelayPerSlot"/>). Re-evaluated per
+        /// frame by the base container, so a card scrolling towards the centre gets progressively easier
+        /// to trigger.
         /// </summary>
-        protected override double LoadDelay => TimeBeforeLoad + loadDelayPerSlot() * Math.Abs(slotsFromCentre());
+        protected override double LoadDelay
+        {
+            get
+            {
+                // Asked every frame of every card not built yet, so the distance only when it counts.
+                double perSlot = loadDelayPerSlot();
+                return perSlot > 0 ? TimeBeforeLoad + perSlot * Math.Abs(slotsFromCentre()) : TimeBeforeLoad;
+            }
+        }
     }
 }

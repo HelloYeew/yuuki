@@ -145,7 +145,8 @@ public partial class TestNoteMotion : TestScene
 
         play(chart, 300, 2300, time =>
         {
-            // Hold from the head, drop it, grab the body again, follow it to its end lane, let go on time.
+            // Hold from the head, drop it, grab the body again, let go on time. By key, one drifting across is
+            // held by the one key all the way.
             if (atFrame(time, 1000))
                 playfield.PressLane(1, time);
 
@@ -158,14 +159,8 @@ public partial class TestNoteMotion : TestScene
             if (atFrame(time, 1500))
                 playfield.PressLane(1, time);
 
-            if (crossing && atFrame(time, 1900))
-            {
-                playfield.PressLane(endLane, time);
-                playfield.ReleaseLane(1, time);
-            }
-
             if (atFrame(time, 2000))
-                playfield.ReleaseLane(endLane, time);
+                playfield.ReleaseLane(1, time);
         }, time =>
         {
             if (!notes.Any())

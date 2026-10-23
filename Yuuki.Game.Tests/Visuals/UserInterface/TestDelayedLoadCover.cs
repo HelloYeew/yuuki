@@ -1,6 +1,7 @@
 // This code is part of yuuki. project. Licensed under the MIT License.
 // See the LICENSE file for full license text.
 
+using System;
 using System.IO;
 using NUnit.Framework;
 using Sakura.Framework.Allocation;
@@ -16,12 +17,14 @@ namespace Yuuki.Game.Tests.Visuals.UserInterface;
 public partial class TestDelayedLoadCover : TestScene
 {
     private readonly HeadlessTextureManager textureManager = new HeadlessTextureManager();
+    private readonly RecentCoverTextures recentCovers = new RecentCoverTextures();
 
     [BackgroundDependencyLoader]
     private void load()
     {
         // Provide a texture manager so the cover's async decode/upload path can run headless.
         Cache<ITextureManager>(textureManager);
+        Cache(recentCovers);
     }
 
     [OneTimeTearDown]
@@ -84,6 +87,112 @@ public partial class TestDelayedLoadCover : TestScene
         AddAssert("back to placeholder", () => !cover.HasCover);
     }
 
+    /// <summary>
+    /// A cover already decoded at its size, on show somewhere else, shows at once rather than decoding again.
+    /// </summary>
+    [Test]
+    public void TestACoverOnShowElsewhereShowsAtOnce()
+    {
+        DelayedLoadCover first = null!, second = null!;
+        TestCoverSource source = null!;
+
+        AddStep("two covers", () =>
+        {
+            Clear();
+            Add(first = new DelayedLoadCover { Size = new Vector2(120), RelativeSizeAxes = Axes.None });
+            Add(second = new DelayedLoadCover { Size = new Vector2(120), RelativeSizeAxes = Axes.None, X = 140 });
+        });
+
+        AddStep("the first shows a cover", () => first.SetSource(source = new TestCoverSource(create1X1Bmp())));
+        AddUntilStep("decoded", () => first.HasCover);
+
+        AddStep("the second shows it too", () => second.SetSource(source));
+        AddAssert("at once", () => second.HasCover && !second.IsLoading);
+        AddAssert("decoded once", () => source.OpenCount == 1);
+    }
+
+    /// <summary>
+    /// Pointed again at the cover it shows (a recycled card given the same song), a cover keeps it rather
+    /// than going back to its placeholder and decoding it again.
+    /// </summary>
+    [Test]
+    public void TestShowingTheSameCoverAgainKeepsIt()
+    {
+        DelayedLoadCover cover = null!;
+        TestCoverSource source = null!;
+
+        AddStep("add cover", () => addCover(cover = new DelayedLoadCover { Size = new Vector2(240), RelativeSizeAxes = Axes.None }));
+        AddStep("set source", () => cover.SetSource(source = new TestCoverSource(create1X1Bmp())));
+        AddUntilStep("cover loaded", () => cover.HasCover);
+
+        AddStep("the same again", () => cover.SetSource(source));
+        AddAssert("still shown", () => cover.HasCover);
+        AddAssert("decoded once", () => source.OpenCount == 1);
+    }
+
+    /// <summary>
+    /// A cover let go of a moment ago is kept a while, and shows at once when it's shown again.
+    /// </summary>
+    [Test]
+    public void TestACoverLetGoOfJustNowShowsAtOnce()
+    {
+        DelayedLoadCover cover = null!;
+        TestCoverSource source = null!;
+
+        AddStep("add cover", () => addCover(cover = new DelayedLoadCover { Size = new Vector2(240), RelativeSizeAxes = Axes.None }));
+        AddStep("set source", () => cover.SetSource(source = new TestCoverSource(create1X1Bmp())));
+        AddUntilStep("cover loaded", () => cover.HasCover);
+
+        AddStep("let it go", () => cover.SetSource(null));
+        AddUntilStep("kept", () => recentCovers.Holds(source.ShareKey));
+
+        AddStep("show it again", () => cover.SetSource(source));
+        AddAssert("at once", () => cover.HasCover);
+        AddAssert("decoded once", () => source.OpenCount == 1);
+        AddAssert("no longer held as let go", () => !recentCovers.Holds(source.ShareKey));
+    }
+
+    /// <summary>
+    /// Asked not to decode (a row a fast scroll is passing), a cover stays on its placeholder unless its
+    /// image is at hand, and decodes it when it's pointed at it again.
+    /// </summary>
+    [Test]
+    public void TestACoverCanWaitToDecode()
+    {
+        DelayedLoadCover cover = null!;
+        TestCoverSource source = null!;
+
+        AddStep("add cover", () => addCover(cover = new DelayedLoadCover { Size = new Vector2(240), RelativeSizeAxes = Axes.None }));
+        AddStep("not now", () => cover.SetSource(source = new TestCoverSource(create1X1Bmp()), decode: false));
+        AddAssert("on its placeholder", () => !cover.HasCover && !cover.IsLoading);
+        AddAssert("nothing decoded", () => source.OpenCount == 0);
+
+        AddStep("now", () => cover.SetSource(source));
+        AddUntilStep("cover loaded", () => cover.HasCover);
+    }
+
+    /// <summary>
+    /// One at hand shows even so: nothing to decode.
+    /// </summary>
+    [Test]
+    public void TestACoverAtHandShowsWithoutDecoding()
+    {
+        DelayedLoadCover first = null!, second = null!;
+        TestCoverSource source = null!;
+
+        AddStep("two covers", () =>
+        {
+            Clear();
+            Add(first = new DelayedLoadCover { Size = new Vector2(120), RelativeSizeAxes = Axes.None });
+            Add(second = new DelayedLoadCover { Size = new Vector2(120), RelativeSizeAxes = Axes.None, X = 140 });
+        });
+        AddStep("the first shows a cover", () => first.SetSource(source = new TestCoverSource(create1X1Bmp())));
+        AddUntilStep("decoded", () => first.HasCover);
+
+        AddStep("the second, not decoding", () => second.SetSource(source, decode: false));
+        AddAssert("shown", () => second.HasCover);
+    }
+
     private void addCover(DelayedLoadCover cover)
     {
         Clear();
@@ -108,7 +217,13 @@ public partial class TestDelayedLoadCover : TestScene
 
         public Texture? Cached { get; }
 
-        public string? CacheKey => "test-cover";
+        // Its own, so no test finds another's cover held.
+        public string? CacheKey { get; } = $"test-cover-{Guid.NewGuid()}";
+
+        /// <summary>
+        /// What a full-size cover shares its texture under.
+        /// </summary>
+        public string ShareKey => TextureCreationOptions.ShareKeyFor(CacheKey!, null, TextureFillMode.Fill);
 
         public Stream? Open()
         {

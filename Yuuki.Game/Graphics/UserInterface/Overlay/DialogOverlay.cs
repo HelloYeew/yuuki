@@ -62,6 +62,7 @@ public partial class DialogOverlay : FocusedOverlayContainer
             new Box
             {
                 RelativeSizeAxes = Axes.Both,
+                Bleed = Edges.All,
                 Color = palette.Backdrop,
                 Alpha = 0.75f
             },

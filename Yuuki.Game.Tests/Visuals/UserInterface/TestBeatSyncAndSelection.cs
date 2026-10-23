@@ -347,8 +347,8 @@ public partial class TestBeatSyncAndSelection : TestScene
         AddAssert("the song's card has the range", () => setCard.LaneText == "4-7K");
         AddAssert("each difficulty its count", () => fourCard.LaneText == "4K" && sevenCard.LaneText == "7K");
 
-        // A song's tile is only its cover, title and artist (the hero tile and info panel carry the lanes),
-        // while a difficulty's tile puts its count in the caption under the level.
+        // A song's tile has its range on its cover (see TestSongTile), while a difficulty's tile puts its
+        // count in the caption under the level.
         AddStep("as a strip", () => orientation.Value = CarouselOrientation.Horizontal);
         AddStep("show the song again", () => setCard.Apply(set, 0));
         AddAssert("the song still knows its range", () => setCard.LaneText == "4-7K");

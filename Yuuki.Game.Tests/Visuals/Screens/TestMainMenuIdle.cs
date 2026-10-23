@@ -7,6 +7,7 @@ using Sakura.Framework.Graphics.Primitives;
 using Sakura.Framework.Input;
 using Sakura.Framework.Maths;
 using Yuuki.Game.Beatmaps;
+using Yuuki.Game.Graphics;
 using Yuuki.Game.Graphics.Colors;
 using Yuuki.Game.Graphics.Screens;
 using Yuuki.Game.Graphics.ScreenStacks;
@@ -16,6 +17,9 @@ namespace Yuuki.Game.Tests.Visuals.Screens;
 
 public partial class TestMainMenuIdle : YuukiManualInputManagerTestScene
 {
+    [Cached]
+    private readonly GameLayout gameLayout = new GameLayout();
+
     private readonly WorkingBeatmap workingBeatmap = new WorkingBeatmap();
     private readonly BeatmapSet set = BeatmapTestUtility.MakeBeatmapSet(1);
 
@@ -58,6 +62,30 @@ public partial class TestMainMenuIdle : YuukiManualInputManagerTestScene
     }
 
     private void leaveMenu() => AddStep("leave the menu", () => menu.Exit());
+
+    /// <summary>
+    /// A phone being read gets no input at all, where a resting mouse twitches, so by touch the menu waits longer.
+    /// </summary>
+    [Test]
+    public void TestByTouchItWaitsLongerToGoIdle()
+    {
+        AddStep("by touch", () => gameLayout.Touch.Value = true);
+        AddStep("show the main menu", () =>
+        {
+            TestContent.Add(screenStack);
+            screenStack.Push(menu = new MainMenuScreen
+            {
+                Anchor = Anchor.Centre,
+                Origin = Anchor.Centre,
+                RelativeSizeAxes = Axes.Both
+            });
+        });
+        AddUntilStep("it's up", () => menu.IsLoaded);
+        AddAssert("half a minute", () => menu.Idle.Timeout == 30_000);
+        AddStep("a mouse again", () => gameLayout.Touch.Value = false);
+        AddAssert("ten seconds", () => menu.Idle.Timeout == 10_000);
+        leaveMenu();
+    }
 
     private void goIdle()
     {

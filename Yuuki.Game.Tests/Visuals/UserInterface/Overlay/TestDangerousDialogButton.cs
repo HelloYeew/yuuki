@@ -88,6 +88,45 @@ public partial class TestDangerousDialogButton : YuukiManualInputManagerTestScen
         AddAssert("once, and put away", () => confirmed == 1 && overlay.CurrentDialog == null);
     }
 
+    /// <summary>
+    /// By touch nothing is held down (a finger only clicks as it lifts), so the button takes the finger itself.
+    /// </summary>
+    [Test]
+    public void TestHoldingAFingerTakesIt()
+    {
+        AddStep("a finger on it", () => InputManager.TouchDown(TouchSource.Touch1, centre(letMeOut)));
+        AddUntilStep("filling", () => letMeOut.HoldProgress > 0.3f);
+        AddAssert("not yet", () => confirmed == 0);
+        AddUntilStep("taken", () => confirmed == 1);
+        AddStep("lift it", () => InputManager.TouchUp(TouchSource.Touch1));
+        AddAssert("once, and put away", () => confirmed == 1 && overlay.CurrentDialog == null);
+    }
+
+    [Test]
+    public void TestATapDoesNotTakeIt()
+    {
+        AddStep("tap it", () => InputManager.Tap(centre(letMeOut)));
+        AddWaitStep("longer than a hold", DialogButton.HOLD_DURATION * 2);
+        AddAssert("not taken", () => confirmed == 0 && overlay.CurrentDialog != null);
+    }
+
+    [Test]
+    public void TestSlidingAFingerOffStopsIt()
+    {
+        AddStep("a finger on it", () => InputManager.TouchDown(TouchSource.Touch1, centre(letMeOut)));
+        AddUntilStep("partly filled", () => letMeOut.HoldProgress > 0.2f);
+        AddStep("slide off onto the dialog's icon", () =>
+        {
+            var dialog = overlay.CurrentDialog!;
+            InputManager.MoveTouchTo(TouchSource.Touch1, dialog.ToScreenSpace(new Vector2(dialog.DrawWidth / 2, 20)));
+        });
+        AddUntilStep("drained", () => letMeOut.HoldProgress == 0);
+        AddStep("lift it", () => InputManager.TouchUp(TouchSource.Touch1));
+        AddAssert("not taken", () => confirmed == 0 && overlay.CurrentDialog != null);
+    }
+
+    private static Vector2 centre(Drawable drawable) => drawable.ToScreenSpace(drawable.DrawSize / 2);
+
     [Test]
     public void TestLettingGoEarlyDrainsIt()
     {

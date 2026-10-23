@@ -230,11 +230,16 @@ public partial class BeatmapSelector : Container
 
     /// <summary>
     /// Where the selector's side area begins, in screen space: the list's column (vertical) or the
-    /// filter bar (horizontal). Song select keeps its info panel left of it.
+    /// filter bar (horizontal), where it rests. Song select keeps its info panel left of it.
     /// </summary>
-    public float SideAreaLeft => currentOrientation == CarouselOrientation.Vertical
-        ? carouselContainer.DrawRectangle.X
-        : filterControl.DrawRectangle.X;
+    /// <remarks>
+    /// From the layout rather than the drawables: the song list and the filters hide while a difficulty's
+    /// picked, and a hidden drawable isn't updated, so its rectangle would still be where it was, from
+    /// before an orientation switch if there was one.
+    /// </remarks>
+    public float SideAreaLeft => ToScreenSpace(new Vector2(currentOrientation == CarouselOrientation.Vertical
+        ? DrawWidth - verticalRegionWidth
+        : DrawWidth - cardMargin - filterControl.CardWidth, 0)).X;
 
     /// <summary>What the skim label says while it shows, or null while it doesn't (diagnostics/tests).</summary>
     public string? SkimLabelText => skimLabel.Alpha > 0 ? skimLabel.Text : null;
@@ -274,7 +279,8 @@ public partial class BeatmapSelector : Container
 
         var palette = ScreenPalette.Resolve(screenPalette, colorProvider);
 
-        Add(band = new FrostedBand { Alpha = 0 });
+        // The glass reaches the screen's edges, under a notch and the system bars; the lists on it don't.
+        Add(band = new FrostedBand { Alpha = 0, Bleed = Edges.All });
 
         // Over the background, outside the list: left of the rail, or above the strip's hero.
         Add(skimLabel = new SkimLabel());
@@ -335,15 +341,6 @@ public partial class BeatmapSelector : Container
         difficultyCarousel.Tapped += _ => uiSounds?.Play(UISound.Select);
         carousel.SelectedTapped += () => onSelectedCardTapped(SelectionState.SelectingSet);
         difficultyCarousel.SelectedTapped += () => onSelectedCardTapped(SelectionState.SelectingBeatmap);
-
-        // The set cards carry cover art, so a moderate scroll should decode only the cards you land
-        // near, not every one you pass over. Rather than one flat delay large enough for the worst case
-        // (which also made the card under the cursor slow to appear), the floor is short and the cost
-        // scales with distance from the centre: the selection loads promptly, cards several slots out
-        // need to stay visible far longer than a scroll allows. The difficulty carousel's cards are
-        // text-only, so it keeps the snappy flat default.
-        carousel.TimeBeforeLoad = 80;
-        carousel.LoadDelayPerSlot = 60;
 
         Add(filterControl = new BeatmapFilterControl { Alpha = 0, RandomRequested = SelectRandom });
 
@@ -822,7 +819,7 @@ public partial class BeatmapSelector : Container
 
             skimLabel.Anchor = Anchor.TopLeft;
             skimLabel.Origin = Anchor.CentreRight;
-            skimLabel.Position = new Vector2(ToLocalSpace(carouselContainer.ToScreenSpace(Vector2.Zero)).X - 40, centre.Y);
+            skimLabel.Position = new Vector2(ToLocalSpace(carouselContainer.ScreenSpaceDrawQuad.TopLeft).X - 40, centre.Y);
         }
         else
         {

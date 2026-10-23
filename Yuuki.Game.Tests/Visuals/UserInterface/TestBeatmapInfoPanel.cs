@@ -1,6 +1,7 @@
 // This code is part of yuuki. project. Licensed under the MIT License.
 // See the LICENSE file for full license text.
 
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using NUnit.Framework;
@@ -68,6 +69,53 @@ public partial class TestBeatmapInfoPanel : TestScene
             });
             panel.AnimateIn();
         });
+    }
+
+    /// <summary>
+    /// The title and the rows under it end on one straight slanted line, the rows' own slant, however many of
+    /// them are on show.
+    /// </summary>
+    [TestCase(BeatmapInfoPanel.PanelLayout.Full)]
+    [TestCase(BeatmapInfoPanel.PanelLayout.Compact)]
+    public void TestTheRowsEndInAStraightLine(BeatmapInfoPanel.PanelLayout layout)
+    {
+        add(layout);
+        AddStep("show beatmap", () => panel.ShowBeatmap(beatmap));
+        AddUntilStep("all on one line", () =>
+        {
+            Quad[] shapes = panel.RowShapes.ToArray();
+
+            return shapes.Length == (layout == BeatmapInfoPanel.PanelLayout.Full ? 4 : 2)
+                   && shapes.Skip(1).All(s => onTheEdgeOf(shapes[0], s));
+        });
+    }
+
+    /// <summary>
+    /// The chart under the note counts ends on the counts' slanted line too.
+    /// </summary>
+    [Test]
+    public void TestTheDetailRowsEndInAStraightLine()
+    {
+        add();
+        AddStep("show beatmap", () => panel.ShowBeatmap(beatmap));
+        AddUntilStep("loaded", () => !panel.IsLoading);
+        AddUntilStep("on one line", () =>
+        {
+            Quad[] shapes = panel.DetailRowShapes.ToArray();
+            return onTheEdgeOf(shapes[0], shapes[1]);
+        });
+    }
+
+    // Whether a shape's slanted right end lies along another's, drawn on screen: both its corners there on the line
+    // through that end's.
+    private static bool onTheEdgeOf(Quad above, Quad shape) =>
+        offLine(shape.TopRight, above.TopRight, above.BottomRight) < 0.5f && offLine(shape.BottomRight, above.TopRight, above.BottomRight) < 0.5f;
+
+    private static float offLine(Vector2 point, Vector2 a, Vector2 b)
+    {
+        Vector2 along = Vector2.Normalize(b - a);
+        Vector2 off = point - a;
+        return Math.Abs(off.X * along.Y - off.Y * along.X);
     }
 
     [Test]

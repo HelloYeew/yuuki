@@ -20,4 +20,10 @@ public class CarouselMotion
     /// more of what's coming shows; it settles to 0 when the list stops.
     /// </summary>
     public float Lead { get; internal set; }
+
+    /// <summary>
+    /// How fast the list is moving, in items a second (smoothed). A card that loads something costly for
+    /// itself (a cover) can leave it until the list slows.
+    /// </summary>
+    public float Speed { get; internal set; }
 }

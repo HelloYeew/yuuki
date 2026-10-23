@@ -33,6 +33,12 @@ public partial class GameplayHud : Container
     public const string DEFAULT_CHARACTER_NAME = "Yuuki";
 
     private const float health_bar_width = 560;
+
+    /// <summary>
+    /// The bar in a phone's window, where gameplay is zoomed in (see <see cref="GameLayout.GameplayCanvas"/>): short
+    /// enough to stay clear of the far end of the highway, at the top of a 16:9 phone's narrower canvas.
+    /// </summary>
+    private const float phone_health_bar_width = 360;
     private const float health_bar_height = 26;
     private const float progress_bar_height = 12;
 
@@ -61,6 +67,19 @@ public partial class GameplayHud : Container
     /// </summary>
     private const double low_health = 0.3;
 
+    /// <summary>
+    /// How far the score sits in from the top-right corner, with no pause button there.
+    /// </summary>
+    private const float score_inset = 28;
+
+    /// <summary>
+    /// The pause button's corner: all of it takes a tap, so a thumb reaching for the corner finds it (on a
+    /// phone the canvas is small, about 0.4 dp to the unit). The button drawn in it is smaller.
+    /// </summary>
+    private const float pause_area = 128;
+
+    private const float pause_button_size = 76;
+
     private static readonly Color text_color = ColorExtensions.FromHex("#F7F1F5");
     private static readonly Color bar_fill = ColorExtensions.FromHex("#F4E8EE");
     private static readonly Color heart_color = JudgementColors.MISS.Lighten(0.2f);
@@ -78,6 +97,7 @@ public partial class GameplayHud : Container
     private YuukiColorPalette palette;
 
     private Container healthBar = null!;
+    private Container healthBarSlot = null!;
     private Box healthFill = null!;
     private Box healthFlash = null!;
     private IconSprite heart = null!;
@@ -92,6 +112,11 @@ public partial class GameplayHud : Container
     private Box progressFill = null!;
     private SpriteText elapsedText = null!;
     private SeekTrack seekTrack = null!;
+    private Drawable scoreBlock = null!;
+    private PauseButton? pauseButton;
+
+    [Resolved(canBeNull: true)]
+    private GameLayout? gameLayout { get; set; }
 
     private Action<double, bool>? seekRequested;
 
@@ -121,6 +146,12 @@ public partial class GameplayHud : Container
     /// on pause, while the rest of the HUD keeps real time. Set before load; null runs it in real time.
     /// </summary>
     public IFrameBasedClock? ComboClock { get; init; }
+
+    /// <summary>
+    /// What the pause button in the top-right corner does. The button shows while the game is played by
+    /// touch (Escape pauses otherwise), and the score steps left for it. Null, as in a replay, shows none.
+    /// </summary>
+    public Action? PauseRequested { get; init; }
 
     private Container skillPill = null!;
     private SpriteText skillText = null!;
@@ -153,10 +184,20 @@ public partial class GameplayHud : Container
         Children = new Drawable[]
         {
             createCharacterBlock(),
-            createScoreBlock(),
+            scoreBlock = createScoreBlock(),
             createComboBlock(),
             createProgressBlock()
         };
+
+        if (PauseRequested.IsNotNull())
+        {
+            Add(pauseButton = new PauseButton(PauseRequested)
+            {
+                Anchor = Anchor.TopRight,
+                Origin = Anchor.TopRight,
+                Alpha = 0
+            });
+        }
 
         // Before the block loads, so everything in it takes this clock.
         if (ComboClock.IsNotNull())
@@ -205,6 +246,8 @@ public partial class GameplayHud : Container
                         Masking = true,
                         CornerRadius = 6,
                         Shear = UserInterfaceConstant.Shear,
+                        // Its slanted end goes past the screen's edge, under a notch or camera cutout too.
+                        Bleed = Edges.Left,
                         Child = new Box
                         {
                             RelativeSizeAxes = Axes.Both,
@@ -230,7 +273,7 @@ public partial class GameplayHud : Container
                 {
                     // The flow places this one; the bar inside it is what shakes when hurt, since the flow
                     // would put a moved child of its own straight back.
-                    new Container
+                    healthBarSlot = new Container
                     {
                         Anchor = Anchor.CentreLeft,
                         Origin = Anchor.CentreLeft,
@@ -320,7 +363,7 @@ public partial class GameplayHud : Container
     {
         Anchor = Anchor.TopRight,
         Origin = Anchor.TopRight,
-        Position = new Vector2(-28, 14),
+        Position = new Vector2(-score_inset, 14),
         AutoSizeAxes = Axes.Both,
         Direction = FlowDirection.Vertical,
         Children = new Drawable[]
@@ -486,6 +529,23 @@ public partial class GameplayHud : Container
         displayedAccuracy = score.Accuracy.Value;
     }
 
+    protected override void LoadComplete()
+    {
+        base.LoadComplete();
+
+        if (gameLayout.IsNotNull())
+            BindValueChanged(gameLayout.PhoneWindow, e => healthBarSlot.Width = e.NewValue ? phone_health_bar_width : health_bar_width, true);
+
+        if (pauseButton.IsNotNull() && gameLayout.IsNotNull())
+        {
+            BindValueChanged(gameLayout.Touch, e =>
+            {
+                pauseButton.Alpha = e.NewValue ? 1 : 0;
+                scoreBlock.X = -(e.NewValue ? pause_area : score_inset);
+            }, true);
+        }
+    }
+
     public override void Update()
     {
         base.Update();
@@ -554,7 +614,9 @@ public partial class GameplayHud : Container
 
     /// <summary>
     /// Puts the combo at the playfield's <see cref="Playfield.ComboPosition"/>, as big as the playfield is
-    /// drawn, by mapping that point (and one a unit across) through screen space into the HUD's.
+    /// drawn, by mapping that point (and one a unit across) through screen space into the HUD's. In a phone's
+    /// window it's as much bigger as the rest of the HUD (see <see cref="GameLayout.GameplayCanvas"/>), and centred
+    /// between the highway's edge and the screen's rather than the playfield's, to have the room beside the field.
     /// </summary>
     private void placeCombo()
     {
@@ -562,9 +624,17 @@ public partial class GameplayHud : Container
         {
             Vector2 centre = ToLocalSpace(playfield.ToScreenSpace(playfield.ComboPosition));
             Vector2 across = ToLocalSpace(playfield.ToScreenSpace(playfield.ComboPosition + new Vector2(1, 0)));
+            float scale = Vector2.Distance(centre, across);
+
+            if (gameLayout?.PhoneWindow.Value == true)
+            {
+                float edgeX = ToLocalSpace(playfield.ToScreenSpace(playfield.ComboHighwayEdge)).X;
+                centre.X = (edgeX + DrawWidth) / 2;
+                scale *= (float)GameLayout.PHONE_ZOOM;
+            }
 
             comboAnchor.Position = centre;
-            comboAnchor.Scale = new Vector2(Vector2.Distance(centre, across));
+            comboAnchor.Scale = new Vector2(scale);
             return;
         }
 
@@ -574,6 +644,13 @@ public partial class GameplayHud : Container
 
     /// <summary>Where the combo is drawn, in the HUD's space (tests).</summary>
     public Vector2 ComboCentre => comboAnchor.Position;
+
+    /// <summary>
+    /// The health bar's row (the bar and its percentage) and the score's block, the HUD's widest pieces at the top (tests).
+    /// </summary>
+    public Drawable HealthRow => healthBarSlot.Parent!;
+
+    public Drawable ScoreBlock => scoreBlock;
 
     /// <summary>How big the combo is drawn, following the playfield's size (tests).</summary>
     public float ComboScale => comboAnchor.Scale.X;
@@ -627,6 +704,84 @@ public partial class GameplayHud : Container
     }
 
     /// <summary>The progress bar's hit area, which turns clicks and drags into seeks while enabled.</summary>
+    /// <summary>
+    /// A touch game's way to pause: a round button in the top-right corner. It takes the finger that
+    /// presses it, so the lanes never see that tap, and pauses when the finger lifts over it.
+    /// </summary>
+    private partial class PauseButton : Container
+    {
+        private readonly Action pause;
+        private readonly Container circle;
+
+        // The finger pressing the button, or null.
+        private TouchSource? finger;
+
+        public PauseButton(Action pause)
+        {
+            this.pause = pause;
+
+            Size = new Vector2(pause_area);
+            Child = circle = new Container
+            {
+                Anchor = Anchor.Centre,
+                Origin = Anchor.Centre,
+                Size = new Vector2(pause_button_size),
+                Masking = true,
+                CornerRadius = pause_button_size / 2,
+                BorderThickness = 2,
+                BorderColor = text_color.WithAlpha(0.45f),
+                Children = new Drawable[]
+                {
+                    new Box
+                    {
+                        RelativeSizeAxes = Axes.Both,
+                        Color = Color.Black,
+                        Alpha = 0.3f
+                    },
+                    new IconSprite
+                    {
+                        Anchor = Anchor.Centre,
+                        Origin = Anchor.Centre,
+                        Icon = IconUsage.Pause,
+                        IconSize = 40,
+                        Color = text_color
+                    }
+                }
+            };
+        }
+
+        public override bool OnTouchDown(TouchEvent e)
+        {
+            if (finger.IsNotNull())
+                return false;
+
+            finger = e.Source;
+            circle.ScaleTo(0.88f, 80, Easing.OutQuint);
+            return true;
+        }
+
+        public override bool OnTouchUp(TouchEvent e)
+        {
+            if (finger != e.Source)
+                return false;
+
+            finger = null;
+            circle.ScaleTo(1, 300, UserInterfaceConstant.SoftBounce);
+
+            // Not when the finger slid off first, or the system took it.
+            if (!e.Cancelled && Contains(e.ScreenSpacePosition))
+                pause();
+
+            return true;
+        }
+
+        public override bool OnClick(MouseButtonEvent e)
+        {
+            pause();
+            return true;
+        }
+    }
+
     private partial class SeekTrack : Container
     {
         public bool Enabled;

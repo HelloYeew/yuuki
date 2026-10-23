@@ -64,10 +64,10 @@ public partial class TouchEffects : Container
     public readonly Reactive<YuukiColorPalette> Palette = new Reactive<YuukiColorPalette>(DefaultYuukiColorProvider.GetDefaultPalette());
 
     /// <summary>
-    /// How big it all is, as a multiple: at 1 a star is 6–10 dp across and the petal 30 dp long, as far apart and
-    /// as far flung as fits them.
+    /// How big it all is, as a multiple: at 1 a star is 6–10 dp across and the petal 30 dp long (as big as
+    /// BanG Dream's), as far apart and as far flung as fits them. A touch bigger by default, so it reads.
     /// </summary>
-    public float Size { get; set; } = 1;
+    public float Size { get; set; } = 1.25f;
 
     /// <summary>
     /// Whether the player wants them: the Touch effects setting.

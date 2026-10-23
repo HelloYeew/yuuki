@@ -4,6 +4,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using Yuuki.Game.Configurations;
 using Yuuki.Game.Gameplay.Replays;
 
 namespace Yuuki.Game.Gameplay.Scoring;
@@ -39,8 +40,16 @@ public class GameplayResult
     /// <summary>The chart's length in ms (end of its last note), the span of the judgement timeline.</summary>
     public double ChartLength { get; init; }
 
-    /// <summary>The audio offset (ms) the run was played with, the base for <see cref="SuggestedOffset"/>.</summary>
+    /// <summary>The audio offset (ms) the run was played with, a base for <see cref="SuggestedOffsets"/>.</summary>
     public double AudioOffset { get; init; }
+
+    /// <summary>The visual offset (ms) the run was played with, the other base for <see cref="SuggestedOffsets"/>.</summary>
+    public double VisualOffset { get; init; }
+
+    /// <summary>
+    /// The difficulty's song offset (ms) the run ended on: added to <see cref="AudioOffset"/> on the gameplay clock.
+    /// </summary>
+    public double SongOffset { get; init; }
 
     /// <summary>Hit presses needed before the mean error is trusted enough to suggest an offset.</summary>
     public const int MINIMUM_OFFSET_SAMPLES = 20;
@@ -63,7 +72,8 @@ public class GameplayResult
         Judgements = replay?.Judgements.Select(j => j.ToJudgement()).ToArray() ?? Array.Empty<JudgementResult>(),
         HitWindows = replay?.HitWindows ?? new HitWindows(),
         ChartLength = replay?.ChartLength ?? 0,
-        AudioOffset = replay?.AudioOffset ?? 0
+        AudioOffset = replay?.AudioOffset ?? 0,
+        SongOffset = replay?.SongOffset ?? 0
     };
 
     /// <summary>The player ran out of health before the end.</summary>
@@ -181,25 +191,75 @@ public class GameplayResult
     }
 
     /// <summary>
-    /// The audio offset that would have centred this run's presses on the notes: the offset played
-    /// with, minus the mean error (hitting 44 ms late suggests 44 ms lower). Rounded to whole ms. Null
-    /// with fewer than <see cref="MINIMUM_OFFSET_SAMPLES"/> hit presses, where the mean is mostly noise.
+    /// The offsets that would have centred this run's presses on the notes by moving the judging alone: the audio
+    /// offset lower by the mean error and the visual offset higher by it (hitting 44 ms late suggests 44 ms lower and
+    /// 44 ms higher). Their sum, which sets where the notes are seen against the music, stays as it was, so this holds
+    /// however much the player went by ear or by eye: the audio offset alone would move the notes with the judging,
+    /// and leave someone tapping to what they see exactly as late. Rounded to whole ms, and moved less where either
+    /// would pass its limit. Null with fewer than <see cref="MINIMUM_OFFSET_SAMPLES"/> hit presses, where the mean is
+    /// mostly noise.
     /// </summary>
-    public double? SuggestedOffset
+    public (int Audio, int Visual)? SuggestedOffsets
     {
         get
         {
-            if (MeanError is not double mean)
+            if (MeanError is not double mean || TimingSamples < MINIMUM_OFFSET_SAMPLES)
                 return null;
 
-            int samples = 0;
+            return OffsetsShiftedBy(mean);
+        }
+    }
+
+    /// <summary>
+    /// The offsets with the judging <paramref name="shift"/> ms later than the run's (rounded to whole ms), the notes
+    /// kept where they're seen, as <see cref="SuggestedOffsets"/> moves them; moved less where either would pass its
+    /// limit.
+    /// </summary>
+    public (int Audio, int Visual) OffsetsShiftedBy(double shift)
+    {
+        // As far as both can go the same way.
+        double furthestLater = Math.Min(AudioOffset - YuukiConfigManager.MIN_AUDIO_OFFSET, YuukiConfigManager.MAX_VISUAL_OFFSET - VisualOffset);
+        double furthestEarlier = Math.Max(AudioOffset - YuukiConfigManager.MAX_AUDIO_OFFSET, YuukiConfigManager.MIN_VISUAL_OFFSET - VisualOffset);
+        shift = Math.Min(Math.Max(Math.Round(shift), furthestEarlier), furthestLater);
+
+        return ((int)Math.Round(AudioOffset - shift), (int)Math.Round(VisualOffset + shift));
+    }
+
+    /// <summary>
+    /// How many presses the timing statistics are worked out from (see <see cref="AffectsTimingStatistics"/>).
+    /// </summary>
+    public int TimingSamples => Judgements.Count(AffectsTimingStatistics);
+
+    /// <summary>
+    /// How many more presses would have been Critical with the run's lean taken off as
+    /// <see cref="SuggestedOffsets"/> would: what the lean cost, which a delay the offsets don't cover yet often
+    /// is. 0 without a suggestion.
+    /// </summary>
+    public int CriticalsLostToLean
+    {
+        get
+        {
+            if (SuggestedOffsets is not var (audio, _))
+                return 0;
+
+            // How much later the judging would be.
+            double shift = AudioOffset - audio;
+            int now = 0;
+            int centred = 0;
+
             foreach (JudgementResult judgement in Judgements)
             {
-                if (AffectsTimingStatistics(judgement))
-                    samples++;
+                if (!AffectsTimingStatistics(judgement))
+                    continue;
+
+                if (Math.Abs(judgement.TimingError) <= HitWindows.Critical)
+                    now++;
+
+                if (Math.Abs(judgement.TimingError - shift) <= HitWindows.Critical)
+                    centred++;
             }
 
-            return samples < MINIMUM_OFFSET_SAMPLES ? null : Math.Round(AudioOffset - mean);
+            return Math.Max(0, centred - now);
         }
     }
 

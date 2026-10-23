@@ -27,6 +27,7 @@ using Yuuki.Game.Gameplay.Scoring;
 using Yuuki.Game.Graphics.Colors;
 using Yuuki.Game.Graphics.ScreenStacks;
 using Yuuki.Game.Graphics.Text;
+using Yuuki.Game.Graphics.UserInterface;
 
 namespace Yuuki.Game.Graphics.Screens;
 
@@ -122,6 +123,21 @@ public partial class GameplayScreen : YuukiScreen, IHaveScreenAction
     [Resolved(canBeNull: true)]
     private IWindow? window { get; set; }
 
+    [Resolved(canBeNull: true)]
+    private OffsetManager? offsets { get; set; }
+
+    [Resolved(canBeNull: true)]
+    private IPlatformHaptics? haptics { get; set; }
+
+    // Whether the song is felt: its hits, and a full combo or a fail (the Haptics setting, where there's a motor).
+    private bool feltHere => haptics?.IsSupported == true && config?.Get<bool>(YuukiSetting.Haptics).Value != false;
+
+    // The difficulty whose song offset the run plays with and nudges; null for a generated chart, which has none.
+    private int? songOffsetBeatmap;
+
+    private OffsetStepper? songOffsetStepper;
+    private SpriteText songOffsetText = null!;
+
     /// <summary>
     /// The beatmap whose notes this screen loaded, so they can be dropped again on exit. Null when
     /// the run used a generated chart.
@@ -211,6 +227,7 @@ public partial class GameplayScreen : YuukiScreen, IHaveScreenAction
             loadedNotesFor = beatmap;
 
         chartFromBeatmap = beatmap != null && notes.Length > 0;
+        songOffsetBeatmap = chartFromBeatmap && offsets != null ? beatmap!.ID : null;
 
         if (chartFromBeatmap)
             chart = PlayableBeatmap.FromBeatmap(beatmap!, laneCount: LaneKeyLayouts.Clamp(beatmap!.LaneCount));
@@ -231,6 +248,13 @@ public partial class GameplayScreen : YuukiScreen, IHaveScreenAction
         trackClock = channel != null ? new TrackClock(channel) : null;
         IAdjustableClock? source = trackClock;
 
+        if (songOffsetBeatmap is int songId)
+        {
+            songOffsetStepper = new OffsetStepper(palette, "Song offset", OffsetManager.MIN_SONG_OFFSET, OffsetManager.MAX_SONG_OFFSET, palette.TextLight);
+            songOffsetStepper.Current.Value = offsets!.GetSongOffset(songId);
+            songOffsetStepper.Current.ValueChanged += e => offsets.SetSongOffset(songId, e.NewValue);
+        }
+
         AddRange(new Drawable[]
         {
             // First, so it sees Space before the lanes do (see SkipKeyHandler).
@@ -247,8 +271,20 @@ public partial class GameplayScreen : YuukiScreen, IHaveScreenAction
                 SwipeRightKey = config?.Get<Key>(YuukiSetting.SwipeRightKey).Value,
                 AudioOffset = config?.Get(YuukiSetting.AudioOffset, 0).Value ?? 0,
                 VisualOffset = config?.Get(YuukiSetting.VisualOffset, 0).Value ?? 0,
+                SongOffset = songOffsetBeatmap is int id ? offsets!.GetSongOffset(id) : 0,
                 SongLength = channel != null && channel.Length > 0 ? channel.Length : null,
-                PauseRequested = pauseIfRunning
+                PauseRequested = pauseIfRunning,
+                Haptics = feltHere
+            },
+            // What a song offset key just set it to.
+            songOffsetText = new SpriteText
+            {
+                Anchor = Anchor.TopCentre,
+                Origin = Anchor.TopCentre,
+                Y = 110,
+                Font = YuukiFontUsage.GetFontUsage(Typeface.Quicksand, 30, FontWeight.Bold),
+                Color = palette.TextLight,
+                Alpha = 0
             },
             retryProgress = new Box
             {
@@ -275,14 +311,68 @@ public partial class GameplayScreen : YuukiScreen, IHaveScreenAction
             pauseMenu = new GameplayMenuOverlay("Paused", "Take a breath.", palette,
                 (IconUsage.PlayArrow, "Continue", resume),
                 (IconUsage.Replay, "Retry", Restart),
-                (IconUsage.Logout, "Quit", quit)),
+                (IconUsage.Logout, "Quit", quit))
+            {
+                Footer = songOffsetStepper
+            },
             failMenu = new GameplayMenuOverlay("Failed", "Your health ran out.", palette,
                 (IconUsage.Replay, "Retry", Restart),
                 (IconUsage.Logout, "Quit", quit))
         });
 
         gameplay.Failed += onFailed;
+
+        if (config != null)
+        {
+            // A device changed mid-song: its offsets take over at once, as its sound or picture already has.
+            BindValueChanged(config.Get<int>(YuukiSetting.AudioOffset), e => gameplay.AudioOffset = e.NewValue);
+            BindValueChanged(config.Get<int>(YuukiSetting.VisualOffset), e => gameplay.VisualOffset = e.NewValue);
+        }
     }
+
+    #region Song offset
+
+    private void onSongOffsetChanged(int beatmapId)
+    {
+        if (beatmapId != songOffsetBeatmap || offsets == null)
+            return;
+
+        int offset = offsets.GetSongOffset(beatmapId);
+        gameplay.SongOffset = offset;
+
+        if (songOffsetStepper != null)
+            songOffsetStepper.Current.Value = offset;
+
+        string? difficulty = workingBeatmap?.Beatmap?.DifficultyName;
+        songOffsetText.Text = string.IsNullOrEmpty(difficulty)
+            ? $"Song offset {OffsetManager.Signed(offset)}"
+            : $"Song offset {OffsetManager.Signed(offset)} ({difficulty})";
+        songOffsetText.ClearTransforms();
+        songOffsetText.FadeIn(100).Then(1200).FadeOut(400);
+    }
+
+    /// <summary>
+    /// The song offset keys: 5 ms a press (1 ms with Alt), held to keep going, in play or paused.
+    /// </summary>
+    private bool nudgeSongOffset(KeyEvent e)
+    {
+        if (songOffsetBeatmap is not int id || offsets == null || config == null
+            || state is not (PlayState.Playing or PlayState.CountingDown or PlayState.Paused))
+            return false;
+
+        int direction = e.Key == config.Get<Key>(YuukiSetting.SongOffsetUpKey).Value ? 1
+            : e.Key == config.Get<Key>(YuukiSetting.SongOffsetDownKey).Value ? -1
+            : 0;
+
+        if (direction == 0)
+            return false;
+
+        int step = (e.Modifiers & KeyModifiers.Alt) != 0 ? 1 : OffsetStepper.STEP;
+        offsets.SetSongOffset(id, offsets.GetSongOffset(id) + direction * step);
+        return true;
+    }
+
+    #endregion
 
     /// <summary>
     /// How long notes are on screen. With "follow BPM" on, the setting is the time at 120 BPM and
@@ -341,6 +431,9 @@ public partial class GameplayScreen : YuukiScreen, IHaveScreenAction
             window.FocusLost += onFocusLost;
             window.EnteringBackground += onFocusLost;
         }
+
+        if (offsets != null)
+            offsets.SongOffsetChanged += onSongOffsetChanged;
     }
 
     public override void OnResuming(Screen? last)
@@ -372,6 +465,9 @@ public partial class GameplayScreen : YuukiScreen, IHaveScreenAction
             window.EnteringBackground -= onFocusLost;
         }
 
+        if (offsets != null)
+            offsets.SongOffsetChanged -= onSongOffsetChanged;
+
         gameplay.Stop();
         audioManager?.EndGameplay();
         this.FadeOut(300);
@@ -388,6 +484,11 @@ public partial class GameplayScreen : YuukiScreen, IHaveScreenAction
     protected override void LoadComplete()
     {
         base.LoadComplete();
+
+        // Ready for the first hit, which would otherwise come a little late as the motor starts.
+        if (feltHere)
+            haptics!.Prepare();
+
         // Start the run once fully loaded (includes the container's lead-in).
         gameplay.Restart();
     }
@@ -478,6 +579,10 @@ public partial class GameplayScreen : YuukiScreen, IHaveScreenAction
         state = PlayState.CountingDown;
         int version = ++countdownVersion;
         pauseMenu.Hide();
+
+        // The motor may have stopped while paused.
+        if (feltHere)
+            haptics!.Prepare();
 
         // A beat per count, doubled up for very fast songs so the count stays readable.
         double time = gameplay.GameplayClock.CurrentTime;
@@ -575,6 +680,9 @@ public partial class GameplayScreen : YuukiScreen, IHaveScreenAction
         gameplay.FadeTo(0.4f, fail_duration, Easing.OutQuint);
 
         playSample("failsound.wav");
+
+        if (feltHere)
+            haptics!.Play(HapticFeedback.Error);
     }
 
     /// <summary>Winds the song down like a record slowing to a stop, then shows the fail menu.</summary>
@@ -607,6 +715,9 @@ public partial class GameplayScreen : YuukiScreen, IHaveScreenAction
 
         GameplayResult result = gameplay.BuildResult();
         bool isNewBest = saveRun(result);
+
+        if (feltHere && (result.IsFullCombo || result.IsAllPerfect))
+            haptics!.Play(HapticFeedback.Success);
 
         if (result.IsAllPerfect)
         {
@@ -677,6 +788,9 @@ public partial class GameplayScreen : YuukiScreen, IHaveScreenAction
         gameplay.Restart();
         skipOverlay.Reset();
 
+        if (feltHere)
+            haptics!.Prepare();
+
         // Back from a fail's wind-down (Restart has already put the rate back to 1).
         if (trackClock != null)
             trackClock.PreservePitch = true;
@@ -714,6 +828,9 @@ public partial class GameplayScreen : YuukiScreen, IHaveScreenAction
 
     public override bool OnKeyDown(KeyEvent e)
     {
+        if (nudgeSongOffset(e))
+            return true;
+
         if (e.IsRepeat)
             return base.OnKeyDown(e);
 
@@ -754,6 +871,8 @@ public partial class GameplayScreen : YuukiScreen, IHaveScreenAction
         // With the replay: watchable from the results, and again (with the full breakdown) whenever
         // the score is opened later.
         savedScore = ScoreInfo.From(result, beatmap.ID, beatmap.BeatmapSet?.ID ?? 0);
+        savedScore.AudioDevice = offsets?.AudioDevice;
+        savedScore.Display = offsets?.Display;
         savedReplay = gameplay.BuildReplay();
         scoreStore.Add(savedScore, savedReplay);
 

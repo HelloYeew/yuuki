@@ -173,4 +173,61 @@ public partial class TestReplay : YuukiManualInputManagerTestScene
         AddAssert("on lane 0", () => gameplay.BuildReplay().Inputs.Take(2).All(i => i.Lane == 0));
         AddAssert("chart fingerprinted", () => gameplay.BuildReplay().ChartHash == ReplayData.ChartHashOf(chart()));
     }
+
+    /// <summary>
+    /// A song offset nudged mid-run moves the clock at once, and the replay keeps where: played back, the offsets change
+    /// at the same point in the song, judged the same as ever, and seeking back puts them as they started.
+    /// </summary>
+    [Test]
+    public void TestOffsetChangesAreRecordedAndPlayedBack()
+    {
+        AddStep("add a live run", () => TestContent.Add(gameplay = new GameplayContainer(chart())
+        {
+            Anchor = Anchor.Centre,
+            Origin = Anchor.Centre,
+            LeadInTime = 0,
+            AudioOffset = 10,
+            SongOffset = 5
+        }));
+        AddUntilStep("loaded", () => gameplay.IsLoaded);
+        AddAssert("both on the clock", () => gameplay.GameplayClock.Offset == 15);
+
+        AddStep("nudge the song", () => gameplay.SongOffset = 20);
+        AddAssert("the clock moved", () => gameplay.GameplayClock.Offset == 30);
+        AddAssert("recorded", () =>
+        {
+            ReplayData recorded = gameplay.BuildReplay();
+            return recorded.AudioOffset == 10 && recorded.SongOffset == 5
+                   && recorded.OffsetChanges.Count == 1 && recorded.OffsetChanges[0] is { AudioOffset: 10, SongOffset: 20 };
+        });
+
+        AddStep("watch a run nudged at 200", () =>
+        {
+            ReplayData nudged = replay();
+            nudged.AudioOffset = 10;
+            nudged.SongOffset = 5;
+            nudged.OffsetChanges.Add(new ReplayOffsetChange(200, 10, 20));
+
+            TestContent.Clear();
+            TestContent.Add(gameplay = new GameplayContainer(chart())
+            {
+                Anchor = Anchor.Centre,
+                Origin = Anchor.Centre,
+                LeadInTime = 0,
+                Replay = nudged,
+                AudioOffset = nudged.AudioOffset,
+                SongOffset = nudged.SongOffset
+            });
+        });
+        AddUntilStep("loaded", () => gameplay.IsLoaded);
+        AddAssert("starts as the run did", () => gameplay.GameplayClock.Offset == 15);
+
+        AddStep("play", () => gameplay.Restart());
+        AddUntilStep("nudged where the run was", () => gameplay.GameplayClock.Offset == 30, playback_timeout);
+        AddUntilStep("everything judged", () => gameplay.AllJudged, playback_timeout);
+        AddAssert("judged as the inputs say", () => results().SequenceEqual(expected));
+
+        AddStep("seek back to 0", () => gameplay.SeekReplay(0));
+        AddUntilStep("as it started", () => gameplay.GameplayClock.Offset == 15);
+    }
 }

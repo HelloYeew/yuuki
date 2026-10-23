@@ -75,6 +75,8 @@ public partial class MenuSideFlashes : BeatSyncContainer
             RelativeSizeAxes = Axes.Y,
             Height = 1.5f,
             Width = box_width,
+            // From the screen's very edge, past a notch or a camera cutout.
+            Bleed = Edges.Left,
             Alpha = 0,
             Blending = BlendingMode.Additive,
             // Bright at the screen edge, fading toward the center.
@@ -88,6 +90,7 @@ public partial class MenuSideFlashes : BeatSyncContainer
             RelativeSizeAxes = Axes.Y,
             Height = 1.5f,
             Width = box_width,
+            Bleed = Edges.Right,
             Alpha = 0,
             Blending = BlendingMode.Additive,
             // Fading in from the center, bright at the screen edge.

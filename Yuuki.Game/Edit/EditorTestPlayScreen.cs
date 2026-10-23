@@ -17,6 +17,7 @@ using Sakura.Framework.Maths;
 using Yuuki.Game.Beatmaps;
 using Yuuki.Game.Configurations;
 using Yuuki.Game.Gameplay;
+using Yuuki.Game.Graphics;
 using Yuuki.Game.Graphics.Colors;
 using Yuuki.Game.Graphics.Screens;
 using Yuuki.Game.Graphics.Text;
@@ -39,6 +40,9 @@ public partial class EditorTestPlayScreen : YuukiScreen
 
     [Resolved(canBeNull: true)]
     private YuukiConfigManager? config { get; set; }
+
+    [Resolved(canBeNull: true)]
+    private GameLayout? gameLayout { get; set; }
 
     private GameplayContainer gameplay = null!;
     private double endTime;
@@ -97,9 +101,12 @@ public partial class EditorTestPlayScreen : YuukiScreen
                 SwipeLeftKey = config?.Get<Key>(YuukiSetting.SwipeLeftKey).Value,
                 SwipeRightKey = config?.Get<Key>(YuukiSetting.SwipeRightKey).Value,
                 AudioOffset = config?.Get(YuukiSetting.AudioOffset, 0).Value ?? 0,
-                SongLength = channel != null && channel.Length > 0 ? channel.Length : null
+                VisualOffset = config?.Get(YuukiSetting.VisualOffset, 0).Value ?? 0,
+                SongLength = channel != null && channel.Length > 0 ? channel.Length : null,
+                // By touch, the HUD's pause button: there's no pausing a test, so it goes back as Escape does.
+                PauseRequested = leave
             },
-            new TestPlayBadge(palette)
+            new TestPlayBadge(palette, gameLayout?.Touch.Value == true)
             {
                 Anchor = Anchor.TopCentre,
                 Origin = Anchor.TopCentre,
@@ -165,7 +172,7 @@ public partial class EditorTestPlayScreen : YuukiScreen
 
     private partial class TestPlayBadge : Container
     {
-        public TestPlayBadge(YuukiColorPalette palette)
+        public TestPlayBadge(YuukiColorPalette palette, bool touch)
         {
             Masking = true;
             CornerRadius = 15;
@@ -179,7 +186,7 @@ public partial class EditorTestPlayScreen : YuukiScreen
                 {
                     Anchor = Anchor.Centre,
                     Origin = Anchor.Centre,
-                    Text = "Test play! Esc to go back",
+                    Text = touch ? "Test play! Tap pause to go back" : "Test play! Esc to go back",
                     Font = YuukiFontUsage.GetFontUsage(Typeface.Nunito, 15, FontWeight.Bold),
                     Color = Color.White,
                     Margin = new MarginPadding { Left = 16, Right = 16 }

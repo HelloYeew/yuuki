@@ -121,7 +121,11 @@ public class ScoreStoreTest
             new ReplayInput(1080.5, ReplayInputKind.LaneRelease, 2),
             new ReplayInput(1500, ReplayInputKind.SwipeLeft),
             new ReplayInput(2000, ReplayInputKind.Pause),
-            new ReplayInput(2000, ReplayInputKind.Resume)
+            new ReplayInput(2000, ReplayInputKind.Resume),
+            // By touch, with the finger: the first one, 0, is kept as well.
+            new ReplayInput(2100, ReplayInputKind.TouchDown, 1, 0),
+            new ReplayInput(2200, ReplayInputKind.TouchSlide, 2, 0),
+            new ReplayInput(2300, ReplayInputKind.TouchUp, 2, 0)
         },
         Judgements = new List<RecordedJudgement>
         {
@@ -176,7 +180,7 @@ public class ScoreStoreTest
         var score = play(easy, 1);
         store.Add(score, replay());
 
-        Assert.That(store.GetReplay(score)!.Inputs, Has.Count.EqualTo(5));
+        Assert.That(store.GetReplay(score)!.Inputs, Has.Count.EqualTo(replay().Inputs.Count));
     }
 
     [Test]

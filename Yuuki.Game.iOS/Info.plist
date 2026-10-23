@@ -51,5 +51,52 @@
 	<true/>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
+	<!-- .osz, the type osu! declares, opened with the game from Files or another app ("Open in yuuki."). -->
+	<key>UTImportedTypeDeclarations</key>
+	<array>
+		<dict>
+			<key>UTTypeIdentifier</key>
+			<string>sh.ppy.osu.osz</string>
+			<key>UTTypeDescription</key>
+			<string>osu! beatmap archive</string>
+			<key>UTTypeConformsTo</key>
+			<array>
+				<string>public.data</string>
+			</array>
+			<key>UTTypeTagSpecification</key>
+			<dict>
+				<key>public.filename-extension</key>
+				<string>osz</string>
+			</dict>
+		</dict>
+	</array>
+	<key>CFBundleDocumentTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeName</key>
+			<string>osu! beatmap archive</string>
+			<key>CFBundleTypeRole</key>
+			<string>Viewer</string>
+			<key>LSHandlerRank</key>
+			<string>Alternate</string>
+			<key>LSItemContentTypes</key>
+			<array>
+				<string>sh.ppy.osu.osz</string>
+			</array>
+		</dict>
+	</array>
+	<!-- The game's storage (Documents) in Finder's Files tab for the phone, and in the Files app, where an .osz put in
+	     it is imported. A file opened from elsewhere comes in place; the framework copies it in to read it. -->
+	<key>LSSupportsOpeningDocumentsInPlace</key>
+	<true/>
+	<key>UIFileSharingEnabled</key>
+	<true/>
+	<key>LSApplicationCategoryType</key>
+	<string>public.app-category.music-games</string>
+	<!-- Game Mode, which the category alone doesn't turn on: LSSupportsGameMode from iOS 26, GCSupportsGameMode before. -->
+	<key>LSSupportsGameMode</key>
+	<true/>
+	<key>GCSupportsGameMode</key>
+	<true/>
 </dict>
 </plist>

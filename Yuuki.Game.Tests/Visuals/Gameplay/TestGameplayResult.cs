@@ -5,6 +5,7 @@ using System;
 using NUnit.Framework;
 using Sakura.Framework.Testing;
 using Yuuki.Game.Beatmaps;
+using Yuuki.Game.Configurations;
 using Yuuki.Game.Gameplay.Scoring;
 
 namespace Yuuki.Game.Tests.Visuals.Gameplay;
@@ -115,25 +116,62 @@ public partial class TestGameplayResult : TestScene
         AddAssert("release still counts as early", () => result.EarlyCount(HitResult.Critical) == 1);
     }
 
+    /// <summary>
+    /// The judging moves to meet the taps, and nothing else does: the audio offset by the mean error one way, the visual
+    /// offset by it the other, so their sum (where the notes are seen against the music) stays.
+    /// </summary>
     [Test]
-    public void TestSuggestedOffsetCorrectsMeanError()
+    public void TestSuggestedOffsetsMoveTheJudgingOnly()
     {
-        // 30 presses, all 44 ms late, played at offset 0 -> offset should drop by 44.
+        // 30 presses, all 44 ms late, played at 0 and 0.
         var late = new GameplayResult { CriticalCount = 30, Judgements = repeat(judgement(HitResult.Critical, 44), 30) };
-        AddAssert("suggests -44", () => late.SuggestedOffset == -44);
+        AddAssert("audio -44, visual +44", () => late.SuggestedOffsets == (-44, 44));
 
-        // Already at −10 and still 5 ms early -> raise to −5.
-        var early = new GameplayResult { CriticalCount = 30, AudioOffset = -10, Judgements = repeat(judgement(HitResult.Critical, -5), 30) };
-        AddAssert("suggests -5", () => early.SuggestedOffset == -5);
+        // At -10 and +20, and still 5 ms early.
+        var early = new GameplayResult { CriticalCount = 30, AudioOffset = -10, VisualOffset = 20, Judgements = repeat(judgement(HitResult.Critical, -5), 30) };
+        AddAssert("audio -5, visual +15", () => early.SuggestedOffsets == (-5, 15));
+        AddAssert("the sum kept", () => early.SuggestedOffsets is var (audio, visual) && audio + visual == -10 + 20);
+    }
+
+    /// <summary>
+    /// Where either offset would pass its limit, both move as far as it can go, so the sum still stays.
+    /// </summary>
+    [Test]
+    public void TestSuggestedOffsetsStopAtTheLimits()
+    {
+        var result = new GameplayResult
+        {
+            CriticalCount = 30,
+            AudioOffset = YuukiConfigManager.MIN_AUDIO_OFFSET + 10,
+            VisualOffset = 0,
+            Judgements = repeat(judgement(HitResult.Critical, 44), 30)
+        };
+
+        AddAssert("moved 10, both", () => result.SuggestedOffsets == (YuukiConfigManager.MIN_AUDIO_OFFSET, 10));
+    }
+
+    /// <summary>
+    /// What a run's lean cost: presses that would have been Critical with it taken off.
+    /// </summary>
+    [Test]
+    public void TestCriticalsLostToLean()
+    {
+        // 30 presses 60 ms late, every one a Break: centred, every one Critical.
+        var late = new GameplayResult { CriticalCount = 0, BreakCount = 30, Judgements = repeat(judgement(HitResult.Break, 60), 30) };
+        AddAssert("all 30", () => late.CriticalsLostToLean == 30);
+
+        // Already Critical, if a little late: nothing to win.
+        var close = new GameplayResult { CriticalCount = 30, Judgements = repeat(judgement(HitResult.Critical, 10), 30) };
+        AddAssert("none", () => close.CriticalsLostToLean == 0);
     }
 
     [Test]
-    public void TestSuggestedOffsetNeedsEnoughHits()
+    public void TestSuggestedOffsetsNeedEnoughHits()
     {
         int tooFew = GameplayResult.MINIMUM_OFFSET_SAMPLES - 1;
         var result = new GameplayResult { CriticalCount = tooFew, Judgements = repeat(judgement(HitResult.Critical, 44), tooFew) };
 
-        AddAssert("no suggestion", () => result.SuggestedOffset == null);
+        AddAssert("no suggestion", () => result.SuggestedOffsets == null);
     }
 
     private static JudgementResult[] repeat(JudgementResult judgement, int count)

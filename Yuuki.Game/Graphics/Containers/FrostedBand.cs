@@ -207,8 +207,9 @@ public partial class FrostedBand : Container
         }
 
         // Line the copies up with the screen's background, wherever the band is (it slides in and out).
-        var topLeft = frost.ToLocalSpace(screenBackground.ToScreenSpace(Vector2.Zero));
-        var bottomRight = frost.ToLocalSpace(screenBackground.ToScreenSpace(screenBackground.DrawSize));
+        Quad background = screenBackground.ScreenSpaceDrawQuad;
+        var topLeft = frost.ToLocalSpace(background.TopLeft);
+        var bottomRight = frost.ToLocalSpace(background.BottomRight);
 
         copy.Position = videoCopy.Position = topLeft;
         copy.Size = videoCopy.Size = bottomRight - topLeft;

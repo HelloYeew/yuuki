@@ -16,10 +16,10 @@ using Yuuki.Game.Graphics.Colors;
 namespace Yuuki.Game.Tests.Visuals.Gameplay;
 
 /// <summary>
-/// A hold that changes lanes has to be followed: any key in the lanes it crosses keeps it held (roll
-/// across, or jump to the end key), and its tail is judged when it's let go from its end lane. Let go
-/// anywhere else at the end and it wasn't followed: a Miss. Inputs are fed at exact times through the
-/// replay path, which judges them as live presses.
+/// On a keyboard, a hold that changes lanes is played as a normal hold: keys can't follow it across, so the
+/// key that takes it holds it to the end, wherever it drifts, and letting go of that key judges the tail.
+/// Another key doesn't carry it. (By touch a finger follows it: see <see cref="TestTouchPlay"/>.) Inputs are
+/// fed at exact times through the replay path, which judges them as live presses.
 /// </summary>
 public partial class TestCrossLaneHold : TestScene
 {
@@ -70,35 +70,22 @@ public partial class TestCrossLaneHold : TestScene
     private IEnumerable<HitResult> results => gameplay.BuildResult().Judgements.Select(j => j.Result);
 
     [Test]
-    public void TestRollingAcross()
+    public void TestHeldByItsKeyToTheEnd()
     {
-        play(crossing(),
-            press(300, 0), press(500, 1), release(520, 0), press(700, 2), release(720, 1), release(900, 2));
+        play(crossing(), press(300, 0), release(900, 0));
 
         AddAssert("head and tail on time", () => results.SequenceEqual(new[] { HitResult.Critical, HitResult.Critical }));
         AddAssert("never broken", () => gameplay.BuildResult().HoldBreakCount == 0);
-        AddAssert("the character followed it", () => gameplay.CharacterLane == 2);
     }
 
+    /// <summary>
+    /// The keys of the lanes it drifts into don't take it over: letting go of its own key early breaks it.
+    /// </summary>
     [Test]
-    public void TestJumpingToTheEndKey()
+    public void TestAnotherKeyDoesntCarryIt()
     {
-        play(crossing(), press(300, 0), press(850, 2), release(860, 0), release(900, 2));
-        AddAssert("head and tail on time", () => results.SequenceEqual(new[] { HitResult.Critical, HitResult.Critical }));
-    }
-
-    [Test]
-    public void TestNotFollowedIsAMiss()
-    {
-        play(crossing(), press(300, 0), release(900, 0));
-        AddAssert("the tail misses", () => results.SequenceEqual(new[] { HitResult.Critical, HitResult.Miss }));
-    }
-
-    [Test]
-    public void TestEndKeyLetGoOnTimeWhileStillHoldingTheStart()
-    {
-        play(crossing(), press(300, 0), press(800, 2), release(900, 2), release(950, 0));
-        AddAssert("head and tail on time", () => results.SequenceEqual(new[] { HitResult.Critical, HitResult.Critical }));
+        play(crossing(), press(300, 0), press(500, 1), release(520, 0), release(900, 1));
+        AddAssert("broken", () => gameplay.BuildResult().HoldBreakCount == 1);
     }
 
     [Test]
@@ -107,6 +94,18 @@ public partial class TestCrossLaneHold : TestScene
         play(crossing(), press(300, 0), release(500, 0));
         AddAssert("a break, then the tail runs out", () =>
             gameplay.BuildResult().HoldBreakCount == 1 && results.SequenceEqual(new[] { HitResult.Critical, HitResult.Miss }));
+    }
+
+    /// <summary>
+    /// Dropped, it's taken up again by the key of any lane it crosses, which then holds it to the end; the
+    /// tail is capped at Hit for the drop.
+    /// </summary>
+    [Test]
+    public void TestTakenUpAgainFromAnyLaneItCrosses()
+    {
+        play(crossing(), press(300, 0), release(450, 0), press(600, 2), release(900, 2));
+        AddAssert("a break, then the tail", () =>
+            gameplay.BuildResult().HoldBreakCount == 1 && results.SequenceEqual(new[] { HitResult.Critical, HitResult.Hit }));
     }
 
     [Test]

@@ -312,6 +312,46 @@ public partial class DialogButton : ClickableContainer
     // A dangerous answer is taken by holding, never by a click.
     public override bool OnClick(MouseButtonEvent e) => dangerous || base.OnClick(e);
 
+    // By touch nothing is held down (a finger only clicks as it lifts), so a dangerous answer takes the finger
+    // itself: it fills while the finger stays on it, and lets go as it slides off or lifts, as with the mouse.
+    private TouchSource? finger;
+
+    public override bool OnTouchDown(TouchEvent e)
+    {
+        if (!dangerous || finger != null)
+            return false;
+
+        finger = e.Source;
+        beginHold();
+        return true;
+    }
+
+    public override bool OnTouchMove(TouchEvent e)
+    {
+        if (finger != e.Source)
+            return false;
+
+        if (Contains(e.ScreenSpacePosition))
+            beginHold();
+        else if (heldKey == null)
+            abortHold();
+
+        return true;
+    }
+
+    public override bool OnTouchUp(TouchEvent e)
+    {
+        if (finger != e.Source)
+            return false;
+
+        finger = null;
+
+        if (heldKey == null)
+            abortHold();
+
+        return true;
+    }
+
     private void beginHold()
     {
         if (fired || !Enabled.Value)
