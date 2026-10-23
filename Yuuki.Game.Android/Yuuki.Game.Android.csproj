@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0-android</TargetFramework>
+    <SupportedOSPlatformVersion>29</SupportedOSPlatformVersion>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <ApplicationId>dev.helloyeew.yuuki</ApplicationId>
+    <ApplicationTitle>yuuki.</ApplicationTitle>
+    <ApplicationVersion>1</ApplicationVersion>
+    <ApplicationDisplayVersion>1.0</ApplicationDisplayVersion>
+    <RuntimeIdentifiers>android-arm64</RuntimeIdentifiers>
+  </PropertyGroup>
+  <PropertyGroup Label="Runtime">
+    <!-- CoreCLR rather than Mono. Stock CoreCLR for now: Satori isn't built for Android yet. -->
+    <UseMonoRuntime>false</UseMonoRuntime>
+    <!-- Uncompressed assemblies are memory-mapped from the APK instead of being inflated into memory at launch. -->
+    <AndroidEnableAssemblyCompression>false</AndroidEnableAssemblyCompression>
+  </PropertyGroup>
+  <ItemGroup Label="Resources">
+    <!-- Resources/ is where Android keeps its own resources, so it isn't embedded the way it is elsewhere. -->
+    <EmbeddedResource Remove="Resources\**" />
+  </ItemGroup>
+  <ItemGroup Label="Package References">
+    <PackageReference Include="Sakura.Framework.Android" Version="2026.1023.0" />
+  </ItemGroup>
+  <ItemGroup Label="Project References">
+    <ProjectReference Include="..\Yuuki.Game\Yuuki.Game.csproj" />
+  </ItemGroup>
+</Project>
