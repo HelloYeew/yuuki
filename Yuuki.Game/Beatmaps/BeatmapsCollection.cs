@@ -73,9 +73,14 @@ public class BeatmapsCollection
 
     public Beatmap? GetBeatmapById(int id) => Beatmaps.Find(e => e.ID == id);
 
-    public BeatmapSet? GetRandomBeatmapSet()
+    /// <param name="except">A set not to pick while there's another, such as the one playing now.</param>
+    public BeatmapSet? GetRandomBeatmapSet(BeatmapSet? except = null)
     {
         var candidates = BeatmapSets.Where(e => !e.Hide).ToList();
+
+        if (except != null && candidates.Count > 1)
+            candidates.RemoveAll(e => e.ID == except.ID);
+
         return candidates.Count == 0 ? null : candidates[Random.Shared.Next(candidates.Count)];
     }
 

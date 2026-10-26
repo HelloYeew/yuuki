@@ -396,7 +396,8 @@ public partial class YuukiAudioManager : Component
         if (!AllowTrackChange.Value)
             return;
 
-        BeatmapSet? next = beatmapsCollection.GetRandomBeatmapSet();
+        // Another set than the one playing, where there is one: picking the same changes nothing.
+        BeatmapSet? next = beatmapsCollection.GetRandomBeatmapSet(workingBeatmap.BeatmapSet);
         if (next.IsNotNull())
             workingBeatmap.BeatmapSet = next;
     }
@@ -457,15 +458,16 @@ public partial class YuukiAudioManager : Component
 
     private void onCurrentChannelEnded()
     {
-        // A looping channel shouldn't reach its end; nothing to do if one does.
-        if (LoopPreview.Value)
-            return;
-
         // A screen that has the song fixed (results, setup, gameplay) keeps it: the song starts over
-        // from its preview point rather than moving on, which would change the beatmap under it.
-        if (!AllowTrackChange.Value)
+        // from its preview point rather than moving on, which would change the beatmap under it. So does
+        // a looping preview that stopped anyway, which it does when the song ran out just as the loop was
+        // turned on (song select entered at the song's end): left alone, song select would be silent. One
+        // still running has wrapped by itself, as a looping channel reports every time it does.
+        if (LoopPreview.Value || !AllowTrackChange.Value)
         {
-            if (channel.IsNotNull() && workingBeatmap.BeatmapSet.IsNotNull())
+            bool wrapped = LoopPreview.Value && channel.IsNotNull() && channel.IsRunning.Value;
+
+            if (!wrapped && channel.IsNotNull() && workingBeatmap.BeatmapSet.IsNotNull())
             {
                 channel.CurrentTime = workingBeatmap.BeatmapSet.PreviewTime;
                 channel.Play();
@@ -474,7 +476,22 @@ public partial class YuukiAudioManager : Component
             return;
         }
 
-        workingBeatmap.BeatmapSet = beatmapsCollection.GetRandomBeatmapSet();
+        var next = beatmapsCollection.GetRandomBeatmapSet(workingBeatmap.BeatmapSet);
+
+        // Picking the set that's playing changes nothing, so the song would stay stopped: the only set
+        // there is plays again from the start instead.
+        if (next.IsNull() || Equals(next, workingBeatmap.BeatmapSet))
+        {
+            if (channel.IsNotNull())
+            {
+                channel.CurrentTime = 0;
+                channel.Play();
+            }
+
+            return;
+        }
+
+        workingBeatmap.BeatmapSet = next;
     }
 
     private void onBeatmapSetChanged(BeatmapSet oldSet, BeatmapSet newSet)
