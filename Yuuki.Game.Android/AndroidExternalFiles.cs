@@ -29,10 +29,19 @@ public class AndroidExternalFiles : IExternalFiles
     {
         var uri = Uri.Parse(link)!;
 
-        using (var cursor = context.ContentResolver?.Query(uri, new[] { IOpenableColumns.DisplayName }, null, null, null))
+        // The app that handed the link over decides what it answers: no permission to read it (one sent without the
+        // grant, or a stale one from Recents), no such column, or a file deleted since all throw, and this is asked on the
+        // update thread. The link's own last segment names it then, and opening it is where the import fails.
+        try
         {
-            if (cursor != null && cursor.MoveToFirst() && cursor.GetString(0) is { Length: > 0 } name)
-                return name;
+            using (var cursor = context.ContentResolver?.Query(uri, new[] { IOpenableColumns.DisplayName }, null, null, null))
+            {
+                if (cursor != null && cursor.MoveToFirst() && cursor.GetString(0) is { Length: > 0 } name)
+                    return name;
+            }
+        }
+        catch (Exception)
+        {
         }
 
         return uri.LastPathSegment ?? link;

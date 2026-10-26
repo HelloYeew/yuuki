@@ -20,10 +20,14 @@ namespace Yuuki.Game.Android;
     Theme = "@android:style/Theme.Black.NoTitleBar",
     // Every layout in the game is a landscape one.
     ScreenOrientation = ScreenOrientation.SensorLandscape,
-    // Rotating, resizing or folding would otherwise restart the activity; the game lays itself out again instead.
+    // Rotating, resizing or folding would otherwise restart the activity; the game lays itself out again instead. So would
+    // changing the system's language, text size or bold text, display colors, or SIM: SDL ends the whole app when its
+    // activity is made a second time, so each of those closed the game.
     ConfigurationChanges = ConfigChanges.Keyboard | ConfigChanges.KeyboardHidden | ConfigChanges.Navigation | ConfigChanges.Orientation
                            | ConfigChanges.ScreenLayout | ConfigChanges.ScreenSize | ConfigChanges.SmallestScreenSize | ConfigChanges.UiMode
-                           | ConfigChanges.Density)]
+                           | ConfigChanges.Density | ConfigChanges.Locale | ConfigChanges.LayoutDirection | ConfigChanges.FontScale
+                           | ConfigChanges.FontWeightAdjustment | ConfigChanges.GrammaticalGender | ConfigChanges.ColorMode
+                           | ConfigChanges.Touchscreen | ConfigChanges.Mcc | ConfigChanges.Mnc)]
 // An .osz a file manager or browser opens with the game (most give it no type of its own, so its name says what it is),
 // or one shared to it. Android's path patterns don't backtrack: ".*" runs to the first "." and needs ".osz" right
 // there, so a name with dots before it ("(TV size ver.).osz") needs a pattern with as many.
