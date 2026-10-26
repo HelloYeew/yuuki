@@ -613,6 +613,8 @@ public partial class GameplayScreen : YuukiScreen, IHaveScreenAction
             resumeAt -= beatLength - intoBeat;
         }
 
+        resumeAt += audioManager?.GameplayChannel?.OutputLatency ?? 0;
+
         Scheduler.AddDelayed(() =>
         {
             if (version != countdownVersion)
