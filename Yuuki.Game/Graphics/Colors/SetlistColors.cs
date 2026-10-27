@@ -6,7 +6,6 @@ using System.Linq;
 using Sakura.Framework.Extensions.ColorExtensions;
 using Sakura.Framework.Graphics.Colors;
 using Yuuki.Game.Beatmaps;
-using Yuuki.Game.Utilities;
 
 namespace Yuuki.Game.Graphics.Colors;
 

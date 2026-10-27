@@ -69,7 +69,8 @@ public partial class Playfield : Container
     /// </summary>
     /// <remarks>
     /// On top of <see cref="DisplayLatency"/>, which the renderer measures, so this is only what that can't see: the
-    /// panel's response, and the tap's own delay.
+    /// panel's response. Not the tap's own delay, which is in every tap whether it goes by ear or by eye, so the audio
+    /// offset covers it (see <see cref="Graphics.Screens.CalibrationScreen"/>).
     /// </remarks>
     public double VisualOffset { get; set; }
 
