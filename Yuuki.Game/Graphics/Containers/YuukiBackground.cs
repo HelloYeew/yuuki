@@ -16,6 +16,7 @@ using Sakura.Framework.Graphics.Video;
 using Sakura.Framework.Maths;
 using Sakura.Framework.Platform;
 using Sakura.Framework.Reactive;
+using Sakura.Framework.Timing;
 using Sakura.Framework.Utilities;
 using Yuuki.Game.Audio;
 using Yuuki.Game.Beatmaps;
@@ -55,10 +56,11 @@ public partial class YuukiBackground : Container
     private Container? currentVideoContainer;
 
     /// <summary>
-    /// Max drift (ms) between video and audio before a corrective seek. Big enough to ignore audio
-    /// start-up/buffer jitter (so it doesn't seek repeatedly), small enough that a real desync is caught.
+    /// What the video plays on: the music's position, smoothed between the audio's coarse updates and running at its
+    /// speed. The video follows it as it would the music itself, so at a replay's half speed it plays at half speed,
+    /// and a seek or retry moves it with the song.
     /// </summary>
-    private const double resync_threshold = 250;
+    private InterpolatingFramedClock musicClock = null!;
 
     private BeatmapSet? currentSet;
 
@@ -115,6 +117,8 @@ public partial class YuukiBackground : Container
     private void load()
     {
         RelativeSizeAxes = Axes.Both;
+
+        musicClock = new InterpolatingFramedClock(new ChannelClock(() => activeChannel));
 
         Add(blurContainer = new BufferedContainer(false)
         {
@@ -246,6 +250,15 @@ public partial class YuukiBackground : Container
         {
             var previousContainer = currentVideoContainer;
             var previousVideo = currentVideo;
+
+            // It fades out on the frame it was showing. Left on the music's clock, it would follow the next song, and seek
+            // to where that one is as it went.
+            if (previousVideo.IsNotNull())
+            {
+                previousVideo.SyncToClock = false;
+                previousVideo.Pause();
+            }
+
             previousContainer.FadeOut(fade_duration, Easing.OutQuint);
             Scheduler.AddDelayed(() =>
             {
@@ -266,7 +279,9 @@ public partial class YuukiBackground : Container
             Anchor = Anchor.Centre,
             Origin = Anchor.Centre,
             RelativeSizeAxes = Axes.Both,
-            FillMode = TextureFillMode.Fill
+            FillMode = TextureFillMode.Fill,
+            Clock = musicClock,
+            SyncToClock = true
         };
 
         currentVideoContainer = new Container
@@ -286,45 +301,38 @@ public partial class YuukiBackground : Container
     private IAudioChannel? activeChannel => audioManager?.InGameplay == true ? audioManager.GameplayChannel : audioManager?.CurrentChannel;
 
     /// <summary>
-    /// Keeps the background video locked to the music. The video plays on its own clock, but is paused
-    /// whenever the audio is and re-seeked only when it drifts past <see cref="resync_threshold"/> from
-    /// the audio — one catch-up seek when a preview starts partway in, then nothing during steady
-    /// playback. Small audio start-up jitter stays under the threshold, so it doesn't cause a burst of
-    /// seeks. A paused video is still moved to the audio's position, so gameplay's count-in shows the
-    /// song's first frame rather than wherever the preview had got to.
+    /// Whichever channel is playing, as a clock: the song's position (what's heard), and its speed, tempo and frequency
+    /// both. Read each time, so it moves on with the music from the preview to gameplay and back.
     /// </summary>
-    private void updateVideoSync()
+    private sealed class ChannelClock : IClock
     {
-        // Wait until the decoder is ready (Duration known) so a Seek actually takes effect.
-        if (currentVideo.IsNull() || currentVideo.Duration <= 0)
-            return;
+        private readonly Func<IAudioChannel?> channel;
 
-        // Nobody sees a hidden video, so it is held still rather than decoded. Showing it again
-        // catches it up with one seek.
-        if (!videoShown && Precision.AlmostEqualZero(videoLayer.Alpha))
+        public ChannelClock(Func<IAudioChannel?> channel)
         {
-            if (currentVideo.IsPlaying)
-                currentVideo.Pause();
-            return;
+            this.channel = channel;
         }
 
-        var channel = activeChannel;
-        if (channel.IsNull())
+        public double CurrentTime => channel()?.CurrentTime ?? 0;
+
+        public double Rate => channel() is IAudioChannel playing ? playing.Frequency.Value * playing.Tempo.Value : 1;
+
+        public bool IsRunning => channel()?.IsRunning.Value ?? false;
+    }
+
+    /// <summary>
+    /// Moves <see cref="musicClock"/> on to the music's position, which the video then shows (it follows the clock
+    /// itself: a jump is a seek, anything less it plays through). A stopped song holds it on its frame, so gameplay's
+    /// count-in shows the song's first frame rather than wherever the preview had got to.
+    /// </summary>
+    private void updateMusicClock()
+    {
+        // Nobody sees a hidden video, so it is held still rather than decoded. Showing it again
+        // catches it up with one seek.
+        if (currentVideo.IsNull() || (!videoShown && Precision.AlmostEqualZero(videoLayer.Alpha)))
             return;
 
-        bool running = channel.IsRunning.Value;
-
-        if (running && !currentVideo.IsPlaying)
-            currentVideo.Play();
-        else if (!running && currentVideo.IsPlaying)
-            currentVideo.Pause();
-
-        // Measured against where the video can actually be: past its end the video holds its last
-        // frame, and comparing with the audio there would seek it again every frame.
-        double target = Math.Min(channel.CurrentTime, currentVideo.Duration);
-
-        if (Math.Abs(currentVideo.CurrentTime - target) > resync_threshold)
-            currentVideo.Seek(target);
+        musicClock.ProcessFrame();
     }
 
     public override void Update()
@@ -332,7 +340,9 @@ public partial class YuukiBackground : Container
         base.Update();
 
         updateBlurTransition();
-        updateVideoSync();
+
+        // Before the video updates, which it does after this.
+        updateMusicClock();
     }
 
     public void HideVideo()
