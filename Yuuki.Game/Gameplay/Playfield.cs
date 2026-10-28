@@ -5,6 +5,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Sakura.Framework.Allocation;
+using Sakura.Framework.Extensions.ColorExtensions;
 using Sakura.Framework.Extensions.DrawableExtensions;
 using Sakura.Framework.Extensions.ObjectExtensions;
 using Sakura.Framework.Graphics.Colors;
@@ -388,7 +389,7 @@ public partial class Playfield : Container
             }, true);
         }
 
-        Color[] cycle = { palette.Accent, palette.TextLight, palette.TextMuted, palette.Surface, palette.Control, palette.TextLight, palette.Accent };
+        Color[] cycle = { palette.Accent, palette.TextLight, palette.TextMuted, palette.Surface, ColorExtensions.FromHex("#D3BBFA"), palette.TextLight, palette.Accent };
         laneColors = new Color[laneCount];
         for (int i = 0; i < laneCount; i++)
             laneColors[i] = cycle[i % cycle.Length];
