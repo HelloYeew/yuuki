@@ -22,7 +22,7 @@
     <EmbeddedResource Remove="Resources\**" />
   </ItemGroup>
   <ItemGroup Label="Package References">
-    <PackageReference Include="Sakura.Framework.Android" Version="2026.1024.0" />
+    <PackageReference Include="Sakura.Framework.Android" Version="2026.1027.0" />
   </ItemGroup>
   <ItemGroup Label="Project References">
     <ProjectReference Include="..\Yuuki.Game\Yuuki.Game.csproj" />
