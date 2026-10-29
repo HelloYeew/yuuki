@@ -63,6 +63,27 @@ float noise(vec2 p)
                mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), u.x), u.y);
 }
 
+float hash(vec3 p)
+{
+    p = fract(p * 0.1031);
+    p += dot(p, p.zyx + 31.32);
+    return fract((p.x + p.y) * p.z);
+}
+
+// Smooth noise in three dimensions: with time as the third, a pattern changes where it is instead of sliding along.
+float noise(vec3 p)
+{
+    vec3 i = floor(p);
+    vec3 f = fract(p);
+    vec3 u = f * f * (3.0 - 2.0 * f);
+
+    float near = mix(mix(hash(i), hash(i + vec3(1.0, 0.0, 0.0)), u.x),
+                     mix(hash(i + vec3(0.0, 1.0, 0.0)), hash(i + vec3(1.0, 1.0, 0.0)), u.x), u.y);
+    float far = mix(mix(hash(i + vec3(0.0, 0.0, 1.0)), hash(i + vec3(1.0, 0.0, 1.0)), u.x),
+                    mix(hash(i + vec3(0.0, 1.0, 1.0)), hash(i + vec3(1.0, 1.0, 1.0)), u.x), u.y);
+    return mix(near, far, u.z);
+}
+
 float fbm(vec2 p)
 {
     float value = 0.0;
