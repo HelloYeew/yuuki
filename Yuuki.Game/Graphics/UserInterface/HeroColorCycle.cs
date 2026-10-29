@@ -55,7 +55,7 @@ public partial class HeroColorCycle : Component
 
     /// <summary>
     /// Starts handing the moving color to <paramref name="apply"/>, for a color that isn't a drawable's own (an
-    /// <see cref="EdgeGlow"/>'s, a <see cref="LightRays"/>' spokes). Remove it by the same delegate.
+    /// <see cref="EdgeGlow"/>'s). Remove it by the same delegate.
     /// </summary>
     public void Add(Action<Color> apply, float hue = 0) => targets.Add((apply, apply, hue));
 
