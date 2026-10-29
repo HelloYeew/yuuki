@@ -5,13 +5,14 @@ using System;
 using Sakura.Framework.Extensions.ColorExtensions;
 using Sakura.Framework.Graphics.Drawables;
 using Sakura.Framework.Graphics.Rendering;
-using Sakura.Framework.Graphics.Rendering.Vertex;
 using Sakura.Framework.Maths;
+using Sakura.Framework.Utilities;
 
 namespace Yuuki.Game.Graphics.UserInterface;
 
 /// <summary>
-/// A ring filled clockwise from 12 o'clock up to <see cref="Progress"/> — a circular progress bar.
+/// A ring filled clockwise from 12 o'clock up to <see cref="Progress"/> — a circular progress bar. With a
+/// <see cref="Start"/> it's an arc from there instead, as a segment of a ring split into bands.
 /// The ring fills this drawable's bounds; <see cref="InnerRadius"/> sets its thickness. Emits one quad
 /// per segment, like <see cref="Yuuki.Game.Gameplay.HoldNoteBody"/>, since the framework has no arc.
 /// </summary>
@@ -22,11 +23,30 @@ public partial class RingArc : Drawable
     /// </summary>
     private const int full_segments = 160;
 
+    private float start;
     private float progress = 1;
     private float innerRadius = 0.85f;
+    private bool smoothEdges;
 
     /// <summary>
-    /// How much of the ring is drawn, 0–1.
+    /// Where the ring starts, 0–1 of a turn clockwise from 12 o'clock; it's drawn from here to <see cref="Progress"/>.
+    /// </summary>
+    public float Start
+    {
+        get => start;
+        set
+        {
+            value = Math.Clamp(value, 0, 1);
+            if (Precision.AlmostEquals(value, start))
+                return;
+
+            start = value;
+            Invalidate(InvalidationFlags.DrawInfo);
+        }
+    }
+
+    /// <summary>
+    /// Where the ring ends, 0–1 of a turn: how much of it is drawn when it starts at 12 o'clock.
     /// </summary>
     public float Progress
     {
@@ -34,7 +54,7 @@ public partial class RingArc : Drawable
         set
         {
             value = Math.Clamp(value, 0, 1);
-            if (value == progress)
+            if (Precision.AlmostEquals(value, progress))
                 return;
 
             progress = value;
@@ -55,6 +75,23 @@ public partial class RingArc : Drawable
         }
     }
 
+    /// <summary>
+    /// Whether the edges fade over a screen pixel, as masks draw theirs, instead of stepping. It takes three times the
+    /// vertices, so it's for the rings looked at closely (the results), not every ring in a song.
+    /// </summary>
+    public bool SmoothEdges
+    {
+        get => smoothEdges;
+        set
+        {
+            if (value == smoothEdges)
+                return;
+
+            smoothEdges = value;
+            Invalidate(InvalidationFlags.DrawInfo);
+        }
+    }
+
     protected override VertexTopology Topology => VertexTopology.Triangles;
 
     // The color is baked into every segment vertex, so the default four-corner color fast path would
@@ -63,15 +100,17 @@ public partial class RingArc : Drawable
 
     protected override void GenerateVertices()
     {
-        int segments = (int)MathF.Ceiling(full_segments * progress);
-        if (segments == 0)
+        float sweepFraction = progress - start;
+        int segments = (int)MathF.Ceiling(full_segments * sweepFraction);
+        if (segments <= 0)
         {
             SetVertexCount(0);
             DrawRectangle = new RectangleF(0, 0, 0, 0);
             return;
         }
 
-        SetVertexCount(segments * 6);
+        int perSegment = FeatheredStrip.VerticesPerPiece(smoothEdges);
+        SetVertexCount(segments * perSegment);
 
         var color = new Vector4(
             ColorExtensions.SrgbToLinear(Color.R),
@@ -79,40 +118,35 @@ public partial class RingArc : Drawable
             ColorExtensions.SrgbToLinear(Color.B),
             DrawAlpha * (Color.A / 255f));
 
-        float sweep = MathF.Tau * progress;
+        float startAngle = -MathF.PI / 2 + MathF.Tau * start;
+        float sweep = MathF.Tau * sweepFraction;
+        float feather = smoothEdges ? FeatheredStrip.EDGE_FEATHER : 0;
         float minX = float.MaxValue, minY = float.MaxValue, maxX = float.MinValue, maxY = float.MinValue;
 
-        Vector2 previousOuter = Vector2.Zero, previousInner = Vector2.Zero;
+        StripSection previous = default;
+        int offset = 0;
 
         for (int i = 0; i <= segments; i++)
         {
-            // Start at 12 o'clock, going clockwise (screen y points down).
-            float angle = -MathF.PI / 2 + sweep * i / segments;
+            // Clockwise from the start (screen y points down).
+            float angle = startAngle + sweep * i / segments;
             float cos = MathF.Cos(angle);
             float sin = MathF.Sin(angle);
 
             // Unit-square local space, mapped to screen by ModelMatrix.
             Vector2 outer = Vector2.Transform(new Vector2(0.5f + 0.5f * cos, 0.5f + 0.5f * sin), ModelMatrix);
             Vector2 inner = Vector2.Transform(new Vector2(0.5f + 0.5f * innerRadius * cos, 0.5f + 0.5f * innerRadius * sin), ModelMatrix);
+            var section = new StripSection(inner, outer, feather);
 
-            minX = Math.Min(minX, Math.Min(outer.X, inner.X));
-            minY = Math.Min(minY, Math.Min(outer.Y, inner.Y));
-            maxX = Math.Max(maxX, Math.Max(outer.X, inner.X));
-            maxY = Math.Max(maxY, Math.Max(outer.Y, inner.Y));
+            minX = Math.Min(minX, Math.Min(section.AOuter.X, section.BOuter.X));
+            minY = Math.Min(minY, Math.Min(section.AOuter.Y, section.BOuter.Y));
+            maxX = Math.Max(maxX, Math.Max(section.AOuter.X, section.BOuter.X));
+            maxY = Math.Max(maxY, Math.Max(section.AOuter.Y, section.BOuter.Y));
 
             if (i > 0)
-            {
-                int offset = (i - 1) * 6;
-                Vertices[offset + 0] = new Vertex { Position = previousOuter, TexCoords = new Vector2(0, 0), Color = color };
-                Vertices[offset + 1] = new Vertex { Position = outer, TexCoords = new Vector2(1, 0), Color = color };
-                Vertices[offset + 2] = new Vertex { Position = inner, TexCoords = new Vector2(1, 1), Color = color };
-                Vertices[offset + 3] = new Vertex { Position = inner, TexCoords = new Vector2(1, 1), Color = color };
-                Vertices[offset + 4] = new Vertex { Position = previousInner, TexCoords = new Vector2(0, 1), Color = color };
-                Vertices[offset + 5] = new Vertex { Position = previousOuter, TexCoords = new Vector2(0, 0), Color = color };
-            }
+                offset = FeatheredStrip.Write(Vertices, offset, previous, section, color, smoothEdges);
 
-            previousOuter = outer;
-            previousInner = inner;
+            previous = section;
         }
 
         DrawRectangle = new RectangleF(minX, minY, maxX - minX, maxY - minY);
