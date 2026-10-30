@@ -9,6 +9,7 @@ using Sakura.Framework.Graphics.Drawables;
 using Sakura.Framework.Graphics.Primitives;
 using Sakura.Framework.Graphics.Rendering;
 using Sakura.Framework.Graphics.Textures;
+using Sakura.Framework.Graphics.Transforms;
 using Sakura.Framework.Maths;
 using Yuuki.Game.Graphics.Colors;
 
@@ -145,6 +146,9 @@ public partial class BlossomFlower : Container
         Anchor = Anchor.Centre;
         Origin = Anchor.Centre;
         Size = new Vector2(64);
+        // A ring's buds start unseen and are only ever shown by their alpha (Grow): kept present so they're drawn
+        // properly once they are.
+        AlwaysPresent = true;
 
         stem = new StemLayer(this);
 
@@ -388,7 +392,7 @@ public partial class BlossomFlower : Container
 
     private static float clamp01(double value) => (float)Math.Clamp(value, 0, 1);
 
-    private static float outCubic(float t) => 1 - MathF.Pow(1 - t, 3);
+    private static float outCubic(float t) => (float)EasingFunctions.Apply(Easing.OutCubic, t);
 
     /// <summary>
     /// Where a flower's stem is drawn: over the flower's spot, wherever it is, as grown out as it is. The flower's size,
@@ -404,6 +408,7 @@ public partial class BlossomFlower : Container
             Anchor = flower.Anchor;
             Origin = flower.Origin;
             Size = flower.Size;
+            AlwaysPresent = true;
         }
 
         public override void Update()

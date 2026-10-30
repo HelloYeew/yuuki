@@ -9,6 +9,7 @@ using Sakura.Framework.Graphics.Drawables;
 using Sakura.Framework.Graphics.Primitives;
 using Sakura.Framework.Graphics.Rendering;
 using Sakura.Framework.Graphics.Rendering.Vertex;
+using Sakura.Framework.Graphics.Transforms;
 using Sakura.Framework.Maths;
 using Yuuki.Game.Graphics.Rendering;
 
@@ -278,7 +279,7 @@ public partial class BubbleDisc : Container
         OutOfRound = Math.Max(Math.Abs(min), Math.Abs(max));
     }
 
-    private static float outCubic(float t) => 1 - MathF.Pow(1 - t, 3);
+    private static float outCubic(float t) => (float)EasingFunctions.Apply(Easing.OutCubic, t);
 
     /// <param name="Time">When it was poked, on the disc's clock.</param>
     /// <param name="Strength">How hard.</param>

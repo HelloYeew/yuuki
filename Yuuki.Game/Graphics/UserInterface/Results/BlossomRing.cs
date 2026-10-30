@@ -11,6 +11,7 @@ using Sakura.Framework.Graphics.Drawables;
 using Sakura.Framework.Graphics.Primitives;
 using Sakura.Framework.Graphics.Rendering;
 using Sakura.Framework.Graphics.Textures;
+using Sakura.Framework.Graphics.Transforms;
 using Sakura.Framework.Maths;
 using Yuuki.Game.Gameplay.Scoring;
 using Yuuki.Game.Graphics.Colors;
@@ -267,6 +268,9 @@ public partial class BlossomRing : Container
 
             clusters.Add(cluster);
         }
+
+        // Grown as far as the fill (none yet) has brought them, so they don't show before it comes near.
+        updateGrowth();
 
         // Where the branch starts and the ring closes: the logo's bud, tilted as the logo is, with two small ones.
         Color yuuna = HeroColors.YUUNA.Main;
@@ -538,10 +542,10 @@ public partial class BlossomRing : Container
             bandFills[i].Progress = Math.Clamp(fillAmount, start, end);
         }
 
+        updateGrowth();
+
         foreach (Cluster cluster in clusters)
         {
-            cluster.Grow = outCubic(Math.Clamp((fillAmount - (cluster.At - grow_ahead)) / grow_span, 0, 1));
-
             bool reached = fillAmount >= cluster.At;
 
             if (reached && !cluster.Reached)
@@ -557,6 +561,15 @@ public partial class BlossomRing : Container
                 cluster.Close();
             }
         }
+    }
+
+    /// <summary>
+    /// How far each rank's buds have grown out of the branch: not at all until the fill comes near their rank.
+    /// </summary>
+    private void updateGrowth()
+    {
+        foreach (Cluster cluster in clusters)
+            cluster.Grow = outCubic(Math.Clamp((fillAmount - (cluster.At - grow_ahead)) / grow_span, 0, 1));
     }
 
     /// <summary>
@@ -598,7 +611,7 @@ public partial class BlossomRing : Container
         return new Vector2(MathF.Cos(angle), MathF.Sin(angle)) * radius;
     }
 
-    private static float outCubic(float t) => 1 - MathF.Pow(1 - t, 3);
+    private static float outCubic(float t) => (float)EasingFunctions.Apply(Easing.OutCubic, t);
 
     /// <summary>
     /// A speck of light on the band ring: where it starts and how fast it drifts (turns a second), how far in or out of
