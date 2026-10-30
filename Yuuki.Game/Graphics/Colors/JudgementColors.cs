@@ -9,6 +9,12 @@ namespace Yuuki.Game.Graphics.Colors;
 
 public static class JudgementColors
 {
+    /// <summary>
+    /// A Bloom, where one color has to do (a dot on a graph, a burst of light). Shown on its own, a Bloom takes the
+    /// Hero Club's rainbow (<see cref="RainbowColors"/>).
+    /// </summary>
+    public static readonly Color BLOOM = ColorExtensions.FromHex("#F07FB0");
+
     public static readonly Color CRITICAL = ColorExtensions.FromHex("#E0A030");
     public static readonly Color BREAK = ColorExtensions.FromHex("#4E8FD9");
     public static readonly Color HIT = ColorExtensions.FromHex("#4FA36B");
@@ -26,8 +32,14 @@ public static class JudgementColors
     /// </summary>
     public static readonly Color ALL_PERFECT = ColorExtensions.FromHex("#E8649E");
 
+    /// <summary>
+    /// SS: Yuuna's color.
+    /// </summary>
+    public static readonly Color SS = HeroColors.YUUNA.Main;
+
     public static Color For(HitResult result) => result switch
     {
+        HitResult.Bloom => BLOOM,
         HitResult.Critical => CRITICAL,
         HitResult.Break => BREAK,
         HitResult.Hit => HIT,
@@ -36,6 +48,7 @@ public static class JudgementColors
 
     public static Color For(ScoreRank rank) => rank switch
     {
+        ScoreRank.SS => SS,
         ScoreRank.S => CRITICAL,
         ScoreRank.A => HIT,
         ScoreRank.B => BREAK,

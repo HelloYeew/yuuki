@@ -50,6 +50,7 @@ public static class HeroColors
     /// </summary>
     public static HeroSwatch ForRank(ScoreRank rank) => rank switch
     {
+        ScoreRank.SS => YUUNA,
         ScoreRank.S => FUU,
         ScoreRank.A => ITSUKI,
         ScoreRank.B => MIMORI,

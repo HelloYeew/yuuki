@@ -9,8 +9,8 @@ namespace Yuuki.Game.Gameplay.Scoring;
 
 /// <summary>
 /// Score, combo and accuracy from incoming <see cref="JudgementResult"/>s, normalized: a perfect run
-/// of any chart is exactly <see cref="MAX_SCORE"/> — 90% for accuracy, 10% for combo. The rank comes
-/// from accuracy, not score.
+/// of any chart is exactly <see cref="MAX_SCORE"/> — 90% for accuracy, 10% for combo — and each Bloom adds a point on
+/// top, so a Full Bloom scores past it. The rank comes from accuracy, not score.
 /// </summary>
 public class ScoreProcessor
 {
@@ -47,6 +47,9 @@ public class ScoreProcessor
     private double accuracyTotal;
     private double comboTotal;
 
+    // Each Bloom adds a point past the normalised score.
+    private int blooms;
+
     /// <summary>
     /// Sets the chart's totals so the score can be normalized to <see cref="MAX_SCORE"/>.
     /// </summary>
@@ -78,6 +81,9 @@ public class ScoreProcessor
         judgedWeight += weight;
         accuracyTotal += weight * value;
 
+        if (result.Result == HitResult.Bloom)
+            blooms++;
+
         if (result.Result.IsHit())
         {
             Combo.Value++;
@@ -105,6 +111,7 @@ public class ScoreProcessor
     public void Reset()
     {
         judgedWeight = accuracyTotal = comboTotal = 0;
+        blooms = 0;
         Combo.Value = 0;
         MaxCombo.Value = 0;
         refresh();
@@ -120,7 +127,7 @@ public class ScoreProcessor
         double normalised = (weightBase > 0 ? accuracy_portion * accuracyTotal / weightBase : 0)
                             + (comboBase > 0 ? combo_portion * comboTotal / comboBase : 0);
 
-        Score.Value = (int)Math.Round(MAX_SCORE * normalised);
+        Score.Value = (int)Math.Round(MAX_SCORE * normalised) + blooms;
     }
 
     /// <summary>

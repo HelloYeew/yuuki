@@ -244,6 +244,7 @@ public partial class GameplayContainer : Container
     /// </summary>
     public bool Seek(double time) => clockContainer.Seek(time);
 
+    private int bloomCount;
     private int criticalCount;
     private int breakCount;
     private int hitCount;
@@ -330,6 +331,7 @@ public partial class GameplayContainer : Container
     {
         Score = Score.Score.Value,
         MaxCombo = Score.MaxCombo.Value,
+        BloomCount = bloomCount,
         CriticalCount = criticalCount,
         BreakCount = breakCount,
         HitCount = hitCount,
@@ -476,8 +478,8 @@ public partial class GameplayContainer : Container
     }
 
     /// <summary>
-    /// A hit felt by how good it was: a Critical firm and crisp, a Hit soft and dull. A miss, nothing, and nor a
-    /// Pass note, which nothing touched.
+    /// A hit felt by how good it was: a Bloom or a Critical firm and crisp, a Hit soft and dull. A miss, nothing, and nor
+    /// a Pass note, which nothing touched.
     /// </summary>
     private void feel(JudgementResult result)
     {
@@ -486,6 +488,7 @@ public partial class GameplayContainer : Container
 
         switch (result.Result)
         {
+            case HitResult.Bloom:
             case HitResult.Critical:
                 haptics?.PlayTap(0.75f, 0.85f);
                 break;
@@ -504,6 +507,7 @@ public partial class GameplayContainer : Container
     {
         switch (result)
         {
+            case HitResult.Bloom: bloomCount++; break;
             case HitResult.Critical: criticalCount++; break;
             case HitResult.Break: breakCount++; break;
             case HitResult.Hit: hitCount++; break;
@@ -538,7 +542,7 @@ public partial class GameplayContainer : Container
         Score.Reset();
         Health.Reset();
         Skills.Reset();
-        criticalCount = breakCount = hitCount = missCount = holdBreakCount = 0;
+        bloomCount = criticalCount = breakCount = hitCount = missCount = holdBreakCount = 0;
         failed = false;
         playfield.InputPaused = false;
         judgements.Clear();

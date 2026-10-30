@@ -19,6 +19,11 @@ public class ScoreInfo
     public double Accuracy { get; set; }
     public int MaxCombo { get; set; }
 
+    /// <summary>
+    /// Blooms; 0 for plays saved before there were any.
+    /// </summary>
+    public int BloomCount { get; set; }
+
     public int CriticalCount { get; set; }
     public int BreakCount { get; set; }
     public int HitCount { get; set; }
@@ -28,6 +33,11 @@ public class ScoreInfo
     public ScoreRank Rank { get; set; }
     public bool IsFullCombo { get; set; }
     public bool IsAllPerfect { get; set; }
+
+    /// <summary>
+    /// Every judgement a Bloom (<see cref="GameplayResult.IsFullBloom"/>).
+    /// </summary>
+    public bool IsFullBloom { get; set; }
 
     /// <summary>The player ran out of health. Counts as a play, never as a ranking entry.</summary>
     public bool Failed { get; set; }
@@ -79,6 +89,7 @@ public class ScoreInfo
         Score = result.Score,
         Accuracy = result.Accuracy,
         MaxCombo = result.MaxCombo,
+        BloomCount = result.BloomCount,
         CriticalCount = result.CriticalCount,
         BreakCount = result.BreakCount,
         HitCount = result.HitCount,
@@ -87,6 +98,7 @@ public class ScoreInfo
         Rank = result.Rank,
         IsFullCombo = result.IsFullCombo,
         IsAllPerfect = result.IsAllPerfect,
+        IsFullBloom = result.IsFullBloom,
         Failed = result.Failed,
         Date = DateTimeOffset.Now,
         MeanError = result.TimingSamples >= GameplayResult.MINIMUM_OFFSET_SAMPLES ? result.MeanError : null,

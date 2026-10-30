@@ -12,6 +12,11 @@ namespace Yuuki.Game.Gameplay.Scoring;
 /// </summary>
 public class HitWindows
 {
+    /// <summary>
+    /// Half <see cref="Critical"/>'s window.
+    /// </summary>
+    public double Bloom { get; set; } = 22;
+
     public double Critical { get; set; } = 45;
     public double Break { get; set; } = 90;
     public double Hit { get; set; } = 135;
@@ -49,6 +54,7 @@ public class HitWindows
     public HitResult ResultFor(double timingError)
     {
         double error = Math.Abs(timingError);
+        if (error <= Bloom) return HitResult.Bloom;
         if (error <= Critical) return HitResult.Critical;
         if (error <= Break) return HitResult.Break;
         if (error <= Hit) return HitResult.Hit;

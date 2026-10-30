@@ -22,7 +22,8 @@ public partial class TestGameplayResult : TestScene
     [Test]
     public void TestRankThresholds()
     {
-        AddAssert("100% is S", () => ScoreRankExtensions.FromAccuracy(1) == ScoreRank.S);
+        AddAssert("100% is SS", () => ScoreRankExtensions.FromAccuracy(1) == ScoreRank.SS);
+        AddAssert("99.99% is S", () => ScoreRankExtensions.FromAccuracy(0.9999) == ScoreRank.S);
         AddAssert("95% is S", () => ScoreRankExtensions.FromAccuracy(0.95) == ScoreRank.S);
         AddAssert("94.99% is A", () => ScoreRankExtensions.FromAccuracy(0.9499) == ScoreRank.A);
         AddAssert("80% is B", () => ScoreRankExtensions.FromAccuracy(0.80) == ScoreRank.B);
@@ -54,7 +55,7 @@ public partial class TestGameplayResult : TestScene
     [Test]
     public void TestHoldBreakKeepsS()
     {
-        var result = new GameplayResult { CriticalCount = 100, HoldBreakCount = 1 };
+        var result = new GameplayResult { CriticalCount = 99, BreakCount = 1, HoldBreakCount = 1 };
 
         AddAssert("is S", () => result.Rank == ScoreRank.S);
         AddAssert("lost nothing", () => !result.RankLostToMiss);
@@ -67,7 +68,35 @@ public partial class TestGameplayResult : TestScene
 
         AddAssert("is all perfect", () => result.IsAllPerfect);
         AddAssert("is full combo", () => result.IsFullCombo);
-        AddAssert("is S", () => result.Rank == ScoreRank.S);
+        AddAssert("is SS", () => result.Rank == ScoreRank.SS);
+        AddAssert("is not a full bloom", () => !result.IsFullBloom);
+    }
+
+    /// <summary>
+    /// Every judgement a Bloom: a Full Bloom, which is an all perfect too.
+    /// </summary>
+    [Test]
+    public void TestFullBloom()
+    {
+        var result = new GameplayResult { BloomCount = 10 };
+
+        AddAssert("is a full bloom", () => result.IsFullBloom);
+        AddAssert("is all perfect", () => result.IsAllPerfect);
+        AddAssert("is SS", () => result.Rank == ScoreRank.SS);
+    }
+
+    /// <summary>
+    /// Blooms and Criticals together: an all perfect, not a Full Bloom; a Bloom counts as much as a Critical.
+    /// </summary>
+    [Test]
+    public void TestBloomsCountAsCriticals()
+    {
+        var result = new GameplayResult { BloomCount = 6, CriticalCount = 3, BreakCount = 1 };
+
+        AddAssert("accuracy as if all ten were Criticals but one Break", () => Math.Abs(result.Accuracy - (9 + 2.0 / 3) / 10) < 1e-9);
+        AddAssert("not all perfect", () => !result.IsAllPerfect);
+        AddAssert("no Break and it's all perfect", () => new GameplayResult { BloomCount = 6, CriticalCount = 4 }.IsAllPerfect);
+        AddAssert("but not a full bloom", () => !new GameplayResult { BloomCount = 6, CriticalCount = 4 }.IsFullBloom);
     }
 
     [Test]

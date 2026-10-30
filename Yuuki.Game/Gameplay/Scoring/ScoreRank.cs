@@ -14,7 +14,12 @@ public enum ScoreRank
     C,
     B,
     A,
-    S
+    S,
+
+    /// <summary>
+    /// Accuracy of 100%: every note Critical or Bloom.
+    /// </summary>
+    SS
 }
 
 public static class ScoreRankExtensions
@@ -29,6 +34,7 @@ public static class ScoreRankExtensions
     /// </summary>
     public static double MinimumAccuracy(this ScoreRank rank) => rank switch
     {
+        ScoreRank.SS => 1,
         ScoreRank.S => 0.95,
         ScoreRank.A => 0.90,
         ScoreRank.B => 0.80,
@@ -57,6 +63,10 @@ public static class ScoreRankExtensions
     /// </summary>
     public static ScoreRank FromAccuracy(double accuracy)
     {
+        // Everything Critical or better: exactly 1, as a weighted mean of ones.
+        if (accuracy >= ScoreRank.SS.MinimumAccuracy() - 1e-9)
+            return ScoreRank.SS;
+
         for (int i = THRESHOLD_RANKS.Length - 1; i >= 0; i--)
         {
             if (accuracy >= THRESHOLD_RANKS[i].MinimumAccuracy())

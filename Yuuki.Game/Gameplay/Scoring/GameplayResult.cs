@@ -17,6 +17,7 @@ public class GameplayResult
     public int Score { get; init; }
     public int MaxCombo { get; init; }
 
+    public int BloomCount { get; init; }
     public int CriticalCount { get; init; }
     public int BreakCount { get; init; }
     public int HitCount { get; init; }
@@ -62,6 +63,7 @@ public class GameplayResult
     {
         Score = (int)score.Score,
         MaxCombo = score.MaxCombo,
+        BloomCount = score.BloomCount,
         CriticalCount = score.CriticalCount,
         BreakCount = score.BreakCount,
         HitCount = score.HitCount,
@@ -79,7 +81,7 @@ public class GameplayResult
     /// <summary>The player ran out of health before the end.</summary>
     public bool Failed { get; init; }
 
-    public int TotalNotes => CriticalCount + BreakCount + HitCount + MissCount;
+    public int TotalNotes => BloomCount + CriticalCount + BreakCount + HitCount + MissCount;
 
     private readonly double? accuracy;
 
@@ -98,7 +100,8 @@ public class GameplayResult
             if (TotalNotes == 0)
                 return 1;
 
-            return (CriticalCount * HitResult.Critical.Value() + BreakCount * HitResult.Break.Value() + HitCount * HitResult.Hit.Value()) / TotalNotes;
+            return (BloomCount * HitResult.Bloom.Value() + CriticalCount * HitResult.Critical.Value() + BreakCount * HitResult.Break.Value()
+                    + HitCount * HitResult.Hit.Value()) / TotalNotes;
         }
         init => accuracy = value;
     }
@@ -124,9 +127,14 @@ public class GameplayResult
     public bool IsFullCombo => TotalNotes > 0 && MissCount == 0 && HoldBreakCount == 0;
 
     /// <summary>
-    /// Every judgement was a Critical (AP). Implies <see cref="IsFullCombo"/>.
+    /// Every judgement was a Critical or a Bloom (AP). Implies <see cref="IsFullCombo"/>.
     /// </summary>
-    public bool IsAllPerfect => IsFullCombo && CriticalCount == TotalNotes;
+    public bool IsAllPerfect => IsFullCombo && BloomCount + CriticalCount == TotalNotes;
+
+    /// <summary>
+    /// Every judgement was a Bloom: the theoretical best (理論値). Implies <see cref="IsAllPerfect"/>.
+    /// </summary>
+    public bool IsFullBloom => IsFullCombo && BloomCount == TotalNotes;
 
     /// <summary>
     /// How many judgements of <paramref name="result"/> were pressed early (negative error).

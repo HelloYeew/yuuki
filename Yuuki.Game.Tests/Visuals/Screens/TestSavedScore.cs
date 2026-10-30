@@ -101,8 +101,10 @@ public partial class TestSavedScore : TestYuukiScreenStack
         AddStep("at double speed", () => ((ReplayScreen)screenStack.CurrentScreen!).Gameplay!.Rate = 2);
 
         // Real-time playback outruns a headless step timeout; allow for it.
-        AddUntilStep("judged as recorded", () => screenStack.CurrentScreen is ReplayScreen { Gameplay: { AllJudged: true } } replayScreen
-                                                 && replayScreen.Gameplay.BuildResult().CriticalCount == 2, 60_000);
+        // Its inputs judged again, with today's windows: two presses on time are Blooms, though the play was saved
+        // before there were any.
+        AddUntilStep("judged again from its inputs", () => screenStack.CurrentScreen is ReplayScreen { Gameplay: { AllJudged: true } } replayScreen
+                                                           && replayScreen.Gameplay.BuildResult().BloomCount == 2, 60_000);
         AddUntilStep("back on the score", () => screenStack.CurrentScreen == scoreScreen, 60_000);
     }
 
