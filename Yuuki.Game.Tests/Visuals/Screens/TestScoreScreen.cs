@@ -13,6 +13,7 @@ using Yuuki.Game.Configurations;
 using Yuuki.Game.Gameplay.Scoring;
 using Yuuki.Game.Graphics.Screens;
 using Yuuki.Game.Graphics.UserInterface;
+using Yuuki.Game.Graphics.UserInterface.Results;
 
 namespace Yuuki.Game.Tests.Visuals.Screens;
 
@@ -44,6 +45,51 @@ public partial class TestScoreScreen : TestYuukiScreenStack
 
     [Test]
     public void TestEmptyRun() => showResult("empty run", new GameplayResult(), r => r.TotalNotes == 0);
+
+    /// <summary>
+    /// A skip goes first to just before the first rank lands (an S that breaks, here), then to nearly the end; the rank
+    /// the run earned has landed by then, though the skip jumped it, and after that there's nothing left to skip.
+    /// </summary>
+    [Test]
+    public void TestSkipping()
+    {
+        showResult("S lost to a miss", build(critical: 380, breaks: 15, misses: 1, seed: 5), r => r.RankLostToMiss);
+
+        AddStep("skip", () => shown!.Skip());
+        AddAssert("just before the S lands", () => shown!.RevealTime >= shown.Timeline.FirstLanding - RevealTimeline.SKIP_LEAD && shown.RevealTime < shown.Timeline.FirstLanding);
+        AddAssert("no rank landed yet", () => !shown!.RankRevealed);
+
+        AddStep("skip again", () => shown!.Skip());
+        AddAssert("nearly the end", () => shown!.RevealTime >= shown.Timeline.End - RevealTimeline.SKIP_TAIL);
+        AddUntilStep("the rank it earned has landed", () => shown!.RankRevealed);
+        AddAssert("nothing left to skip", () => !shown!.Skip());
+    }
+
+    /// <summary>
+    /// Once the reveal is over Yuuki speaks, her words in the footer; with her voice turned off, she doesn't.
+    /// </summary>
+    [Test]
+    public void TestYuukiSpeaksOnceItsOver()
+    {
+        showResult("full combo", build(critical: 320, breaks: 60, hits: 20, seed: 2), r => r.IsFullCombo);
+        AddStep("skip to the end", () =>
+        {
+            shown!.Skip();
+            shown.Skip();
+        });
+        AddUntilStep("her words", () => isSubtitle(shown!.ScreenHelperText.Value));
+
+        AddStep("turn her voice off", () => config.Get<bool>(YuukiSetting.ResultsVoice).Value = false);
+        showResult("full combo again", build(critical: 320, breaks: 60, hits: 20, seed: 2), r => r.IsFullCombo);
+        AddStep("skip to the end", () =>
+        {
+            shown!.Skip();
+            shown.Skip();
+        });
+        AddWaitStep("past when she'd speak", 1000);
+        AddAssert("not a word", () => !isSubtitle(shown!.ScreenHelperText.Value));
+        AddStep("her voice back on", () => config.Get<bool>(YuukiSetting.ResultsVoice).Value = true);
+    }
 
     /// <summary>
     /// The offer moves the judging alone: both offsets by the run's lean, the other way about.
@@ -139,6 +185,9 @@ public partial class TestScoreScreen : TestYuukiScreenStack
     }
 
     private ScoreScreen? shown;
+
+    // Whether the footer says one of Yuuki's lines.
+    private static bool isSubtitle(string text) => ResultsVoice.Lines.Values.SelectMany(takes => takes).Any(take => take.English == text);
 
     private PillButton pill(string text) => pillOrNull(text)!;
 

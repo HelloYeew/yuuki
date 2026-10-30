@@ -131,6 +131,20 @@ public partial class TestBlossomRing : YuukiTestScene
         });
     }
 
+    /// <summary>
+    /// A rank's buds grow out of the branch only as the fill comes near it: none show before the fill has started (only
+    /// the three at the top, which are there from the start), and they don't show and then vanish when it does.
+    /// </summary>
+    [Test]
+    public void TestTheBudsWaitForTheFill()
+    {
+        AddUntilStep("only the three at the top show before the fill", () => shownFlowers() == 3);
+        AddStep("fill to 68%, just short of C", () => ring.Fill = 0.68f);
+        AddUntilStep("C's three are growing too", () => shownFlowers() == 6);
+    }
+
+    private int shownFlowers() => descendants(ring).OfType<BlossomFlower>().Count(f => f.Alpha > 0);
+
     private static IEnumerable<Drawable> descendants(Drawable drawable)
     {
         yield return drawable;

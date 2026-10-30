@@ -179,6 +179,9 @@ public partial class GameplayScreen : YuukiScreen, IHaveScreenAction
     // Set by the results screen's Retry, read when it hands control back.
     private bool retryRequested;
 
+    // Which try in a row on this chart the run is: Yuuki says so on the results screen after a few.
+    private int attempt = 1;
+
     // Whether this run has been written to the score store (once per run).
     private bool saved;
 
@@ -754,7 +757,7 @@ public partial class GameplayScreen : YuukiScreen, IHaveScreenAction
         // until it's done; the results music waits for it. Leaving (or retrying) stops it.
         gameplay.SilenceHitSounds();
 
-        screenStack.Push(new ScoreScreen(result, isNewBest, () => retryRequested = true, savedScore, savedReplay)
+        screenStack.Push(new ScoreScreen(result, isNewBest, () => retryRequested = true, savedScore, savedReplay, attempt)
         {
             Anchor = Anchor.Centre,
             Origin = Anchor.Centre,
@@ -769,6 +772,7 @@ public partial class GameplayScreen : YuukiScreen, IHaveScreenAction
     /// <summary>Starts the run over in place: same chart, same track, everything reset.</summary>
     public void Restart()
     {
+        attempt++;
         state = PlayState.Playing;
         saved = false;
         savedScore = null;

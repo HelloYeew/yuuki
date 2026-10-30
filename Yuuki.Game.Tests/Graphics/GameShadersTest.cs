@@ -33,7 +33,7 @@ public class GameShadersTest
 
     [Test]
     public void TestTheShadersAreFound() =>
-        Assert.That(shaders, Is.EquivalentTo(new[] { "bubble-back.frag", "bubble-front.frag", "edge-glow.frag", "rays.frag" }));
+        Assert.That(shaders, Is.EquivalentTo(new[] { "bubble-back.frag", "bubble-front.frag", "edge-glow.frag", "landing-waves.frag", "rays.frag" }));
 
     [Test]
     public void TestEachBuilds([ValueSource(nameof(shaders))] string shader,

@@ -2,7 +2,6 @@
 // See the LICENSE file for full license text.
 
 using System;
-using Sakura.Framework.Graphics.Colors;
 using Sakura.Framework.Graphics.Drawables;
 using Sakura.Framework.Graphics.Rendering;
 using Sakura.Framework.Graphics.Rendering.Vertex;
@@ -132,7 +131,7 @@ public partial class LightRays : Drawable
 
         // Narrower rays are the noise's peaks taken to a higher power.
         var data = new Vector4(spokes, Math.Clamp(1f / spokeWidth, 1, 8), time, heroColored ? -alpha : alpha);
-        float color = packColor(Color);
+        float color = GameShaderDrawNode.PackColor(Color);
 
         Vertex vertex(float x, float y) => new Vertex
         {
@@ -163,15 +162,5 @@ public partial class LightRays : Drawable
         }
 
         DrawRectangle = new RectangleF(minX, minY, maxX - minX, maxY - minY);
-    }
-
-    /// <summary>
-    /// A color as one number, six bits a channel (red highest), for the shader: small enough to come through the
-    /// GPU's interpolation exact. Six bits is plenty for a tint of light.
-    /// </summary>
-    private static float packColor(Color color)
-    {
-        int channel(byte value) => (int)MathF.Round(value / 255f * 63);
-        return channel(color.R) * 4096 + channel(color.G) * 64 + channel(color.B);
     }
 }

@@ -34,6 +34,7 @@ using Yuuki.Game.Graphics.Containers;
 using Yuuki.Game.Graphics.Text;
 using Yuuki.Game.Graphics.Screens;
 using Yuuki.Game.Graphics.ScreenStacks;
+using Yuuki.Game.Graphics.UserInterface.Results;
 using Vector2 = Sakura.Framework.Maths.Vector2;
 
 namespace Yuuki.Game.Graphics.UserInterface.Overlay;
@@ -125,6 +126,7 @@ public partial class SettingsOverlay : FocusedOverlayContainer
 
     private const string framework_url = "https://github.com/HelloYeew/sakura";
     private const string yuuki_url = "https://github.com/HelloYeew/yuuki";
+    private const string voicevox_url = "https://voicevox.hiroshiba.jp/";
 
     [BackgroundDependencyLoader]
     private void load(YuukiConfigManager configManager, FrameworkConfigManager frameworkConfigManager, [CanBeNull] IYuukiColorProvider? colorProvider)
@@ -284,6 +286,9 @@ public partial class SettingsOverlay : FocusedOverlayContainer
             settingRow("Hitsound volume", "The notes, holds and combo break during play, on top of effects volume.",
                 percentSlider(configManager.Get<double>(YuukiSetting.HitsoundVolume)),
                 "samples", "sfx", "keysound"),
+            settingRow("Yuuki's voice", $"On the results screen, Yuuki calls your rank and says how she felt about the run ({ResultsVoice.CREDIT}).",
+                toggle(configManager.Get<bool>(YuukiSetting.ResultsVoice)),
+                "speech", "character", "results", "tsumugi", "voicevox", "subtitles"),
             settingRow("Output device", "Where sound plays. The system default follows your system as its choice changes.",
                 outputDeviceDropdown(frameworkConfigManager.Get<string>(FrameworkSetting.AudioDevice)),
                 "device", "output", "speaker", "headphone", "bluetooth"),
@@ -419,9 +424,14 @@ public partial class SettingsOverlay : FocusedOverlayContainer
                 multiplierSlider(frameworkConfigManager.Get<double>(FrameworkSetting.CursorSensitivity), 0.1, 4),
                 "mouse", "speed", "velocity", "raw input"));
 
-        searchBox.Text.BindValueChanged(e => applySearch(e.NewValue));
+        // Who and what the game is made with: its version and framework, then the voice, with links to them.
+        addSection(content, IconUsage.Info, "About", true,
+            createAbout(),
+            settingRow("Voice", $"Yuuki's voice on the results screen is 春日部つむぎ, made with VOICEVOX, a free text-to-speech engine. {ResultsVoice.CREDIT}",
+                links(("春日部つむぎ", ResultsVoice.CREDIT_URL), ("VOICEVOX", voicevox_url)),
+                "credits", "acknowledgements", "tsumugi", "kasukabe", "voicevox", "speech"));
 
-        content.Add(createAbout());
+        searchBox.Text.BindValueChanged(e => applySearch(e.NewValue));
 
         if (gameLayout != null)
             BindValueChanged(gameLayout.Current, e => applyLayout(e.NewValue == DisplayLayout.Phone), true);
@@ -502,17 +512,31 @@ public partial class SettingsOverlay : FocusedOverlayContainer
     };
 
     // A row the platform doesn't have comes as null, and is left out.
-    private void addSection(FlowContainer content, IconUsage icon, string title, params Drawable?[] rows)
+    private void addSection(FlowContainer content, IconUsage icon, string title, params Drawable?[] rows) => addSection(content, icon, title, false, rows);
+
+    /// <param name="separated">Whether a line sets it apart from the sections above, over its title.</param>
+    private void addSection(FlowContainer content, IconUsage icon, string title, bool separated, params Drawable?[] rows)
     {
+        var heading = new List<Drawable>();
+
+        if (separated)
+        {
+            heading.Add(new Box
+            {
+                RelativeSizeAxes = Axes.X,
+                Height = 2,
+                Color = palette.Text,
+                Alpha = 0.15f
+            });
+        }
+
         var section = new FlowContainer
         {
             RelativeSizeAxes = Axes.X,
             AutoSizeAxes = Axes.Y,
             Direction = FlowDirection.Vertical,
             Spacing = new Vector2(0, 22),
-            Children = new Drawable[]
-            {
-                new FlowContainer
+            Children = heading.Append(new FlowContainer
                 {
                     AutoSizeAxes = Axes.Both,
                     Direction = FlowDirection.Horizontal,
@@ -537,8 +561,7 @@ public partial class SettingsOverlay : FocusedOverlayContainer
                             Color = palette.Control
                         }
                     }
-                }
-            }
+                }).ToArray()
         };
 
         foreach (Drawable? row in rows)
@@ -1222,7 +1245,7 @@ public partial class SettingsOverlay : FocusedOverlayContainer
     };
 
     /// <summary>
-    /// The bottom of the settings: the game's logo, version and build, and the framework it runs on.
+    /// The top of the About section: the game's logo, version and build, and the framework it runs on.
     /// </summary>
     private Drawable createAbout()
     {
@@ -1237,13 +1260,6 @@ public partial class SettingsOverlay : FocusedOverlayContainer
             Spacing = new Vector2(0, 24),
             Children = new Drawable[]
             {
-                new Box
-                {
-                    RelativeSizeAxes = Axes.X,
-                    Height = 2,
-                    Color = palette.Text,
-                    Alpha = 0.15f
-                },
                 new Container
                 {
                     RelativeSizeAxes = Axes.X,
@@ -1302,6 +1318,21 @@ public partial class SettingsOverlay : FocusedOverlayContainer
             }
         };
     }
+
+    /// <summary>
+    /// A button for each link, side by side, each opening it in the browser.
+    /// </summary>
+    private Drawable links(params (string Text, string Url)[] links) => new FlowContainer
+    {
+        AutoSizeAxes = Axes.Both,
+        Direction = FlowDirection.Horizontal,
+        Spacing = new Vector2(12, 0),
+        Children = links.Select(link => (Drawable)new PillButton(palette.Control, Color.White)
+        {
+            Text = link.Text,
+            Action = () => host?.OpenUrlExternally(link.Url)
+        }).ToArray()
+    };
 
     private static string versionText(string version) => version == "development" ? "Development build" : $"Version {version}";
 

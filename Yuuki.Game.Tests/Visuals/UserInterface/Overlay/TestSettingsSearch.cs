@@ -76,7 +76,7 @@ public partial class TestSettingsSearch : YuukiManualInputManagerTestScene
         AddAssert("nothing", () => !overlay.ShownSections.Any() && !overlay.ShownSettings.Any());
 
         AddStep("clear the search", () => overlay.SearchText = string.Empty);
-        AddAssert("everything back", () => overlay.ShownSections.Count() == 6);
+        AddAssert("everything back", () => overlay.ShownSections.Count() == 7);
     }
 
     [Test]

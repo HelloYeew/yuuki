@@ -35,6 +35,13 @@ public partial class YuukiAudioManager : Component
     private const string results_track_path = "theme/result.mp3";
 
     /// <summary>
+    /// The results music's beat, in ms, and where its first beat is (132 BPM)
+    /// </summary>
+    public const double RESULTS_MUSIC_BEAT = 60000 / 132.0;
+
+    private const double results_first_beat = 432;
+
+    /// <summary>
     /// How long the result music takes to fade in.
     /// </summary>
     private const double results_fade_in = 1200;
@@ -49,6 +56,54 @@ public partial class YuukiAudioManager : Component
     /// (a chart often ends before its song does).
     /// </summary>
     public bool ResultsMusicWaiting { get; private set; }
+
+    /// <summary>
+    /// How loud the results music is while it's lowered (<see cref="ResultsMusicLowered"/>): about -9 dB.
+    /// </summary>
+    private const double results_lowered_volume = 0.35;
+
+    /// <summary>
+    /// How fast the results music goes down when it's lowered, and back up once it's let go (after a moment, in case
+    /// it's lowered again straight away), in ms.
+    /// </summary>
+    private const double results_lower_time = 50;
+
+    private const double results_raise_time = 300;
+    private const double results_raise_delay = 250;
+
+    private double resultsLowering = 1;
+    private double resultsLetGoAt = double.NegativeInfinity;
+    private bool resultsMusicLowered;
+
+    /// <summary>
+    /// How far the results music is through its beat, 0–1 (0 on the beat); null while it isn't playing.
+    /// </summary>
+    public double? ResultsMusicBeat
+    {
+        get
+        {
+            if (resultsChannel.IsNull() || !resultsChannel.IsRunning.Value)
+                return null;
+
+            double beats = (resultsChannel.CurrentTime - results_first_beat) / RESULTS_MUSIC_BEAT;
+            return beats - Math.Floor(beats);
+        }
+    }
+
+    /// <summary>
+    /// Lowers the results music, to be spoken over (Yuuki's voice), until set false again.
+    /// </summary>
+    public bool ResultsMusicLowered
+    {
+        get => resultsMusicLowered;
+        set
+        {
+            if (resultsMusicLowered && !value)
+                resultsLetGoAt = Clock.CurrentTime;
+
+            resultsMusicLowered = value;
+        }
+    }
 
     // Ducks in force (see Duck): the music's low-pass sits at the lowest cutoff among them.
     private readonly List<DuckParameters> duckOperations = new List<DuckParameters>();
@@ -180,21 +235,27 @@ public partial class YuukiAudioManager : Component
             startResultsMusic();
         }
 
-        updateResultsFadeIn();
+        updateResultsVolume();
         updateDuck();
     }
 
-    // Ease the results music in rather than cutting it on at full volume.
-    private void updateResultsFadeIn()
+    // Ease the results music in rather than cutting it on at full volume, and down under a voice.
+    private void updateResultsVolume()
     {
-        if (resultsChannel.IsNull() || double.IsNaN(resultsFadeStart))
+        bool raising = !resultsMusicLowered && Clock.CurrentTime >= resultsLetGoAt + results_raise_delay;
+        double target = resultsMusicLowered ? results_lowered_volume : raising ? 1 : resultsLowering;
+        double time = resultsMusicLowered ? results_lower_time : results_raise_time;
+        resultsLowering += (target - resultsLowering) * (1 - Math.Exp(-Clock.ElapsedFrameTime / time));
+
+        if (resultsChannel.IsNull())
             return;
 
-        double progress = Math.Clamp((Clock.CurrentTime - resultsFadeStart) / results_fade_in, 0, 1);
-        resultsChannel.Volume.Value = progress;
+        double fade = double.IsNaN(resultsFadeStart) ? 1 : Math.Clamp((Clock.CurrentTime - resultsFadeStart) / results_fade_in, 0, 1);
 
-        if (progress >= 1)
+        if (fade >= 1)
             resultsFadeStart = double.NaN;
+
+        resultsChannel.Volume.Value = fade * resultsLowering;
     }
 
     /// <summary>
