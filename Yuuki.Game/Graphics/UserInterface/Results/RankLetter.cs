@@ -89,6 +89,12 @@ public partial class RankLetter : Container
     public ScoreRank Rank => rank;
 
     /// <summary>
+    /// Whether it takes the heroes' colors in turn, a Full Bloom's, rather than its own: lightened, so they read on the
+    /// dark ring.
+    /// </summary>
+    public bool Rainbow { get; set; }
+
+    /// <summary>
     /// Lands <paramref name="landing"/> in <paramref name="landingColor"/>, hitting at <paramref name="time"/> (now if not
     /// given): it starts dropping <see cref="FALL"/> before. Anything it was doing is forgotten.
     /// </summary>
@@ -144,7 +150,7 @@ public partial class RankLetter : Container
             alpha = 1;
         }
 
-        Color shown = color;
+        Color shown = Rainbow ? HeroColors.Cycle(now) : color;
         Vector2 offset = Vector2.Zero;
         float rotation = 0, slashed = 0;
         double sinceCrack = now - cracksAt;

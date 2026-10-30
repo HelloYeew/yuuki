@@ -73,7 +73,7 @@ public partial class JudgementTimeline : FlowContainer
             int column = (int)(judgement.Note.StartTime / result.ChartLength * column_count);
             column = Math.Clamp(column, 0, column_count - 1);
 
-            if (worst[column] == HitResult.None || judgement.Result > worst[column])
+            if (worst[column] == HitResult.None || judgement.Result.Grade() < worst[column].Grade())
                 worst[column] = judgement.Result;
         }
 
@@ -115,6 +115,7 @@ public partial class JudgementTimeline : FlowContainer
     /// </summary>
     private static float heightFor(HitResult result) => result switch
     {
+        HitResult.Bloom => 0.25f,
         HitResult.Critical => 0.35f,
         HitResult.Break => 0.55f,
         HitResult.Hit => 0.75f,

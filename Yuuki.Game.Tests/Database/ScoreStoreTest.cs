@@ -102,6 +102,28 @@ public class ScoreStoreTest
         }
     }
 
+    /// <summary>
+    /// A play saved before there were Blooms and SS: an all perfect, saved as S. It's ranked again as it loads, so it
+    /// reads SS now (100%), and is otherwise as it was played: no Blooms, its score, its marks.
+    /// </summary>
+    [Test]
+    public void AnOldAllPerfect_LoadsAsSS_AsPlayed()
+    {
+        File.WriteAllText(Path.Combine(tempDir, "scores.json"),
+            """[{"BeatmapId":2,"BeatmapSetId":1,"Score":1000000,"Accuracy":1,"MaxCombo":10,"CriticalCount":10,"Rank":4,"IsFullCombo":true,"IsAllPerfect":true,"Date":"2026-10-20T12:00:00+07:00"}]""");
+
+        ScoreInfo old = new ScoreStore(storage).Scores.Single();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(old.Rank, Is.EqualTo(ScoreRank.SS));
+            Assert.That(old.BloomCount, Is.Zero);
+            Assert.That(old.Score, Is.EqualTo(1_000_000));
+            Assert.That(old.IsAllPerfect, Is.True);
+            Assert.That(old.IsFullBloom, Is.False);
+        }
+    }
+
     [Test]
     public void DamagedHistory_StartsEmpty()
     {

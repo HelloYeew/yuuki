@@ -19,7 +19,7 @@ namespace Yuuki.Game.Graphics.UserInterface.Results;
 /// </summary>
 public partial class JudgementBreakdown : FlowContainer
 {
-    private static readonly HitResult[] shown_results = { HitResult.Critical, HitResult.Break, HitResult.Hit, HitResult.Miss };
+    private static readonly HitResult[] shown_results = { HitResult.Bloom, HitResult.Critical, HitResult.Break, HitResult.Hit, HitResult.Miss };
 
     private readonly Row[] rows;
 
@@ -56,7 +56,7 @@ public partial class JudgementBreakdown : FlowContainer
         private readonly float share;
 
         private readonly SpriteText countText;
-        private readonly Box bar;
+        private readonly Drawable bar;
 
         public Row(HitResult hitResult, GameplayResult result, YuukiColorPalette palette)
         {
@@ -68,6 +68,9 @@ public partial class JudgementBreakdown : FlowContainer
 
             Color color = JudgementColors.For(hitResult);
 
+            // A Bloom's dot and bar take the heroes' rainbow, moving.
+            bool rainbow = hitResult == HitResult.Bloom;
+
             // A miss has no meaningful press timing (it was never pressed), so it skips the split.
             string timing = hitResult == HitResult.Miss || result.Judgements.Count == 0
                 ? ""
@@ -75,13 +78,23 @@ public partial class JudgementBreakdown : FlowContainer
 
             Children = new Drawable[]
             {
-                new Circle
-                {
-                    Anchor = Anchor.CentreLeft,
-                    Origin = Anchor.CentreLeft,
-                    Size = new Vector2(14),
-                    Color = color
-                },
+                rainbow
+                    ? new Container
+                    {
+                        Anchor = Anchor.CentreLeft,
+                        Origin = Anchor.CentreLeft,
+                        Size = new Vector2(14),
+                        Masking = true,
+                        CornerRadius = 7,
+                        Child = new RainbowFill { RelativeSizeAxes = Axes.Both }
+                    }
+                    : new Circle
+                    {
+                        Anchor = Anchor.CentreLeft,
+                        Origin = Anchor.CentreLeft,
+                        Size = new Vector2(14),
+                        Color = color
+                    },
                 new SpriteText
                 {
                     Anchor = Anchor.CentreLeft,
@@ -130,12 +143,18 @@ public partial class JudgementBreakdown : FlowContainer
                                 Color = palette.Text,
                                 Alpha = 0.15f
                             },
-                            bar = new Box
-                            {
-                                RelativeSizeAxes = Axes.Both,
-                                Width = 0,
-                                Color = color
-                            }
+                            bar = rainbow
+                                ? new RainbowFill
+                                {
+                                    RelativeSizeAxes = Axes.Both,
+                                    Width = 0
+                                }
+                                : new Box
+                                {
+                                    RelativeSizeAxes = Axes.Both,
+                                    Width = 0,
+                                    Color = color
+                                }
                         }
                     }
                 }
@@ -153,6 +172,7 @@ public partial class JudgementBreakdown : FlowContainer
 
         private static int countOf(HitResult hitResult, GameplayResult result) => hitResult switch
         {
+            HitResult.Bloom => result.BloomCount,
             HitResult.Critical => result.CriticalCount,
             HitResult.Break => result.BreakCount,
             HitResult.Hit => result.HitCount,

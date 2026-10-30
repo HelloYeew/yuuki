@@ -65,6 +65,14 @@ public class ResultsVoiceTest
     }
 
     [Test]
+    public void TestAFullBloom()
+    {
+        var run = new VoiceContext(ScoreRank.SS, 1, true, true, NewBest: true, FullBloom: true);
+
+        Assert.That(ResultsVoice.LinesFor(run, new Random(1)), Is.EqualTo(new[] { "rank-ss", "fullbloom", "best", "react-fullbloom" }));
+    }
+
+    [Test]
     public void TestALostSIsOnlyThat()
     {
         var run = new VoiceContext(ScoreRank.A, 0.97, RankLost: true, NewBest: true);
@@ -190,6 +198,13 @@ public class ResultsVoiceTest
             }
         }
 
+        // 100%: an SS, an all perfect, and maybe a Full Bloom.
+        foreach (bool fullBloom in new[] { false, true })
+        {
+            foreach (bool newBest in new[] { false, true })
+                yield return new VoiceContext(ScoreRank.SS, 1, true, true, NewBest: newBest, FullBloom: fullBloom);
+        }
+
         yield return new VoiceContext(ScoreRank.A, 0.97, RankLost: true);
         yield return new VoiceContext(ScoreRank.D, 0.4, Failed: true);
     }
@@ -205,7 +220,7 @@ public class ResultsVoiceTest
 
         IReadOnlyList<string> usual = ResultsVoice.LinesFor(run, new NeverRandom());
 
-        if (run.Failed || run.RankLost || run.AllPerfect)
+        if (run.Failed || run.RankLost || run.AllPerfect || run.FullBloom)
             yield break;
 
         foreach (string moment in ResultsVoice.MomentsFor(run))

@@ -86,4 +86,34 @@ public class RevealTimelineTest
         Assert.That(timeline.Crossings, Is.Empty);
         Assert.That(timeline.FillAt(timeline.End), Is.EqualTo(0));
     }
+
+    /// <summary>
+    /// A Full Bloom: the all perfect's badge, then the gather, the bloom, the cut-in and the badge again, and only then
+    /// the comparison with the best and the music.
+    /// </summary>
+    [Test]
+    public void TestAFullBloom()
+    {
+        var timeline = new RevealTimeline(1, false, true, true);
+
+        Assert.That(timeline.FullBloom);
+        Assert.That(timeline.Badge, Is.EqualTo(3520));
+        Assert.That(timeline.Gather, Is.EqualTo(4040));
+        Assert.That(timeline.Bloom, Is.EqualTo(4680));
+        Assert.That(timeline.BloomBadge, Is.EqualTo(5830));
+        Assert.That(timeline.Best, Is.EqualTo(6370));
+        Assert.That(timeline.GatherAt(4040), Is.EqualTo(0));
+        Assert.That(timeline.GatherAt(4040 + 560), Is.EqualTo(1));
+        Assert.That(timeline.GatherAt(timeline.Bloom), Is.EqualTo(0));
+    }
+
+    [Test]
+    public void TestOnlyAFullBloomBlooms()
+    {
+        var timeline = new RevealTimeline(1, false, true);
+
+        Assert.That(timeline.FullBloom, Is.False);
+        Assert.That(timeline.Best, Is.EqualTo(timeline.Badge + RevealTimeline.BEST_AFTER));
+        Assert.That(timeline.GatherAt(4300), Is.EqualTo(0));
+    }
 }

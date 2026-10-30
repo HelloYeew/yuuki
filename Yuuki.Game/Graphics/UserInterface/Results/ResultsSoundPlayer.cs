@@ -31,6 +31,8 @@ public partial class ResultsSoundPlayer : Component
     private const string all_perfect = "ap.wav";
     private const string best = "best.wav";
     private const string petals = "petals.wav";
+    private const string bloom_gather = "fb-charge.wav";
+    private const string full_bloom = "fullbloom.wav";
 
     /// <summary>
     /// How long the charge rises before it falls into the hit, in ms: the hit lands this long after it starts.
@@ -60,7 +62,7 @@ public partial class ResultsSoundPlayer : Component
             return;
 
         // Preloaded so the first tick of the fill doesn't hitch on a disk read.
-        foreach (string file in new[] { tick, band, charge, impact_s, impact_a, impact_b, impact_low, lost, miss, full_combo, all_perfect, best, petals })
+        foreach (string file in new[] { tick, band, charge, impact_s, impact_a, impact_b, impact_low, lost, miss, full_combo, all_perfect, best, petals, bloom_gather, full_bloom })
             samples[file] = sampleStore!.Get(sample_directory + file);
     }
 
@@ -89,7 +91,7 @@ public partial class ResultsSoundPlayer : Component
     /// </summary>
     public void PlayLanding(ScoreRank rank) => play(rank switch
     {
-        ScoreRank.S => impact_s,
+        ScoreRank.SS or ScoreRank.S => impact_s,
         ScoreRank.A => impact_a,
         ScoreRank.B => impact_b,
         _ => impact_low
@@ -111,6 +113,26 @@ public partial class ResultsSoundPlayer : Component
     /// The swirl of petals after a good rank lands.
     /// </summary>
     public void PlayPetals() => play(petals, volume: 0.9);
+
+    /// <summary>
+    /// A Full Bloom's gather: rising for <see cref="BLOOM_GATHER_TO_BLOOM"/> before the bloom, which should land then.
+    /// </summary>
+    public void PlayBloomGather() => play(bloom_gather);
+
+    /// <summary>
+    /// How long the gather rises before the bloom lands, in ms.
+    /// </summary>
+    public const double BLOOM_GATHER_TO_BLOOM = 640;
+
+    /// <summary>
+    /// A Full Bloom: the biggest hit of the set.
+    /// </summary>
+    public void PlayFullBloom() => play(full_bloom);
+
+    /// <summary>
+    /// The Full Bloom badge stamping, after the cut-in: the crossing chime an octave up.
+    /// </summary>
+    public void PlayBloomStamp() => play(band, semitones(12), 0.7);
 
     private static double semitones(int steps) => Math.Pow(2, steps / 12.0);
 

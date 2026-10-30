@@ -222,6 +222,8 @@ public partial class ScoreScreen : YuukiScreen, IHaveScreenAction
     private LightRays rays = null!;
     private BlossomRing blossom = null!;
     private LandingWaves waves = null!;
+    private FullBloomRings bloomRings = null!;
+    private FullBloomCutIn cutIn = null!;
     private RankLetter letter = null!;
     private SpriteText ringAccuracy = null!;
     private ResultsBadge badge = null!;
@@ -250,6 +252,7 @@ public partial class ScoreScreen : YuukiScreen, IHaveScreenAction
     private double lastRevealTime = double.NegativeInfinity;
     private int skips;
     private bool earnedRankShown;
+    private bool bloomBadgeShown;
     private bool musicStarted;
     private bool voiceStarted;
     private bool graphsShown;
@@ -336,6 +339,7 @@ public partial class ScoreScreen : YuukiScreen, IHaveScreenAction
     {
         ScreenName.Value = "Results";
         helperText = savedScore != null && viewing ? string.Create(CultureInfo.InvariantCulture, $"Played {savedScore.Date.LocalDateTime:d MMM yyyy, HH:mm}")
+            : result.IsFullBloom ? "Full Bloom!"
             : result.IsAllPerfect ? "All Perfect!"
             : result.IsFullCombo ? "Full Combo!"
             : "Nice play!";
@@ -416,6 +420,8 @@ public partial class ScoreScreen : YuukiScreen, IHaveScreenAction
                     }
                 }
             },
+            // A Full Bloom's, across the screen.
+            cutIn = new FullBloomCutIn(),
             petals = new PetalEffects(),
             // A flash of the rank's color over everything as it lands.
             tint = new Box
@@ -552,6 +558,12 @@ public partial class ScoreScreen : YuukiScreen, IHaveScreenAction
                 Scale = new Vector2(ring_scale)
             },
             waves = new LandingWaves
+            {
+                Anchor = Anchor.Centre,
+                Origin = Anchor.Centre,
+                RelativeSizeAxes = Axes.Both
+            },
+            bloomRings = new FullBloomRings
             {
                 Anchor = Anchor.Centre,
                 Origin = Anchor.Centre,
@@ -1027,6 +1039,19 @@ public partial class ScoreScreen : YuukiScreen, IHaveScreenAction
         if (result.IsAllPerfect)
             blossom.OpenAllPerfect(at(t.Badge));
 
+        // A Full Bloom: the all perfect's badge goes under the cut-in, and stamps again as FULL BLOOM after it.
+        if (t.FullBloom)
+        {
+            badge.Look(JudgementColors.ALL_PERFECT, "ALL PERFECT");
+            badge.FadeOutAt(at(t.Bloom));
+            bloomBadgeShown = false;
+
+            bloomRings.Gather(at(t.Gather), RevealTimeline.GATHER_DURATION - 80);
+            bloomRings.Bloom(at(t.Bloom));
+            cutIn.Play(at(t.Bloom));
+            blossom.BloomWave(at(t.Bloom));
+        }
+
         scoreShine.Sweep(at(t.Landing + 60));
     }
 
@@ -1124,6 +1149,22 @@ public partial class ScoreScreen : YuukiScreen, IHaveScreenAction
                 petals.Burst(badgeInPetals(), PetalBurst.Sparkles(), at(t.Badge));
         }
 
+        if (t.FullBloom)
+        {
+            if (between(t.Gather))
+                sounds.PlayBloomGather();
+
+            if (between(t.Bloom))
+            {
+                sounds.PlayFullBloom();
+                petals.Burst(ringMiddleInPetals(), PetalBurst.Storm(), at(t.Bloom));
+                petals.Fall.Blast(ringMiddleInPetals(), 0.9f);
+            }
+
+            if (between(t.BloomBadge))
+                sounds.PlayBloomStamp();
+        }
+
         if (between(t.Best) && isNewBest)
             sounds.PlayNewBest();
 
@@ -1169,7 +1210,7 @@ public partial class ScoreScreen : YuukiScreen, IHaveScreenAction
     {
         petals.Fall.Rate = result.IsAllPerfect ? 22 : result.Rank switch
         {
-            ScoreRank.S => 14,
+            ScoreRank.SS or ScoreRank.S => 14,
             ScoreRank.A => 6,
             ScoreRank.B => 2.5,
             _ => 0
@@ -1207,6 +1248,16 @@ public partial class ScoreScreen : YuukiScreen, IHaveScreenAction
 
         Color color = rankColorAt(now, shown);
 
+        // A Full Bloom: how far the ring has gathered itself (0–1), and how long since everything bloomed (−1 before).
+        // Gathering drains the colors to white; the bloom brings them all back at once, the heroes' in turn.
+        float gather = t.GatherAt(now);
+        double sinceBloom = t.FullBloom && now >= t.Bloom ? now - t.Bloom : -1;
+
+        if (gather > 0)
+            color = color.Blend(Color.White, 0.55f * gather);
+        else if (sinceBloom >= 0)
+            color = HeroColors.Cycle(sinceBloom * 1.4, white: 0);
+
         blossom.Fill = fill;
         blossom.FillColor = color;
         blossom.Charge = charge;
@@ -1228,6 +1279,10 @@ public partial class ScoreScreen : YuukiScreen, IHaveScreenAction
         glow = Math.Max(glow, 0.28f * beat);
         if (sinceFirst >= 0)
             glow = Math.Max(glow, 0.9f * MathF.Exp((float)(-Math.Min(sinceFirst, sinceLanding >= 0 ? sinceLanding : sinceFirst) / 200)));
+        if (gather > 0)
+            glow = Math.Max(glow, 0.95f * gather);
+        if (sinceBloom >= 0)
+            glow = Math.Max(glow, 0.95f * MathF.Exp((float)(-sinceBloom / 500)));
         blossom.Glow = glow;
 
         // The bands: an all perfect's pulse with Yuuna's pink; a broken S's greying.
@@ -1235,8 +1290,13 @@ public partial class ScoreScreen : YuukiScreen, IHaveScreenAction
         {
             Color band = HeroColors.ForRank(bandRank(i)).Main;
 
-            if (result.IsAllPerfect && now >= t.Badge)
+            if (sinceBloom >= 0)
+                band = HeroColors.Cycle(sinceBloom * 1.4, i * 60, 0.1f);
+            else if (result.IsAllPerfect && now >= t.Badge)
                 band = band.Blend(HeroColors.YUUNA.Main, 0.5f + 0.5f * MathF.Sin((float)((now - t.Badge) / 260 + i * 1.2)));
+
+            if (gather > 0)
+                band = band.Blend(Color.White, 0.6f * gather);
             else if (bandRank(i) == ScoreRank.S && sinceCrack >= 0)
                 band = band.Blend(wilted, clamp01(sinceCrack / 120));
 
@@ -1252,7 +1312,24 @@ public partial class ScoreScreen : YuukiScreen, IHaveScreenAction
             scale = 1 + 0.03f * Math.Max(0, 1 - (float)(sinceHit / 70)) - 0.045f * MathF.Sin(clamp01(sinceHit / 220) * MathF.PI);
         if (beatProgress is double bp)
             scale *= 1 + 0.014f * MathF.Exp((float)(-bp * 6));
+
+        // Gathering, it draws in on itself, trembling; blooming, it bursts out and rings.
+        if (gather > 0)
+            scale *= 1 - 0.05f * gather * gather + 0.004f * gather * MathF.Sin((float)(now / 9));
+        else if (sinceBloom >= 0)
+            scale *= 1 + 0.12f * MathF.Exp((float)(-sinceBloom / 140)) * MathF.Cos((float)(sinceBloom / 70));
+
         ringBlock.Scale = new Vector2(scale);
+
+        letter.Rainbow = sinceBloom >= 0;
+
+        // The badge stamps again as FULL BLOOM once the cut-in has gone: bigger, in the heroes' rainbow.
+        if (t.FullBloom && !bloomBadgeShown && now >= t.BloomBadge)
+        {
+            bloomBadgeShown = true;
+            badge.LookRainbow("FULL BLOOM");
+            badge.Stamp(at(t.BloomBadge), 2);
+        }
 
         // The earned rank takes over from a broken S just before it lands.
         if (t.RankLost && !earnedRankShown && now >= t.Landing - RankLetter.FALL)
@@ -1264,7 +1341,7 @@ public partial class ScoreScreen : YuukiScreen, IHaveScreenAction
 
         Color landingColor = JudgementColors.For(t.RankLost && now < t.Landing - RankLetter.FALL ? ScoreRank.S : result.Rank);
 
-        renderLight(now, color, landingColor, beat, charge, sinceCrack);
+        renderLight(now, color, landingColor, beat, charge, sinceCrack, gather, sinceBloom);
         renderNumbers(now, roll, shown);
         renderVoice(now);
     }
@@ -1273,7 +1350,7 @@ public partial class ScoreScreen : YuukiScreen, IHaveScreenAction
     /// The light round the ring and the screen: the rays behind the rank, the edges' glow, the flash of the rank's color,
     /// the dimming as it charges, the color draining while an S breaks, and the shake of a hit.
     /// </summary>
-    private void renderLight(double now, Color fillColor, Color landingColor, float beat, float charge, double sinceCrack)
+    private void renderLight(double now, Color fillColor, Color landingColor, float beat, float charge, double sinceCrack, float gather, double sinceBloom)
     {
         RevealTimeline t = Timeline;
         double sinceLanding = now - t.Landing;
@@ -1283,7 +1360,7 @@ public partial class ScoreScreen : YuukiScreen, IHaveScreenAction
         // Rays behind the rank once it's landed, stronger the better it is.
         float strength = result.IsAllPerfect ? 0.8f : result.Rank switch
         {
-            ScoreRank.S => 0.62f,
+            ScoreRank.SS or ScoreRank.S => 0.62f,
             ScoreRank.A => 0.32f,
             ScoreRank.B => 0.15f,
             _ => 0
@@ -1291,6 +1368,17 @@ public partial class ScoreScreen : YuukiScreen, IHaveScreenAction
 
         rays.Peak = sinceLanding >= 0 ? strength * outCubic(clamp01(sinceLanding / 450)) * (0.82f + 0.18f * beat) : 0;
         rays.Scale = new Vector2(0.85f + 0.15f * outCubic(clamp01(sinceLanding / 600)));
+
+        // A Full Bloom's: broad, in every hero's color, flaring with the bloom.
+        rays.HeroColored = sinceBloom >= 0;
+
+        if (sinceBloom >= 0)
+        {
+            rays.SpokeWidth = LightRays.WIDE;
+            rays.Spokes = 18;
+            rays.Peak = Math.Min(1, 0.85f + 0.6f * MathF.Exp((float)(-sinceBloom / 400)));
+            rays.Scale = new Vector2(1 + 0.25f * outCubic(clamp01(sinceBloom / 500)));
+        }
 
         // The edges: faint as the fill runs, brighter at each rank crossed, as it charges, and as a rank lands, then
         // with the beat.
@@ -1325,6 +1413,17 @@ public partial class ScoreScreen : YuukiScreen, IHaveScreenAction
                 led = Math.Max(led, 0.24f + 0.36f * beat);
         }
 
+        if (gather > 0)
+        {
+            ledColor = Color.White;
+            led = Math.Max(led, 0.2f + 0.75f * gather * (0.8f + 0.2f * MathF.Sin((float)(now / 26))));
+        }
+        else if (sinceBloom >= 0)
+        {
+            ledColor = HeroColors.Cycle(sinceBloom * 1.4);
+            led = Math.Max(led, 0.3f + 0.9f * MathF.Exp((float)(-sinceBloom / 500)));
+        }
+
         edgeGlow.Intensity = led;
         edgeGlow.GlowColor = ledColor;
 
@@ -1333,8 +1432,20 @@ public partial class ScoreScreen : YuukiScreen, IHaveScreenAction
         tint.Color = landingColor;
         tint.Alpha = sinceHit >= 0 ? 0.16f * MathF.Exp((float)(-sinceHit / 170)) : 0;
 
-        // Everything but the ring dims as it charges, and comes back after the hit.
-        focusDimmer.Alpha = sinceFirst < 0 ? 0.32f * charge : 0.32f * (1 - clamp01(sinceFirst / 420));
+        // The bloom whites the screen out for a moment.
+        if (sinceBloom >= 0 && sinceBloom < 900)
+        {
+            tint.Color = Color.White;
+            tint.Alpha = 0.92f * MathF.Exp((float)(-sinceBloom / 150));
+        }
+
+        // Everything but the ring dims as it charges, and comes back after the hit; and again as it gathers itself.
+        float dimming = sinceFirst < 0 ? 0.32f * charge : 0.32f * (1 - clamp01(sinceFirst / 420));
+        if (gather > 0)
+            dimming = Math.Max(dimming, 0.5f * gather);
+        else if (sinceBloom >= 0)
+            dimming = Math.Max(dimming, 0.5f * (1 - clamp01(sinceBloom / 220)));
+        focusDimmer.Alpha = dimming;
 
         // The pain: color drains from the screen while the S breaks, and comes back with the rank earned.
         float drain = 0;
@@ -1355,7 +1466,27 @@ public partial class ScoreScreen : YuukiScreen, IHaveScreenAction
         if (sinceCrack >= 0 && sinceCrack < 300)
             shake.X += 5 * MathF.Exp((float)(-sinceCrack / 90)) * MathF.Sin((float)(sinceCrack / 9));
 
+        // Trembling as it gathers itself; a hard shake as it blooms.
+        if (gather > 0)
+            shake += new Vector2(2 * gather * MathF.Sin((float)(now / 7)), 1.5f * gather * MathF.Cos((float)(now / 9)));
+        else if (sinceBloom >= 0 && sinceBloom < 500)
+        {
+            float d = (float)sinceBloom;
+            shake += new Vector2(14 * MathF.Exp(-d / 110) * MathF.Sin(d / 10), 10 * MathF.Exp(-d / 110) * MathF.Cos(d / 12));
+        }
+
         world.Position = shake;
+
+        // The petals already falling are drawn in while it gathers itself; a storm falls after it blooms, then a
+        // steady fall.
+        if (gather > 0)
+            petals.Fall.Attract(ringMiddleInPetals(), 0.0008f, Clock.ElapsedFrameTime);
+
+        if (sinceBloom >= 0)
+        {
+            petals.Fall.Rate = sinceBloom < 2600 ? 60 : 30;
+            petals.Fall.Limit = 340;
+        }
 
         // The petals falling sway with the beat, one way then the other.
         petals.Fall.Gust = now >= t.Music && audioManager?.ResultsMusicBeat is double phase
@@ -1470,7 +1601,14 @@ public partial class ScoreScreen : YuukiScreen, IHaveScreenAction
         if (t.RankLost && now >= t.Crack + 160)
             return JudgementColors.For(ScoreRank.S).Blend(JudgementColors.For(result.Rank), clamp01((now - t.Crack - 160) / color_blend));
 
+        // SS is no band of the ring's: the fill runs into S's color, which becomes SS's as it lands.
+        if (result.Rank == ScoreRank.SS && now >= t.Landing)
+            return JudgementColors.For(ScoreRank.S).Blend(JudgementColors.For(ScoreRank.SS), clamp01((now - t.Landing) / color_blend));
+
         ScoreRank rank = ScoreRankExtensions.FromAccuracy(shownAccuracy);
+        if (rank == ScoreRank.SS)
+            rank = ScoreRank.S;
+
         int index = Array.IndexOf(ScoreRankExtensions.THRESHOLD_RANKS, rank);
 
         if (index < 0)

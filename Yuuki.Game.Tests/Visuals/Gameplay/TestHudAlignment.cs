@@ -56,6 +56,8 @@ public partial class TestHudAlignment : TestScene
             Add(popup = new JudgementPopup { Anchor = Anchor.Centre });
         });
         AddStep("show an early break", () => popup.Show(new JudgementResult(new BeatmapNote { Type = NoteType.Tap }, HitResult.Break, -30)));
+        AddStep("show a bloom", () => popup.Show(new JudgementResult(new BeatmapNote { Type = NoteType.Tap }, HitResult.Bloom, 5)));
+        AddStep("and the break again", () => popup.Show(new JudgementResult(new BeatmapNote { Type = NoteType.Tap }, HitResult.Break, -30)));
         AddWaitStep("let layout run", 100);
 
         AddAssert("BREAK and EARLY both centred", () =>

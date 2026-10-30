@@ -37,11 +37,14 @@ public partial class ResultsBadge : Container
 
     private readonly Container face;
     private readonly Box fill;
+    private readonly RainbowFill rainbow;
     private readonly SpriteText text;
     private readonly ShineSweep glint;
     private readonly ShineSweep shine;
 
     private double stampsAt = double.PositiveInfinity;
+    private double fadesAt = double.PositiveInfinity;
+    private float drop = 0.5f;
 
     public ResultsBadge()
     {
@@ -70,6 +73,9 @@ public partial class ResultsBadge : Container
                     Children = new Drawable[]
                     {
                         fill = new Box { RelativeSizeAxes = Axes.Both },
+                        // A Full Bloom's, over the fill. Unseen until then and only ever shown by its alpha: kept present
+                        // so it's drawn properly once it is.
+                        rainbow = new RainbowFill { RelativeSizeAxes = Axes.Both, Alpha = 0, AlwaysPresent = true },
                         shine = new ShineSweep { BandWidth = 120, Brightness = 0.35f, Every = shine_every },
                         glint = new ShineSweep()
                     }
@@ -94,7 +100,20 @@ public partial class ResultsBadge : Container
         fill.Color = SetlistColors.TierFill(color);
         text.Color = SetlistColors.TierInk(color);
         text.Text = label;
+        showRainbow(false);
     }
+
+    /// <summary>
+    /// What it says, on the heroes' rainbow moving along it, the text dark on it: a Full Bloom's.
+    /// </summary>
+    public void LookRainbow(string label)
+    {
+        text.Color = RainbowColors.INK_ON_PASTEL;
+        text.Text = label;
+        showRainbow(true);
+    }
+
+    private void showRainbow(bool show) => rainbow.Alpha = show ? 1 : 0;
 
     /// <summary>
     /// Whether it keeps catching the light after its stamp, as an All Perfect's does.
@@ -102,20 +121,27 @@ public partial class ResultsBadge : Container
     public bool Shining { get; set; }
 
     /// <summary>
-    /// Stamps it on at <paramref name="time"/> (now if not given).
+    /// Stamps it on at <paramref name="time"/> (now if not given), down from <paramref name="from"/> times its size.
     /// </summary>
-    public void Stamp(double? time = null)
+    public void Stamp(double? time = null, float from = 1.5f)
     {
         stampsAt = time ?? Clock.CurrentTime;
+        fadesAt = double.PositiveInfinity;
+        drop = from - 1;
         glint.Sweep(stampsAt + glint_after);
     }
+
+    /// <summary>
+    /// Fades it out quickly from <paramref name="time"/> (now if not given), until it's stamped again.
+    /// </summary>
+    public void FadeOutAt(double? time = null) => fadesAt = time ?? Clock.CurrentTime;
 
     /// <summary>
     /// Takes it away, to stamp again.
     /// </summary>
     public void Clear()
     {
-        stampsAt = double.PositiveInfinity;
+        stampsAt = fadesAt = double.PositiveInfinity;
         glint.Stop();
         shine.Stop();
     }
@@ -133,10 +159,10 @@ public partial class ResultsBadge : Container
         }
 
         float scale = since < stamp_down
-            ? 1.5f - 0.5f * (float)EasingFunctions.Apply(Easing.InQuad, since / stamp_down)
+            ? 1 + drop - drop * (float)EasingFunctions.Apply(Easing.InQuad, since / stamp_down)
             : 1 - 0.05f * MathF.Sin(Math.Clamp((float)((since - stamp_down) / 160), 0, 1) * MathF.PI);
 
-        face.Alpha = Math.Min(1, (float)(since / 60));
+        face.Alpha = Math.Min(1, (float)(since / 60)) * (1 - Math.Clamp((float)((Clock.CurrentTime - fadesAt) / 120), 0, 1));
         face.Scale = new Vector2(scale);
 
         // An All Perfect's shine starts once the stamp's glint has passed.

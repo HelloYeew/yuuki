@@ -163,14 +163,15 @@ public partial class HitBurst : Container
 }
 
 /// <summary>
-/// The judgement word above the judgement line — CRITICAL / BREAK / HIT / MISS — with EARLY or LATE
-/// under the near-misses. Each new judgement replaces the last with a pop, then it drifts and fades.
+/// The judgement word above the judgement line — BLOOM (in the heroes' rainbow) / CRITICAL / BREAK / HIT / MISS — with
+/// EARLY or LATE under the near-misses. Each new judgement replaces the last with a pop, then it drifts and fades.
 /// The owner places this drawable; only its inner layer moves, so the placement is never lost.
 /// </summary>
 public partial class JudgementPopup : Container
 {
     private readonly Container body;
     private readonly SpriteText word;
+    private readonly RainbowText bloomWord;
     private readonly SpriteText timing;
 
     // Bumped per judgement so a newer one cancels the previous one's pending drift-out.
@@ -190,11 +191,34 @@ public partial class JudgementPopup : Container
             Alpha = 0,
             Children = new Drawable[]
             {
-                word = new SpriteText
+                // BLOOM over the other words, built once (a rainbow's letters are each their own text): whichever
+                // the judgement is shows.
+                new Container
                 {
                     Anchor = Anchor.TopCentre,
                     Origin = Anchor.TopCentre,
-                    Font = YuukiFontUsage.GetFontUsage(Typeface.Quicksand, 48, FontWeight.Bold)
+                    AutoSizeAxes = Axes.Both,
+                    Children = new Drawable[]
+                    {
+                        word = new SpriteText
+                        {
+                            Anchor = Anchor.TopCentre,
+                            Origin = Anchor.TopCentre,
+                            Font = YuukiFontUsage.GetFontUsage(Typeface.Quicksand, 48, FontWeight.Bold)
+                        },
+                        // Light, on the dark highway. Unseen until a Bloom and only ever shown by its alpha: kept
+                        // present so it's drawn properly once it is.
+                        bloomWord = new RainbowText
+                        {
+                            Anchor = Anchor.TopCentre,
+                            Origin = Anchor.TopCentre,
+                            Font = YuukiFontUsage.GetFontUsage(Typeface.Quicksand, 48, FontWeight.Bold),
+                            Text = "BLOOM",
+                            Stops = RainbowColors.PASTEL,
+                            Alpha = 0,
+                            AlwaysPresent = true
+                        }
+                    }
                 },
                 timing = new SpriteText
                 {
@@ -214,9 +238,12 @@ public partial class JudgementPopup : Container
     public void Show(JudgementResult judgement)
     {
         Color color = JudgementColors.For(judgement.Result);
+        bool bloom = judgement.Result == HitResult.Bloom;
 
-        word.Text = judgement.Result.ToString().ToUpperInvariant();
+        word.Text = bloom ? "" : judgement.Result.ToString().ToUpperInvariant();
         word.Color = color;
+        word.Alpha = bloom ? 0 : 1;
+        bloomWord.Alpha = bloom ? 1 : 0;
 
         // Early/late only where it's useful: a Critical is on time, a Miss never had a press to time,
         // and Pass/Touch notes aren't pressed at all.

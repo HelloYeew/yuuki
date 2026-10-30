@@ -724,7 +724,13 @@ public partial class GameplayScreen : YuukiScreen, IHaveScreenAction
         if (feltHere && (result.IsFullCombo || result.IsAllPerfect))
             haptics!.Play(HapticFeedback.Success);
 
-        if (result.IsAllPerfect)
+        if (result.IsFullBloom)
+        {
+            clearBanner.PlayFullBloom();
+            playSample("fountain-shoot.wav");
+            playSample("spinnerbonus-max.wav");
+        }
+        else if (result.IsAllPerfect)
         {
             clearBanner.Play("All Perfect", JudgementColors.ALL_PERFECT);
             playSample("fountain-shoot.wav");

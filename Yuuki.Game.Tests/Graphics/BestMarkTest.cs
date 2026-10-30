@@ -62,6 +62,19 @@ public class BestMarkTest
         }
     }
 
+    [Test]
+    public void AFullBloomOutranksTheAllPerfect()
+    {
+        var pieces = BestMark.PiecesFor(new ScoreInfo { Rank = ScoreRank.SS, IsFullCombo = true, IsAllPerfect = true, IsFullBloom = true })!.Value;
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(pieces.Rank.Label, Is.EqualTo("SS"));
+            Assert.That(pieces.Medal?.Label, Is.EqualTo("FB"));
+            Assert.That(pieces.Medal?.Rainbow, Is.True);
+        }
+    }
+
     /// <summary>
     /// A medal sharing its rank's color would merge into one block: FC was B's blue, and AP was S's gold.
     /// Each medal must be at least as far from every rank as the closest two ranks (B and C) are from each

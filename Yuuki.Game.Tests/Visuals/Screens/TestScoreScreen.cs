@@ -29,7 +29,19 @@ public partial class TestScoreScreen : TestYuukiScreenStack
     }
 
     [Test]
-    public void TestAllPerfect() => showResult("all perfect", build(critical: 400, seed: 1), r => r.IsAllPerfect);
+    public void TestAllPerfect() => showResult("all perfect", build(critical: 400, seed: 1), r => r.IsAllPerfect && r.Rank == ScoreRank.SS && !r.IsFullBloom);
+
+    [Test]
+    public void TestFullBloom()
+    {
+        showResult("full bloom", build(bloom: 400, seed: 1), r => r.IsFullBloom && r.Rank == ScoreRank.SS);
+        AddStep("skip to the end", () =>
+        {
+            shown!.Skip();
+            shown.Skip();
+        });
+        AddUntilStep("landed", () => shown!.RankRevealed);
+    }
 
     [Test]
     public void TestFullCombo() => showResult("full combo", build(critical: 320, breaks: 60, hits: 20, seed: 2), r => r.IsFullCombo && !r.IsAllPerfect);
@@ -228,12 +240,13 @@ public partial class TestScoreScreen : TestYuukiScreenStack
     /// A plausible run: notes spread over the chart in a shuffled order, each judgement's timing error
     /// drawn from inside its window with a slight late lean, and a mix of note types.
     /// </summary>
-    private static GameplayResult build(int critical = 0, int breaks = 0, int hits = 0, int misses = 0, int seed = 0)
+    private static GameplayResult build(int critical = 0, int breaks = 0, int hits = 0, int misses = 0, int seed = 0, int bloom = 0)
     {
         var random = new Random(seed);
         var windows = new HitWindows();
         var results = new List<HitResult>();
 
+        results.AddRange(repeat(HitResult.Bloom, bloom));
         results.AddRange(repeat(HitResult.Critical, critical));
         results.AddRange(repeat(HitResult.Break, breaks));
         results.AddRange(repeat(HitResult.Hit, hits));
@@ -258,7 +271,8 @@ public partial class TestScoreScreen : TestYuukiScreenStack
 
             double error = result switch
             {
-                HitResult.Critical => between(random, 0, windows.Critical),
+                HitResult.Bloom => between(random, 0, windows.Bloom),
+                HitResult.Critical => between(random, windows.Bloom, windows.Critical),
                 HitResult.Break => between(random, windows.Critical, windows.Break),
                 HitResult.Hit => between(random, windows.Break, windows.Hit),
                 _ => windows.MissWindow + 1
@@ -279,8 +293,9 @@ public partial class TestScoreScreen : TestYuukiScreenStack
         return new GameplayResult
         {
             // Roughly what the normalised scorer would give: mostly accuracy, a little combo.
-            Score = (int)(ScoreProcessor.MAX_SCORE * (0.9 * valueTotal / Math.Max(1, results.Count) + 0.1 * maxCombo / Math.Max(1.0, results.Count))),
+            Score = (int)(ScoreProcessor.MAX_SCORE * (0.9 * valueTotal / Math.Max(1, results.Count) + 0.1 * maxCombo / Math.Max(1.0, results.Count))) + bloom,
             MaxCombo = maxCombo,
+            BloomCount = bloom,
             CriticalCount = critical,
             BreakCount = breaks,
             HitCount = hits,

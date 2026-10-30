@@ -121,12 +121,12 @@ public class PetalBurst
 
         int petals = allPerfect ? 96 : rank switch
         {
-            ScoreRank.S => 66,
+            ScoreRank.SS or ScoreRank.S => 66,
             ScoreRank.A => 28,
             ScoreRank.B => 10,
             _ => 0
         };
-        int sparks = allPerfect || rank == ScoreRank.S ? 20 : rank == ScoreRank.A ? 22 : 16;
+        int sparks = allPerfect || rank >= ScoreRank.S ? 20 : rank == ScoreRank.A ? 22 : 16;
 
         HeroSwatch hero = HeroColors.ForRank(rank);
         var colors = new List<Color>(PINKS) { hero.Main, hero.Light };

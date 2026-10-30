@@ -601,13 +601,13 @@
    },
    {
     "file": "rank-ss-2.mp3",
-    "text": "ダブルエス！ 完璧だよっ！",
-    "english": "SS! Perfect!"
+    "text": "ダブルエス！ 百点満点っ！",
+    "english": "SS! Full marks!"
    },
    {
     "file": "rank-ss-3.mp3",
-    "text": "ダブルエス、きまったっ！",
-    "english": "SS, nailed it!"
+    "text": "ダブルエス、おみごとっ！",
+    "english": "SS, splendid!"
    }
   ],
   "fullbloom": [
@@ -630,13 +630,13 @@
   "react-fullbloom": [
    {
     "file": "react-fullbloom-1.mp3",
-    "text": "ぜんぶブルーム！？ 理論値だよ、すごすぎっ！",
-    "english": "Every note a Bloom!? That's the theoretical max!"
+    "text": "理論値だよ！？ すごすぎるっ！",
+    "english": "The theoretical max!? That's too amazing!"
    },
    {
     "file": "react-fullbloom-2.mp3",
-    "text": "うそ……ぜんぶブルーム……！ 満開の、そのまた先だよっ！",
-    "english": "No way… every note a Bloom…! Even past every blossom open!"
+    "text": "うそ……満開の、そのまた先だよっ！",
+    "english": "No way… even past every blossom open!"
    },
    {
     "file": "react-fullbloom-3.mp3",

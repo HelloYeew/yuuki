@@ -46,13 +46,14 @@ public partial class BestMark : FlowContainer
     }
 
     /// <summary>
-    /// One blade of the chip: its label, and the fill and ink it's printed in.
+    /// One blade of the chip: its label, and the fill and ink it's printed in. A rainbow one (a Full Bloom's) has the
+    /// heroes' rainbow moving along it in place of its fill.
     /// </summary>
-    public readonly record struct Piece(string Label, Color Fill, Color Ink);
+    public readonly record struct Piece(string Label, Color Fill, Color Ink, bool Rainbow = false);
 
     /// <summary>
-    /// The chip for <paramref name="best"/>: its rank, and its medal when it has one (an all perfect over a
-    /// full combo). Null when there's no best to show.
+    /// The chip for <paramref name="best"/>: its rank, and its medal when it has one (a full bloom over an all perfect
+    /// over a full combo). Null when there's no best to show.
     /// </summary>
     public static (Piece Rank, Piece? Medal)? PiecesFor(ScoreInfo? best)
     {
@@ -60,6 +61,9 @@ public partial class BestMark : FlowContainer
             return null;
 
         var rank = piece(best.Rank.ToString(), JudgementColors.For(best.Rank));
+
+        if (best.IsFullBloom)
+            return (rank, new Piece("FB", RainbowColors.PASTEL[0], RainbowColors.INK_ON_PASTEL, Rainbow: true));
 
         if (best.IsAllPerfect)
             return (rank, piece("AP", JudgementColors.ALL_PERFECT));
@@ -95,8 +99,12 @@ public partial class BestMark : FlowContainer
     /// </summary>
     public partial class Blade : Container
     {
+        private readonly Container face;
         private readonly Box fill;
         private readonly SpriteText label;
+
+        // Made the first time a rainbow piece is shown: most blades never need one.
+        private RainbowFill? rainbow;
 
         public Blade(float textSize)
         {
@@ -106,7 +114,7 @@ public partial class BestMark : FlowContainer
 
             Children = new Drawable[]
             {
-                new Container
+                face = new Container
                 {
                     Anchor = Anchor.Centre,
                     Origin = Anchor.Centre,
@@ -138,6 +146,12 @@ public partial class BestMark : FlowContainer
             label.Text = piece.Label;
             label.Color = piece.Ink;
             fill.Color = piece.Fill;
+
+            if (piece.Rainbow && rainbow == null)
+                face.Add(rainbow = new RainbowFill { RelativeSizeAxes = Axes.Both });
+
+            if (rainbow != null)
+                rainbow.Alpha = piece.Rainbow ? 1 : 0;
         }
     }
 }

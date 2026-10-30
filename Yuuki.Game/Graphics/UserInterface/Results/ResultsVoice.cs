@@ -188,8 +188,8 @@ public partial class ResultsVoice : Component
     }
 
     /// <summary>
-    /// What Yuuki says after a reveal, in order: the rank's call, the badge's (full combo or all perfect), a new best, and
-    /// her reaction. A reaction for the moment, when one fits, takes the usual one's place two times in three. A lost S
+    /// What Yuuki says after a reveal, in order: the rank's call, the badge's (full combo, all perfect or Full Bloom), a new
+    /// best, and her reaction. A reaction for the moment, when one fits, takes the usual one's place two times in three. A lost S
     /// is only that, and how she feels about it; a failed run, only her reaction.
     /// </summary>
     public static IReadOnlyList<string> LinesFor(VoiceContext run, Random random)
@@ -202,7 +202,9 @@ public partial class ResultsVoice : Component
 
         var say = new List<string> { $"rank-{run.Rank.ToString().ToLowerInvariant()}" };
 
-        if (run.AllPerfect)
+        if (run.FullBloom)
+            say.Add("fullbloom");
+        else if (run.AllPerfect)
             say.Add("ap");
         else if (run.FullCombo)
             say.Add("fc");
@@ -210,10 +212,10 @@ public partial class ResultsVoice : Component
         if (run.NewBest)
             say.Add("best");
 
-        // All perfect is a moment of its own.
-        if (run.AllPerfect)
+        // A Full Bloom, and an all perfect, are moments of their own.
+        if (run.FullBloom || run.AllPerfect)
         {
-            say.Add("react-ap");
+            say.Add(run.FullBloom ? "react-fullbloom" : "react-ap");
             return say;
         }
 
@@ -223,7 +225,7 @@ public partial class ResultsVoice : Component
             ? moments[random.Next(moments.Length)]
             : run.Rank switch
             {
-                ScoreRank.S => "react-s",
+                ScoreRank.SS or ScoreRank.S => "react-s",
                 ScoreRank.A => "react-a",
                 ScoreRank.B => "react-b",
                 _ => "react-low"
@@ -309,9 +311,10 @@ public readonly record struct VoiceTake(string File, string Text, string English
 /// <param name="FirstPlay">It's the first play of its difficulty.</param>
 /// <param name="Attempt">Which try in a row on it this is (1 for the first).</param>
 /// <param name="Hour">The local hour it ended in, 0–23.</param>
+/// <param name="FullBloom">Every note a Bloom.</param>
 public readonly record struct VoiceContext(ScoreRank Rank, double Accuracy, bool FullCombo = false, bool AllPerfect = false, bool RankLost = false, bool Failed = false,
-                                           bool NewBest = false, bool FirstPlay = false, int Attempt = 1, int Hour = 12)
+                                           bool NewBest = false, bool FirstPlay = false, int Attempt = 1, int Hour = 12, bool FullBloom = false)
 {
     public static VoiceContext For(GameplayResult result, bool newBest, bool firstPlay, int attempt, DateTime ended) => new VoiceContext(result.Rank, result.Accuracy,
-        result.IsFullCombo, result.IsAllPerfect, result.RankLostToMiss, result.Failed, newBest, firstPlay, attempt, ended.Hour);
+        result.IsFullCombo, result.IsAllPerfect, result.RankLostToMiss, result.Failed, newBest, firstPlay, attempt, ended.Hour, result.IsFullBloom);
 }

@@ -51,6 +51,17 @@ public class RevealTimeline
     public const double PULL_DURATION = 450;
 
     public const double BADGE_AFTER_LANDING = 560;
+
+    /// <summary>
+    /// A Full Bloom climbs one step past the all perfect: that badge stamps, then this long after it the ring gathers
+    /// itself for <see cref="GATHER_DURATION"/>, everything blooms at once, and the FULL BLOOM cut-in holds the screen for
+    /// <see cref="CUT_IN_DURATION"/> before the badge stamps again as FULL BLOOM.
+    /// </summary>
+    public const double GATHER_AFTER_BADGE = 520;
+
+    public const double GATHER_DURATION = 640;
+    public const double CUT_IN_DURATION = 1150;
+
     public const double BEST_AFTER = 540;
     public const double MUSIC_AFTER_BEST = 700;
     public const double VOICE_AFTER_MUSIC = 350;
@@ -112,6 +123,17 @@ public class RevealTimeline
     /// </summary>
     public readonly double Best;
 
+    /// <summary>
+    /// For a Full Bloom: when the ring starts gathering itself, when everything blooms, and when the badge stamps again;
+    /// NaN otherwise.
+    /// </summary>
+    public readonly double Gather;
+
+    public readonly double Bloom;
+    public readonly double BloomBadge;
+
+    public bool FullBloom => !double.IsNaN(Bloom);
+
     public double Music => Best + MUSIC_AFTER_BEST;
 
     public double Voice => Music + VOICE_AFTER_MUSIC;
@@ -123,7 +145,7 @@ public class RevealTimeline
 
     public bool RankLost => !double.IsNaN(Crack);
 
-    public RevealTimeline(double accuracy, bool rankLost, bool fullCombo)
+    public RevealTimeline(double accuracy, bool rankLost, bool fullCombo, bool fullBloom = false)
     {
         Target = (float)Math.Clamp(accuracy, 0, 1);
 
@@ -144,10 +166,26 @@ public class RevealTimeline
         }
 
         Badge = fullCombo ? Landing + BADGE_AFTER_LANDING : double.NaN;
-        Best = (fullCombo ? Badge : Landing) + BEST_AFTER;
+        if (fullBloom && fullCombo)
+        {
+            Gather = Badge + GATHER_AFTER_BADGE;
+            Bloom = Gather + GATHER_DURATION;
+            BloomBadge = Bloom + CUT_IN_DURATION;
+        }
+        else
+            Gather = Bloom = BloomBadge = double.NaN;
+
+        Best = (FullBloom ? BloomBadge : fullCombo ? Badge : Landing) + BEST_AFTER;
     }
 
-    public static RevealTimeline For(GameplayResult result) => new RevealTimeline(result.Accuracy, result.RankLostToMiss, result.IsFullCombo);
+    public static RevealTimeline For(GameplayResult result) => new RevealTimeline(result.Accuracy, result.RankLostToMiss, result.IsFullCombo, result.IsFullBloom);
+
+    /// <summary>
+    /// How far the ring has gathered itself at <paramref name="time"/>, 0–1: building over the gather, short of the bloom by
+    /// a moment of stillness; 0 outside it.
+    /// </summary>
+    public float GatherAt(double time) =>
+        FullBloom && time >= Gather && time < Bloom ? (float)Math.Clamp((time - Gather) / (GATHER_DURATION - 80), 0, 1) : 0;
 
     /// <summary>
     /// How far through the fill's motion it is at <paramref name="time"/>, 0–1.

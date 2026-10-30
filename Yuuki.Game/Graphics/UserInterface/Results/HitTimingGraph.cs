@@ -71,6 +71,7 @@ public partial class HitTimingGraph : FlowContainer
                     zone(1, JudgementColors.HIT),
                     zone((float)(windows.Break / range), JudgementColors.BREAK),
                     zone((float)(windows.Critical / range), JudgementColors.CRITICAL),
+                    zone((float)(windows.Bloom / range), JudgementColors.BLOOM),
                     new Box
                     {
                         Anchor = Anchor.TopCentre,
