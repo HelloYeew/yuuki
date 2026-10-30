@@ -107,6 +107,7 @@ public partial class BlossomRing : Container
     private readonly RingArc fill;
     private readonly RingArc[] bandFills = new RingArc[band_ranks.Length];
     private readonly SakuraBranch branch;
+    private readonly Container stems;
     private readonly Container flowers;
     private readonly Circle head;
     private readonly Circle headHalo;
@@ -206,6 +207,8 @@ public partial class BlossomRing : Container
 
         children.Add(branch = new SakuraBranch());
         // The ring's size, not none: a child is drawn through its parent's size, and nothing shows in a parent of none.
+        // Every stem under every flower, so none crosses a flower beside its own.
+        children.Add(stems = new Container { RelativeSizeAxes = Axes.Both });
         children.Add(flowers = new Container { RelativeSizeAxes = Axes.Both });
 
         // The fill's leading edge: a bright head with a halo.
@@ -661,6 +664,7 @@ public partial class BlossomRing : Container
                 StemFrom = Math.Abs(spot.Out) > 3 ? direction * branchRadius - position : null
             };
 
+            ring.stems.Add(flower.Stem);
             ring.flowers.Add(flower);
             flowers.Add((flower, spot.Delay, turn, spot.Out));
         }

@@ -55,7 +55,7 @@ public partial class BlossomFlower : Container
     [Resolved(canBeNull: true)]
     private ITextureManager? textureManager { get; set; }
 
-    private readonly Container stem;
+    private readonly StemLayer stem;
     private readonly Sprite glow;
     private readonly Container budGroup;
     private readonly Container flowerGroup;
@@ -101,9 +101,17 @@ public partial class BlossomFlower : Container
     public bool StaysClosed { get; init; }
 
     /// <summary>
-    /// Where its stem joins the branch, from the flower; none when it sits on the branch itself.
+    /// Where its stem joins the branch, from the flower; none when it sits on the branch itself. <see cref="Stem"/> draws
+    /// it.
     /// </summary>
     public Vector2? StemFrom { get; init; }
+
+    /// <summary>
+    /// Its stem (<see cref="StemFrom"/>), apart from it so that it can go under every flower: a stem drawn with its own
+    /// flower would cross any flower added before it. Add it in a parent just like the flower's (the same, or one the same
+    /// size in the same place), under all the flowers there. It goes wherever the flower goes, and grows out with it.
+    /// </summary>
+    public Drawable Stem => stem;
 
     /// <summary>
     /// How far it has grown out of the branch, 0–1: it grows as the fill comes near.
@@ -138,14 +146,10 @@ public partial class BlossomFlower : Container
         Origin = Anchor.Centre;
         Size = new Vector2(64);
 
+        stem = new StemLayer(this);
+
         Children = new Drawable[]
         {
-            // Under everything else, so its end hides under the flower. The flower's size: a child is drawn through its
-            // parent's size, and nothing shows in a parent of none.
-            stem = new Container
-            {
-                RelativeSizeAxes = Axes.Both
-            },
             // A soft light in the flower's own color as it opens or a wave passes over it. Always present: a drawable
             // that starts unseen and is only ever shown by its alpha isn't drawn again properly when it's shown.
             glow = new Sprite
@@ -385,4 +389,29 @@ public partial class BlossomFlower : Container
     private static float clamp01(double value) => (float)Math.Clamp(value, 0, 1);
 
     private static float outCubic(float t) => 1 - MathF.Pow(1 - t, 3);
+
+    /// <summary>
+    /// Where a flower's stem is drawn: over the flower's spot, wherever it is, as grown out as it is. The flower's size,
+    /// not none: a child is drawn through its parent's size, and nothing shows in a parent of none.
+    /// </summary>
+    private partial class StemLayer : Container
+    {
+        private readonly BlossomFlower flower;
+
+        public StemLayer(BlossomFlower flower)
+        {
+            this.flower = flower;
+            Anchor = flower.Anchor;
+            Origin = flower.Origin;
+            Size = flower.Size;
+        }
+
+        public override void Update()
+        {
+            // Before its own update, so it's drawn where the flower is this frame.
+            Position = flower.Position;
+            Alpha = flower.Alpha;
+            base.Update();
+        }
+    }
 }

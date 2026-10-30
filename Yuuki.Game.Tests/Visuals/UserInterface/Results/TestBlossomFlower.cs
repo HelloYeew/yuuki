@@ -63,7 +63,8 @@ public partial class TestBlossomFlower : YuukiTestScene
                 Origin = Anchor.Centre,
                 RelativeSizeAxes = Axes.Both,
                 Scale = new Vector2(1.8f),
-                Children = flowers
+                // The stems under the flowers, as on the ring.
+                Children = flowers.Select(f => f.Stem).Concat(flowers).ToArray()
             });
         });
     }
