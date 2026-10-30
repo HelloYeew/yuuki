@@ -46,6 +46,15 @@ vec3 heroColor(float position, float white)
     return toLinear(mix(color, vec3(1.0), white));
 }
 
+// A color as GameShaderDrawNode.PackColor packs it into one number, six bits a channel, red highest (small enough to
+// come through the GPU's interpolation whole), back in linear.
+vec3 unpackColor(float packed)
+{
+    float v = round(packed);
+    vec3 bits = vec3(floor(v / 4096.0), floor(mod(v, 4096.0) / 64.0), mod(v, 64.0));
+    return toLinear(bits / 63.0);
+}
+
 float hash(vec2 p)
 {
     vec3 p3 = fract(vec3(p.xyx) * 0.1031);

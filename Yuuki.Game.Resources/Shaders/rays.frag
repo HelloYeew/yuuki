@@ -9,17 +9,9 @@
 //   v_TexCoords  where, from the middle: 1 at the edge of its box
 //   v_Color      x about how many rays go round, y how narrow they are, z the time in seconds,
 //                w how bright (negative: it takes the heroes' colors in turn round the circle)
-//   v_TexIndex   the light's color, as LightRays packs it: six bits a channel, red highest
+//   v_TexIndex   the light's color, packed (GameShaderDrawNode.PackColor)
 
 #include "yuuki.glsl"
-
-// Six bits a channel keeps the packed number small enough that it comes through interpolation whole.
-vec3 unpackColor(float packed)
-{
-    float v = round(packed);
-    vec3 bits = vec3(floor(v / 4096.0), floor(mod(v, 4096.0) / 64.0), mod(v, 64.0));
-    return toLinear(bits / 63.0);
-}
 
 void main()
 {
