@@ -2,6 +2,7 @@
 // See the LICENSE file for full license text.
 
 using System;
+using System.Runtime.InteropServices;
 using Sakura.Framework.Graphics.Colors;
 using Sakura.Framework.Graphics.Drawables;
 using Sakura.Framework.Graphics.Rendering;
@@ -55,10 +56,20 @@ public partial class LandingWaves : Drawable
 
     protected override VertexTopology Topology => VertexTopology.Triangles;
 
-    // The color is baked into every vertex (as RingArc's is).
-    protected override void UpdateDrawColor() => UpdateTransforms();
+    protected override DrawNode CreateDrawNode() => new CustomShaderDrawNode<LandingWavesBlock>(GameShaders.STORE, "landing-waves.frag", nameof(LandingWavesBlock), block);
 
-    protected override DrawNode CreateDrawNode() => new GameShaderDrawNode("landing-waves.frag");
+    private double sinceLanding => (Clock.CurrentTime - landsAt) / 1000;
+
+    private double sinceBreak => (Clock.CurrentTime - cracksAt) / 1000;
+
+    private LandingWavesBlock block() => new LandingWavesBlock
+    {
+        Color = new Vector4(landingColor.R / 255f, landingColor.G / 255f, landingColor.B / 255f, DrawAlpha * (Color.A / 255f)),
+        // Not yet is far in the past, to the shader: nothing.
+        SinceLanding = (float)(sinceLanding >= 0 ? sinceLanding : -1),
+        SinceBreak = (float)(sinceBreak >= 0 ? sinceBreak : -1),
+        Time = (float)(Clock.CurrentTime / 1000 % time_wrap)
+    };
 
     /// <summary>
     /// A rank lands in <paramref name="color"/> at <paramref name="time"/> (now if not given).
@@ -85,10 +96,6 @@ public partial class LandingWaves : Drawable
 
     protected override void GenerateVertices()
     {
-        double now = Clock.CurrentTime;
-        double sinceLanding = (now - landsAt) / 1000;
-        double sinceBreak = (now - cracksAt) / 1000;
-
         // Only as far out as there's light this moment.
         float reach = 0;
         if (sinceLanding >= 0 && sinceLanding < landing_life)
@@ -98,28 +105,18 @@ public partial class LandingWaves : Drawable
 
         Vector2 size = AppliedDrawSize;
 
-        if (reach <= 0 || DrawAlpha <= 0 || size.X <= 0 || size.Y <= 0)
+        if (reach <= 0 || size.X <= 0 || size.Y <= 0)
         {
             SetVertexCount(0);
             DrawRectangle = new RectangleF(0, 0, 0, 0);
             return;
         }
 
-        // Not yet is far in the past, to the shader: nothing.
-        var data = new Vector4(
-            (float)(sinceLanding >= 0 ? sinceLanding : -1),
-            (float)(sinceBreak >= 0 ? sinceBreak : -1),
-            (float)(now / 1000 % time_wrap),
-            DrawAlpha * (Color.A / 255f));
-        float color = GameShaderDrawNode.PackColor(landingColor);
-
         // A point the given distance from the middle, in halves of the box.
         Vertex vertex(float x, float y) => new Vertex
         {
             Position = Vector2.Transform(new Vector2(0.5f + x / 2, 0.5f + y / 2), ModelMatrix),
-            TexCoords = new Vector2(x, y),
-            Color = data,
-            TexIndex = color
+            TexCoords = new Vector2(x, y)
         };
 
         Vertex topLeft = vertex(-reach, -reach), topRight = vertex(reach, -reach), bottomRight = vertex(reach, reach), bottomLeft = vertex(-reach, reach);
@@ -142,5 +139,17 @@ public partial class LandingWaves : Drawable
         }
 
         DrawRectangle = new RectangleF(minX, minY, maxX - minX, maxY - minY);
+    }
+
+    /// <summary>
+    /// <c>LandingWavesBlock</c> in <c>landing-waves.frag</c>.
+    /// </summary>
+    [StructLayout(LayoutKind.Sequential, Size = 32)]
+    private struct LandingWavesBlock
+    {
+        public Vector4 Color;
+        public float SinceLanding;
+        public float SinceBreak;
+        public float Time;
     }
 }

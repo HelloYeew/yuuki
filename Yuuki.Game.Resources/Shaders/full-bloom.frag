@@ -3,14 +3,18 @@
 // A Full Bloom round the results ring, as light. While the ring gathers itself, two white rings close in on it over and
 // over, faster as they near and brighter as the gather builds, and its middle fills with light. Then the bloom: a
 // white-hot flash, and six rings in the heroes' colors bursting out one after another, past the screen's edges, each a
-// bright crest with a glow trailing in behind it, never quite round, thinning as it goes. On its vertices, the same on
-// each but v_TexCoords:
-//   v_TexCoords  where, from the middle: 1 at the edge of the ring's box
-//   v_Color      x how far the gather has built, 0–1 (negative: not gathering), y seconds since the bloom (negative: not
-//                yet), z the time in seconds, w how bright
-//   v_TexIndex   where round the heroes' colors the bloom's rings start (0–1)
+// bright crest with a glow trailing in behind it, never quite round, thinning as it goes. On its vertices, v_TexCoords
+// says where, from the middle: 1 at the edge of the ring's box.
 
 #include "yuuki.glsl"
+
+layout(set = 0, binding = 5, std140) uniform FullBloomBlock
+{
+    float u_Gather; // How far the gather has built, 0–1 (negative: not gathering).
+    float u_Since;  // Seconds since the bloom (negative: not yet).
+    float u_Time;   // In seconds.
+    float u_Alpha;  // How bright it is.
+};
 
 // A ring's crest at crestAt, `width` sharp, with a glow trailing in behind it.
 float shock(float r, float crestAt, float width, float trailing)
@@ -24,11 +28,10 @@ float shock(float r, float crestAt, float width, float trailing)
 void main()
 {
     vec2 p = v_TexCoords;
-    float gather = v_Color.x;
-    float since = v_Color.y;
-    float time = v_Color.z;
-    float alpha = v_Color.w;
-    float firstHue = v_TexIndex;
+    float gather = u_Gather;
+    float since = u_Since;
+    float time = u_Time;
+    float alpha = u_Alpha;
 
     float r = length(p);
     float angle = atan(p.y, p.x);
@@ -70,7 +73,7 @@ void main()
 
             // White-hot at the very crest, the hero's color behind it.
             float d = r - crestAt;
-            vec3 color = mix(heroColor(firstHue + float(i) / 6.0, 0.15), vec3(1.0), 0.4 * exp(-(d * d) / (width * width)));
+            vec3 color = mix(heroColor(float(i) / 6.0, 0.15), vec3(1.0), 0.4 * exp(-(d * d) / (width * width)));
             light += color * shock(r, crestAt, width, 0.1 + 0.3 * progress) * 0.9 * (1.0 - progress) * uneven;
         }
     }

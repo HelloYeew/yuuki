@@ -3,6 +3,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Runtime.InteropServices;
 using Sakura.Framework.Extensions.ColorExtensions;
 using Sakura.Framework.Graphics.Colors;
 using Sakura.Framework.Graphics.Drawables;
@@ -421,8 +422,7 @@ public partial class BubbleDisc : Container
     /// </summary>
     /// <remarks>
     /// Every vertex carries where it is on the bubble in its own shape (its texture coordinates: 1 at the edge, however
-    /// the edge wobbles) and, the same on each, what a uniform would: the time, how bright, a wob's flash, the glow
-    /// and the sheen (see the shader).
+    /// the edge wobbles); the rest is the shader's uniform block.
     /// </remarks>
     private partial class Membrane : Layer
     {
@@ -435,7 +435,17 @@ public partial class BubbleDisc : Container
             Blending = BlendingMode.Additive;
         }
 
-        protected override DrawNode CreateDrawNode() => new GameShaderDrawNode(shader);
+        protected override DrawNode CreateDrawNode() => new CustomShaderDrawNode<BubbleBlock>(GameShaders.STORE, shader, nameof(BubbleBlock), block);
+
+        private BubbleBlock block() => new BubbleBlock
+        {
+            Time = (float)(Disc.Clock.CurrentTime / 1000 % shader_time_wrap),
+            Alpha = DrawAlpha,
+            Flash = Disc.flash,
+            Glow = Disc.Glow,
+            Sheen = Disc.Sheen,
+            Greyed = Disc.Greyed ? 1 : 0
+        };
 
         protected override void GenerateVertices()
         {
@@ -450,15 +460,10 @@ public partial class BubbleDisc : Container
             // A fan from the middle to the edge, then a band from the edge out to where the glow has faded.
             SetVertexCount(segments * 9);
 
-            float time = (float)(disc.Clock.CurrentTime / 1000 % shader_time_wrap);
-            var data = new Vector4(time, disc.Greyed ? -DrawAlpha : DrawAlpha, disc.flash, disc.Glow);
-
             Vertex vertex(float angle, float s, float r) => new Vertex
             {
                 Position = Point(angle, r),
-                TexCoords = new Vector2(s * MathF.Cos(angle), s * MathF.Sin(angle)),
-                Color = data,
-                TexIndex = disc.Sheen
+                TexCoords = new Vector2(s * MathF.Cos(angle), s * MathF.Sin(angle))
             };
 
             Vertex middle = vertex(0, 0, 0);
@@ -485,6 +490,20 @@ public partial class BubbleDisc : Container
 
             SetBounds(REACH * largest + 0.02f);
         }
+    }
+
+    /// <summary>
+    /// <c>BubbleBlock</c> in <c>bubble.glsl</c>.
+    /// </summary>
+    [StructLayout(LayoutKind.Sequential, Size = 32)]
+    private struct BubbleBlock
+    {
+        public float Time;
+        public float Alpha;
+        public float Flash;
+        public float Glow;
+        public float Sheen;
+        public float Greyed;
     }
 
     /// <summary>

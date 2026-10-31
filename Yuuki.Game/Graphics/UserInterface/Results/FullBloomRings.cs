@@ -2,6 +2,7 @@
 // See the LICENSE file for full license text.
 
 using System;
+using System.Runtime.InteropServices;
 using Sakura.Framework.Graphics.Drawables;
 using Sakura.Framework.Graphics.Primitives;
 using Sakura.Framework.Graphics.Rendering;
@@ -54,10 +55,21 @@ public partial class FullBloomRings : Drawable
 
     protected override VertexTopology Topology => VertexTopology.Triangles;
 
-    // The color is baked into every vertex (as RingArc's is).
-    protected override void UpdateDrawColor() => UpdateTransforms();
+    protected override DrawNode CreateDrawNode() => new CustomShaderDrawNode<FullBloomBlock>(GameShaders.STORE, "full-bloom.frag", nameof(FullBloomBlock), block);
 
-    protected override DrawNode CreateDrawNode() => new GameShaderDrawNode("full-bloom.frag");
+    private bool gathering => Clock.CurrentTime >= gathersAt && Clock.CurrentTime < bloomsAt;
+
+    private double sinceBloom => (Clock.CurrentTime - bloomsAt) / 1000;
+
+    private bool blooming => sinceBloom >= 0 && sinceBloom < bloom_life;
+
+    private FullBloomBlock block() => new FullBloomBlock
+    {
+        Gather = gathering ? (float)Math.Clamp((Clock.CurrentTime - gathersAt) / gatherLength, 0, 1) : -1,
+        Since = blooming ? (float)sinceBloom : -1,
+        Time = (float)(Clock.CurrentTime / 1000 % time_wrap),
+        Alpha = DrawAlpha * (Color.A / 255f)
+    };
 
     /// <summary>
     /// The ring starts gathering itself at <paramref name="time"/> (now if not given), building over
@@ -85,34 +97,21 @@ public partial class FullBloomRings : Drawable
 
     protected override void GenerateVertices()
     {
-        double now = Clock.CurrentTime;
-        double sinceBloom = (now - bloomsAt) / 1000;
-        bool gathering = now >= gathersAt && now < bloomsAt;
-        bool blooming = sinceBloom >= 0 && sinceBloom < bloom_life;
-
         float reach = blooming ? bloom_reach : gathering ? gather_reach : 0;
         Vector2 size = AppliedDrawSize;
 
-        if (reach <= 0 || DrawAlpha <= 0 || size.X <= 0 || size.Y <= 0)
+        if (reach <= 0 || size.X <= 0 || size.Y <= 0)
         {
             SetVertexCount(0);
             DrawRectangle = new RectangleF(0, 0, 0, 0);
             return;
         }
 
-        var data = new Vector4(
-            gathering ? (float)Math.Clamp((now - gathersAt) / gatherLength, 0, 1) : -1,
-            blooming ? (float)sinceBloom : -1,
-            (float)(now / 1000 % time_wrap),
-            DrawAlpha * (Color.A / 255f));
-
         // A point the given distance from the middle, in halves of the box.
         Vertex vertex(float x, float y) => new Vertex
         {
             Position = Vector2.Transform(new Vector2(0.5f + x / 2, 0.5f + y / 2), ModelMatrix),
-            TexCoords = new Vector2(x, y),
-            Color = data,
-            TexIndex = 0
+            TexCoords = new Vector2(x, y)
         };
 
         Vertex topLeft = vertex(-reach, -reach), topRight = vertex(reach, -reach), bottomRight = vertex(reach, reach), bottomLeft = vertex(-reach, reach);
@@ -135,5 +134,17 @@ public partial class FullBloomRings : Drawable
         }
 
         DrawRectangle = new RectangleF(minX, minY, maxX - minX, maxY - minY);
+    }
+
+    /// <summary>
+    /// <c>FullBloomBlock</c> in <c>full-bloom.frag</c>.
+    /// </summary>
+    [StructLayout(LayoutKind.Sequential, Size = 16)]
+    private struct FullBloomBlock
+    {
+        public float Gather;
+        public float Since;
+        public float Time;
+        public float Alpha;
     }
 }

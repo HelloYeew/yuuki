@@ -2,6 +2,7 @@
 // See the LICENSE file for full license text.
 
 using System;
+using System.Runtime.InteropServices;
 using Sakura.Framework.Extensions.ColorExtensions;
 using Sakura.Framework.Graphics.Colors;
 using Sakura.Framework.Graphics.Drawables;
@@ -25,11 +26,6 @@ namespace Yuuki.Game.Graphics.UserInterface;
 /// </remarks>
 public partial class EdgeGlow : Drawable
 {
-    /// <summary>
-    /// How fast the light falls away: it fades by e this many times over its reach.
-    /// </summary>
-    private const float falloff = 2.5f;
-
     private float intensity;
     private Color glowColor = Color.White;
 
@@ -68,10 +64,21 @@ public partial class EdgeGlow : Drawable
 
     protected override VertexTopology Topology => VertexTopology.Triangles;
 
-    // The color is baked into every vertex (as RingArc's is).
-    protected override void UpdateDrawColor() => UpdateTransforms();
+    protected override DrawNode CreateDrawNode() => new CustomShaderDrawNode<EdgeGlowBlock>(GameShaders.STORE, "edge-glow.frag", nameof(EdgeGlowBlock), block);
 
-    protected override DrawNode CreateDrawNode() => new GameShaderDrawNode("edge-glow.frag");
+    // Deeper and stronger the higher it goes, as deep and strong as a CSS inset shadow of blur 70 + 110i and spread
+    // 6 + 26i at 85% of i: brightest at the edge, mostly gone by the spread and half the blur in.
+    private float blur => 70 + 110 * intensity;
+    private float spread => 6 + 26 * intensity;
+
+    private EdgeGlowBlock block() => new EdgeGlowBlock
+    {
+        Color = new Vector4(
+            ColorExtensions.SrgbToLinear(glowColor.R),
+            ColorExtensions.SrgbToLinear(glowColor.G),
+            ColorExtensions.SrgbToLinear(glowColor.B),
+            DrawAlpha * Math.Min(0.95f, intensity * 0.85f) * Math.Min(1, 0.5f + spread / blur) * (glowColor.A / 255f))
+    };
 
     protected override void GenerateVertices()
     {
@@ -84,18 +91,7 @@ public partial class EdgeGlow : Drawable
             return;
         }
 
-        // Deeper and stronger the higher it goes, as deep and strong as a CSS inset shadow of blur 70 + 110i and
-        // spread 6 + 26i at 85% of i: brightest at the edge, mostly gone by the spread and half the blur in.
-        float blur = 70 + 110 * intensity;
-        float spread = 6 + 26 * intensity;
-        float strength = Math.Min(0.95f, intensity * 0.85f) * Math.Min(1, 0.5f + spread / blur);
         float reach = spread + blur / 2;
-
-        var color = new Vector4(
-            ColorExtensions.SrgbToLinear(glowColor.R),
-            ColorExtensions.SrgbToLinear(glowColor.G),
-            ColorExtensions.SrgbToLinear(glowColor.B),
-            DrawAlpha * strength * (glowColor.A / 255f));
 
         // A quarter at a time, split down the middle both ways: in each, how far in from the nearest side and the
         // nearest top or bottom is even across it, so the shader gets it exact anywhere.
@@ -105,9 +101,7 @@ public partial class EdgeGlow : Drawable
         Vertex vertex(int i, int j) => new Vertex
         {
             Position = Vector2.Transform(new Vector2(xs[i] / size.X, ys[j] / size.Y), ModelMatrix),
-            TexCoords = new Vector2(Math.Min(xs[i], size.X - xs[i]) / reach, Math.Min(ys[j], size.Y - ys[j]) / reach),
-            Color = color,
-            TexIndex = falloff
+            TexCoords = new Vector2(Math.Min(xs[i], size.X - xs[i]) / reach, Math.Min(ys[j], size.Y - ys[j]) / reach)
         };
 
         SetVertexCount(4 * 6);
@@ -131,5 +125,14 @@ public partial class EdgeGlow : Drawable
         Vector2 topLeft = Vector2.Transform(Vector2.Zero, ModelMatrix);
         Vector2 bottomRight = Vector2.Transform(Vector2.One, ModelMatrix);
         DrawRectangle = new RectangleF(topLeft.X, topLeft.Y, bottomRight.X - topLeft.X, bottomRight.Y - topLeft.Y);
+    }
+
+    /// <summary>
+    /// <c>EdgeGlowBlock</c> in <c>edge-glow.frag</c>.
+    /// </summary>
+    [StructLayout(LayoutKind.Sequential, Size = 16)]
+    private struct EdgeGlowBlock
+    {
+        public Vector4 Color;
     }
 }

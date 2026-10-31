@@ -4,23 +4,28 @@
 // into streaks, with hair-thin rays between, bunched here and spaced there. Nothing moves round: each ray brightens,
 // dims and flickers where it is, as leaves moving in front of the sun would make it. It's never a round shape (a
 // strong ray reaches far, a faint one stops short) and it leans up and to the left, where the light comes from (the
-// bubble's glints are on that side too), in a soft glow round the sun. On its vertices, the same on each but
-// v_TexCoords:
-//   v_TexCoords  where, from the middle: 1 at the edge of its box
-//   v_Color      x about how many rays go round, y how narrow they are, z the time in seconds,
-//                w how bright (negative: it takes the heroes' colors in turn round the circle)
-//   v_TexIndex   the light's color, packed (GameShaderDrawNode.PackColor)
+// bubble's glints are on that side too), in a soft glow round the sun. On its vertices, v_TexCoords says where, from the
+// middle: 1 at the edge of its box.
 
 #include "yuuki.glsl"
+
+layout(set = 0, binding = 5, std140) uniform RaysBlock
+{
+    vec4 u_Color;       // The light's color, and how bright it is.
+    float u_Density;    // About how many rays go round.
+    float u_Narrowness; // How narrow they are.
+    float u_Time;       // In seconds.
+    float u_Heroes;     // 1 if it takes the heroes' colors in turn round the circle instead.
+};
 
 void main()
 {
     vec2 p = v_TexCoords;
-    float density = v_Color.x;
-    float narrowness = v_Color.y;
-    float time = v_Color.z;
-    float alpha = abs(v_Color.w);
-    bool heroes = v_Color.w < 0.0;
+    float density = u_Density;
+    float narrowness = u_Narrowness;
+    float time = u_Time;
+    float alpha = u_Color.a;
+    bool heroes = u_Heroes > 0.5;
 
     float r = length(p);
     float angle = atan(p.y, p.x);
@@ -55,7 +60,7 @@ void main()
     float breath = 0.88 + 0.12 * noise(vec2(time * 0.35, 3.1));
 
     // White hot close in, its own color further out.
-    vec3 color = heroes ? heroColor(angle / (2.0 * PI) + time * 0.04, 0.2) : unpackColor(v_TexIndex);
+    vec3 color = heroes ? heroColor(angle / (2.0 * PI) + time * 0.04, 0.2) : toLinear(u_Color.rgb);
     color = mix(color, vec3(1.0), 0.45 * exp(-r / 0.35));
 
     writeLight(color * (1.7 * rays * rise * fade * (0.85 + 0.15 * lean) + glow) * breath * alpha);

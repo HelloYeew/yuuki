@@ -1,25 +1,8 @@
-// What every game shader starts from. Each pairs with the framework's shader.vert, takes its inputs, and adds its
-// light with writeLight (which keeps it inside any mask, as the framework's own drawing is).
-//
-// Game shaders can't have uniform blocks of their own on every backend (Metal and Direct3D 11 bind only the
-// framework's), so whatever a shader would take as uniforms comes in on its vertices instead: each shader says
-// what its v_Color, v_TexCoords and v_TexIndex carry. Every shader must read all of its inputs: Direct3D links
-// them to the vertex shader's outputs by register, and an input the compiler dropped as unread would move every
-// later one onto the wrong output. GameShadersTest checks this for each shader.
+// What every game shader starts from, on top of the framework's starting point: the game's colors and noise, and
+// writeLight to add its light with. Each shader takes its values in a uniform block of its own, and says what's on its
+// vertices.
 
-#include "sh_Utils.glsl"
-
-layout(location = 0) in vec4 v_Color;
-layout(location = 1) in vec2 v_TexCoords;
-layout(location = 2) in vec2 v_FragPos;
-layout(location = 3) in float v_TexIndex;
-layout(location = 4) in vec4 v_ClipData;
-layout(location = 5) in float v_ClipShearX;
-layout(location = 6) in float v_ClipRadius;
-layout(location = 7) in vec4 v_ClipFadeEdges;
-layout(location = 8) in vec4 v_ClipFadeLength;
-
-layout(location = 0) out vec4 FragColor;
+#include "sh_Custom.glsl"
 
 const float PI = 3.14159265;
 
@@ -44,15 +27,6 @@ vec3 heroColor(float position, float white)
     int i = int(at);
     vec3 color = mix(colors[i], colors[(i + 1) % 6], smoothstep(0.0, 1.0, at - float(i)));
     return toLinear(mix(color, vec3(1.0), white));
-}
-
-// A color as GameShaderDrawNode.PackColor packs it into one number, six bits a channel, red highest (small enough to
-// come through the GPU's interpolation whole), back in linear.
-vec3 unpackColor(float packed)
-{
-    float v = round(packed);
-    vec3 bits = vec3(floor(v / 4096.0), floor(mod(v, 4096.0) / 64.0), mod(v, 64.0));
-    return toLinear(bits / 63.0);
 }
 
 float hash(vec2 p)
@@ -111,9 +85,5 @@ float fbm(vec2 p)
 // Writes a pixel of added light, faded and clipped by any mask it's drawn in.
 void writeLight(vec3 light)
 {
-    FragColor = vec4(light, 1.0);
-    FragColor.a *= clipFade(v_FragPos, v_ClipFadeEdges, v_ClipFadeLength);
-
-    if (!applyClipping(v_FragPos, v_ClipData, v_ClipShearX, v_ClipRadius, FragColor))
-        discard;
+    writeFragment(vec4(light, 1.0));
 }

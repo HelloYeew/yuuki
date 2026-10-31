@@ -2,6 +2,7 @@
 // See the LICENSE file for full license text.
 
 using System;
+using System.Runtime.InteropServices;
 using Sakura.Framework.Graphics.Drawables;
 using Sakura.Framework.Graphics.Rendering;
 using Sakura.Framework.Graphics.Rendering.Vertex;
@@ -105,10 +106,17 @@ public partial class LightRays : Drawable
 
     protected override VertexTopology Topology => VertexTopology.Triangles;
 
-    // The color is baked into every vertex (as RingArc's is).
-    protected override void UpdateDrawColor() => UpdateTransforms();
+    protected override DrawNode CreateDrawNode() => new CustomShaderDrawNode<RaysBlock>(GameShaders.STORE, "rays.frag", nameof(RaysBlock), block);
 
-    protected override DrawNode CreateDrawNode() => new GameShaderDrawNode("rays.frag");
+    private RaysBlock block() => new RaysBlock
+    {
+        // Narrower rays are the noise's peaks taken to a higher power.
+        Narrowness = Math.Clamp(1f / spokeWidth, 1, 8),
+        Density = spokes,
+        Color = new Vector4(Color.R / 255f, Color.G / 255f, Color.B / 255f, DrawAlpha * peak * (Color.A / 255f)),
+        Time = (float)(Clock.CurrentTime / 1000 % time_wrap),
+        Heroes = heroColored ? 1 : 0
+    };
 
     public override void Update()
     {
@@ -119,26 +127,17 @@ public partial class LightRays : Drawable
 
     protected override void GenerateVertices()
     {
-        if (peak <= 0 || DrawAlpha <= 0)
+        if (peak <= 0)
         {
             SetVertexCount(0);
             DrawRectangle = new RectangleF(0, 0, 0, 0);
             return;
         }
 
-        float time = (float)(Clock.CurrentTime / 1000 % time_wrap);
-        float alpha = DrawAlpha * peak * (Color.A / 255f);
-
-        // Narrower rays are the noise's peaks taken to a higher power.
-        var data = new Vector4(spokes, Math.Clamp(1f / spokeWidth, 1, 8), time, heroColored ? -alpha : alpha);
-        float color = GameShaderDrawNode.PackColor(Color);
-
         Vertex vertex(float x, float y) => new Vertex
         {
             Position = Vector2.Transform(new Vector2(x, y), ModelMatrix),
-            TexCoords = new Vector2(2 * x - 1, 2 * y - 1),
-            Color = data,
-            TexIndex = color
+            TexCoords = new Vector2(2 * x - 1, 2 * y - 1)
         };
 
         // One quad over the box: the shader lights every pixel of it.
@@ -162,5 +161,18 @@ public partial class LightRays : Drawable
         }
 
         DrawRectangle = new RectangleF(minX, minY, maxX - minX, maxY - minY);
+    }
+
+    /// <summary>
+    /// <c>RaysBlock</c> in <c>rays.frag</c>.
+    /// </summary>
+    [StructLayout(LayoutKind.Sequential, Size = 32)]
+    private struct RaysBlock
+    {
+        public Vector4 Color;
+        public float Density;
+        public float Narrowness;
+        public float Time;
+        public float Heroes;
     }
 }

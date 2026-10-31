@@ -1,10 +1,20 @@
 // A bubble's film, shared by its two halves: bubble-back.frag draws what's behind whatever is inside the bubble,
-// bubble-front.frag what's in front of it. On every vertex, the same on each:
-//   v_TexCoords  where on the bubble, in its own shape: 1 at the edge however it wobbles
-//   v_Color      x the time in seconds, y how opaque (negative: greyed), z a wob's flash, w how bright the glow is
-//   v_TexIndex   how bright the film is (its colors, rim and glints)
+// bubble-front.frag what's in front of it. On its vertices, v_TexCoords says where on the bubble, in its own shape: 1 at
+// the edge however it wobbles.
 
 #include "yuuki.glsl"
+
+layout(set = 0, binding = 5, std140) uniform BubbleBlock
+{
+    float u_Time;   // In seconds.
+    float u_Alpha;  // How opaque it is.
+    float u_Flash;  // A wob's flash.
+    float u_Glow;   // How bright the glow is.
+    float u_Sheen;  // How bright the film is (its colors, rim and glints).
+    float u_Greyed; // 1 if it's lost its colors.
+    float u_Padding1;
+    float u_Padding2;
+};
 
 // The film's colors run through the heroes' as a soap film's run through the spectrum.
 vec3 film(float position)
@@ -36,12 +46,12 @@ float angleTo(float from, float to)
 void drawFilm(bool front)
 {
     vec2 p = v_TexCoords;
-    float time = v_Color.x;
-    float alpha = abs(v_Color.y);
-    bool greyed = v_Color.y < 0.0;
-    float flash = v_Color.z;
-    float glowStrength = v_Color.w;
-    float sheen = v_TexIndex;
+    float time = u_Time;
+    float alpha = u_Alpha;
+    bool greyed = u_Greyed > 0.5;
+    float flash = u_Flash;
+    float glowStrength = u_Glow;
+    float sheen = u_Sheen;
 
     float s = length(p);
     float aa = max(fwidth(s), 0.0001);

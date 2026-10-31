@@ -4,14 +4,19 @@
 // shock rings thrown out past the ring, one after another as ripples are: each a sharp bright crest with a glow trailing
 // in behind it, never quite round, brighter here and fainter there, and thinning and fading as it spreads. The first
 // has a thin rainbow fringe just outside its crest, in the heroes' colors as the bubble's film is, and sparkles riding
-// it. A rank breaking flashes red and sends out a jagged red ring, broken in places. On its vertices, the same on each
-// but v_TexCoords:
-//   v_TexCoords  where, from the middle: 1 at the edge of the ring's box
-//   v_Color      x seconds since the landing, y seconds since the break (negative: not yet), z the time in seconds,
-//                w how bright
-//   v_TexIndex   the landing's color, packed (GameShaderDrawNode.PackColor)
+// it. A rank breaking flashes red and sends out a jagged red ring, broken in places. On its vertices, v_TexCoords says
+// where, from the middle: 1 at the edge of the ring's box.
 
 #include "yuuki.glsl"
+
+layout(set = 0, binding = 5, std140) uniform LandingWavesBlock
+{
+    vec4 u_Color;         // The landing's color, and how bright it is.
+    float u_SinceLanding; // Seconds since the landing (negative: not yet).
+    float u_SinceBreak;   // Seconds since the break (negative: not yet).
+    float u_Time;         // In seconds.
+    float u_Padding;
+};
 
 // JudgementColors.MISS (#D9534F), linear.
 const vec3 BREAK_RED = vec3(0.693, 0.087, 0.078);
@@ -56,11 +61,11 @@ vec2 shockRing(float r, vec2 around, float since, float delay, float duration, f
 void main()
 {
     vec2 p = v_TexCoords;
-    float sinceLanding = v_Color.x;
-    float sinceBreak = v_Color.y;
-    float time = v_Color.z;
-    float alpha = v_Color.w;
-    vec3 color = unpackColor(v_TexIndex);
+    float sinceLanding = u_SinceLanding;
+    float sinceBreak = u_SinceBreak;
+    float time = u_Time;
+    float alpha = u_Color.a;
+    vec3 color = toLinear(u_Color.rgb);
 
     float r = length(p);
     float angle = atan(p.y, p.x);
