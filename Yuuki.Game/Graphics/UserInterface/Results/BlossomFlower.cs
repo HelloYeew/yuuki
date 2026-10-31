@@ -60,14 +60,10 @@ public partial class BlossomFlower : Container
     private readonly Sprite glow;
     private readonly Container budGroup;
     private readonly Container flowerGroup;
-    private readonly Container[] petalPivots = new Container[5];
-    private readonly Container[] shadowPivots = new Container[5];
     private readonly Sprite[] petals = new Sprite[5];
     private readonly Sprite[] petalShadows = new Sprite[5];
     private readonly Sprite bud;
     private readonly Sprite budShadow;
-    private readonly Container budPivot;
-    private readonly Container budShadowPivot;
     private readonly Circle core;
 
     private double openAt = double.PositiveInfinity;
@@ -171,8 +167,8 @@ public partial class BlossomFlower : Container
                 Size = new Vector2(texture_units),
                 Children = new Drawable[]
                 {
-                    budShadowPivot = pivot(budShadow = petalSprite(-1), shadow_offset),
-                    budPivot = pivot(bud = petalSprite(-1), Vector2.Zero)
+                    budShadow = petalSprite(1, shadow_offset),
+                    bud = petalSprite(1, Vector2.Zero)
                 }
             },
             flowerGroup = new Container
@@ -186,10 +182,10 @@ public partial class BlossomFlower : Container
 
         // Shadows first, so no petal's shadow falls on another petal.
         for (int i = 0; i < 5; i++)
-            flowerGroup.Add(shadowPivots[i] = pivot(petalShadows[i] = petalSprite(-petal_base), shadow_offset));
+            flowerGroup.Add(petalShadows[i] = petalSprite(petal_base, shadow_offset));
 
         for (int i = 0; i < 5; i++)
-            flowerGroup.Add(petalPivots[i] = pivot(petals[i] = petalSprite(-petal_base), Vector2.Zero));
+            flowerGroup.Add(petals[i] = petalSprite(petal_base, Vector2.Zero));
 
         flowerGroup.Add(core = new Circle
         {
@@ -243,8 +239,8 @@ public partial class BlossomFlower : Container
             petalShadow.Texture = petalShadowTexture;
 
         // The bud sits centred on its spot, pointing out; the open petals start from where it points.
-        budPivot.Rotation = budShadowPivot.Rotation = BudDirection;
-        budPivot.Scale = budShadowPivot.Scale = new Vector2(FlowerSize * 0.8f);
+        bud.Rotation = budShadow.Rotation = BudDirection;
+        bud.Scale = budShadow.Scale = new Vector2(FlowerSize * 0.8f);
     }
 
     /// <summary>
@@ -356,8 +352,8 @@ public partial class BlossomFlower : Container
 
         for (int i = 0; i < 5; i++)
         {
-            petalPivots[i].Rotation = shadowPivots[i].Rotation = BudDirection + i * 72 * fan;
-            petalPivots[i].Scale = shadowPivots[i].Scale = new Vector2(0.8f + 0.2f * fan);
+            petals[i].Rotation = petalShadows[i].Rotation = BudDirection + i * 72 * fan;
+            petals[i].Scale = petalShadows[i].Scale = new Vector2(0.8f + 0.2f * fan);
             petals[i].Color = color;
         }
 
@@ -368,26 +364,15 @@ public partial class BlossomFlower : Container
     }
 
     /// <summary>
-    /// A petal texture's sprite, its base at its pivot's middle (<paramref name="y"/> moves it there).
+    /// A petal texture's sprite, turned and scaled about its base, which is <paramref name="baseBelowMiddle"/> below the
+    /// texture's middle and goes at <paramref name="at"/> from the group's middle.
     /// </summary>
-    private static Sprite petalSprite(float y) => new Sprite
+    private static Sprite petalSprite(float baseBelowMiddle, Vector2 at) => new Sprite
     {
         Anchor = Anchor.Centre,
-        Origin = Anchor.Centre,
-        Y = y,
-        Size = new Vector2(texture_units)
-    };
-
-    /// <summary>
-    /// A frame that turns and scales <paramref name="sprite"/> round the point it's centred on, at <paramref name="at"/>.
-    /// </summary>
-    private static Container pivot(Sprite sprite, Vector2 at) => new Container
-    {
-        Anchor = Anchor.Centre,
-        Origin = Anchor.Centre,
+        CustomOrigin = new Vector2(0.5f, 0.5f + baseBelowMiddle / texture_units),
         Position = at,
-        Size = new Vector2(texture_units),
-        Child = sprite
+        Size = new Vector2(texture_units)
     };
 
     private static float clamp01(double value) => (float)Math.Clamp(value, 0, 1);

@@ -132,14 +132,13 @@ public partial class TestRainbowFill : YuukiTestScene
     }
 
     /// <summary>
-    /// The letters' colors come from where they stand, and headless text has no width to stand apart by.
+    /// The colors come from where in the word they are, and headless text has no width to run across.
     /// </summary>
     [Test]
-    [VisualTestOnly("headless text is 0 wide, so every letter stands in the same place")]
-    public void TestTheLettersTakeTurns()
+    [VisualTestOnly("headless text is 0 wide, so there's nowhere for the colors to run")]
+    public void TestTheColorsRunAcrossTheWord()
     {
-        AddAssert("two letters", () => letters.Letters.Count == 2);
-        AddUntilStep("not one color", () => letters.Letters[0].Color != letters.Letters[1].Color);
+        AddUntilStep("not one color", () => letters.ColorAt!(Vector2.Zero) != letters.ColorAt!(new Vector2(letters.ContentSize.X, 0)));
     }
 
     private static bool covers(RainbowFill fill)
