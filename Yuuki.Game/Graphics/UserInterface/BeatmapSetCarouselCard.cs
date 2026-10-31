@@ -74,6 +74,11 @@ public partial class BeatmapSetCarouselCard : CarouselCard<BeatmapSet>
     /// </summary>
     private const float tile_chip_inset = 6;
 
+    /// <summary>
+    /// Between the best mark, the skyline and the lanes, along a row.
+    /// </summary>
+    private const float row_extras_gap = 12;
+
     [Resolved(canBeNull: true)]
     private GameLayout? gameLayout { get; set; }
 
@@ -218,14 +223,9 @@ public partial class BeatmapSetCarouselCard : CarouselCard<BeatmapSet>
                     X = -16,
                     AutoSizeAxes = Axes.Both,
                     Direction = FlowDirection.Horizontal,
-                    Spacing = new Vector2(12, 0),
+                    Spacing = new Vector2(row_extras_gap, 0),
                     Children = new Drawable[]
                     {
-                        rowBest = new BestMark(sizes.BestText)
-                        {
-                            Anchor = Anchor.CentreLeft,
-                            Origin = Anchor.CentreLeft
-                        },
                         rowSkyline = new LevelSkyline(sizes.SkylineHeight, sizes.SkylineBar)
                         {
                             Anchor = Anchor.CentreLeft,
@@ -238,6 +238,12 @@ public partial class BeatmapSetCarouselCard : CarouselCard<BeatmapSet>
                             Color = ink
                         }
                     }
+                },
+                // Apart from the extras, as it stays when they step aside for a skim, moving over to the edge they leave.
+                rowBest = new BestMark(sizes.BestText)
+                {
+                    Anchor = Anchor.CentreRight,
+                    Origin = Anchor.CentreRight
                 },
                 new Container
                 {
@@ -494,14 +500,19 @@ public partial class BeatmapSetCarouselCard : CarouselCard<BeatmapSet>
         // when it's longer.
         if (rowFace != null && vertical)
         {
-            float room = rowFace.DrawWidth - rowText!.X - rowExtras!.DrawWidth * (1 - skim) - 32;
+            float extrasRoom = rowExtras!.DrawWidth > 0 && rowBest!.Alpha > 0 ? rowExtras.DrawWidth + row_extras_gap : rowExtras.DrawWidth;
+            float bestRoom = rowBest!.Alpha > 0 ? rowBest.DrawWidth + rowBest.Margin.Left + rowBest.Margin.Right : 0;
+
+            rowBest.X = rowExtras.X - extrasRoom * (1 - skim);
+
+            float room = rowFace.DrawWidth - rowText!.X - extrasRoom * (1 - skim) - bestRoom - 32;
             rowText.Width = Math.Max(0, room / rowText.Scale.X);
         }
     }
 
     /// <summary>
-    /// Compacts the faces as the list skims (<paramref name="skim"/> 0 at rest, 1 skimming): the title and
-    /// artist stay, smaller; the best mark, skyline and lanes step aside.
+    /// Compacts the faces as the list skims (<paramref name="skim"/> 0 at rest, 1 skimming): the title, the
+    /// artist and the best mark stay, the text smaller; the skyline and lanes step aside.
     /// </summary>
     private void layOutForSkim(float skim)
     {
@@ -527,17 +538,16 @@ public partial class BeatmapSetCarouselCard : CarouselCard<BeatmapSet>
             tileArtist!.Y = cover + sizes.TileArtistOffset;
             tileArtist.Width = cover + 10;
 
-            // In the foot's corners, stepping aside with the rest while skimming. Each is in from its edge as
-            // far as the best mark's margin keeps it, clear of the blades' slanted ends. The lanes give way on
-            // a cover too narrow for both (a long range beside a medal).
+            // In the foot's corners, the lanes stepping aside with the rest while skimming. Each is in from its
+            // edge as far as the best mark's margin keeps it, clear of the blades' slanted ends. The lanes give
+            // way on a cover too narrow for both (a long range beside a medal).
             float edge = sizes.TileChipText * 0.6f;
 
             tileBest!.Position = new Vector2(6, cover - tile_chip_inset);
             tileLanes!.Position = new Vector2(6 + cover - edge, cover - tile_chip_inset);
-            tileChips!.Alpha = 1 - skim;
 
             float best = tileBest.Alpha > 0 ? tileBest.DrawWidth + edge : 0;
-            tileLanes.Alpha = !string.IsNullOrEmpty(tileLanes.Text) && best + tileLanes.DrawWidth + edge * 2 <= cover ? 1 : 0;
+            tileLanes.Alpha = !string.IsNullOrEmpty(tileLanes.Text) && best + tileLanes.DrawWidth + edge * 2 <= cover ? 1 - skim : 0;
         }
     }
 
