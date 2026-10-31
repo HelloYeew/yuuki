@@ -37,6 +37,26 @@ public static class JudgementColors
     /// </summary>
     public static readonly Color SS = HeroColors.YUUNA.Main;
 
+    private static readonly Color bloom_deep = BLOOM.Darken(0.35f);
+    private static readonly Color critical_deep = CRITICAL.Darken(0.35f);
+    private static readonly Color break_deep = BREAK.Darken(0.35f);
+    private static readonly Color hit_deep = HIT.Darken(0.35f);
+    private static readonly Color miss_deep = MISS.Darken(0.35f);
+
+    /// <summary>
+    /// A judgement's color for a small mark on a graph, over the bands tinted with those colors. The color itself can't be
+    /// told from a tint of itself (1.1:1 for a Bloom on its own band): these are the same hues deep enough to stand out, 2.3:1
+    /// or more.
+    /// </summary>
+    public static Color MarkFor(HitResult result) => result switch
+    {
+        HitResult.Bloom => bloom_deep,
+        HitResult.Critical => critical_deep,
+        HitResult.Break => break_deep,
+        HitResult.Hit => hit_deep,
+        _ => miss_deep
+    };
+
     public static Color For(HitResult result) => result switch
     {
         HitResult.Bloom => BLOOM,
