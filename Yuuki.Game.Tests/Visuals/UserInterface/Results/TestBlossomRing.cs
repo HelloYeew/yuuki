@@ -64,7 +64,6 @@ public partial class TestBlossomRing : YuukiTestScene
         AddSliderStep("pulse", 0f, 1f, 0f, pulse => ring.Pulse = pulse);
         AddSliderStep("charge", 0f, 1f, 0f, charge => ring.Charge = charge);
         AddSliderStep("glow", 0f, 1f, 0f, glow => ring.Glow = glow);
-        AddSliderStep("beat", 0f, 1f, 0f, beat => ring.Beat = beat);
         AddSliderStep("shimmer", 0f, 1f, 1f, shimmer => ring.Shimmer = shimmer);
         AddSliderStep("backdrop wobble", 0f, 3f, 1f, wobble => ring.Backdrop.Wobble = wobble);
         AddSliderStep("backdrop ripples", 0f, 3f, 1f, ripples => ring.Backdrop.Ripples = ripples);

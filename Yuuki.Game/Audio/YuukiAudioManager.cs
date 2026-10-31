@@ -35,13 +35,6 @@ public partial class YuukiAudioManager : Component
     private const string results_track_path = "theme/result.mp3";
 
     /// <summary>
-    /// The results music's beat, in ms, and where its first beat is (132 BPM)
-    /// </summary>
-    public const double RESULTS_MUSIC_BEAT = 60000 / 132.0;
-
-    private const double results_first_beat = 432;
-
-    /// <summary>
     /// How long the result music takes to fade in.
     /// </summary>
     private const double results_fade_in = 1200;
@@ -74,21 +67,6 @@ public partial class YuukiAudioManager : Component
     private double resultsLowering = 1;
     private double resultsLetGoAt = double.NegativeInfinity;
     private bool resultsMusicLowered;
-
-    /// <summary>
-    /// How far the results music is through its beat, 0–1 (0 on the beat); null while it isn't playing.
-    /// </summary>
-    public double? ResultsMusicBeat
-    {
-        get
-        {
-            if (resultsChannel.IsNull() || !resultsChannel.IsRunning.Value)
-                return null;
-
-            double beats = (resultsChannel.CurrentTime - results_first_beat) / RESULTS_MUSIC_BEAT;
-            return beats - Math.Floor(beats);
-        }
-    }
 
     /// <summary>
     /// Lowers the results music, to be spoken over (Yuuki's voice), until set false again.

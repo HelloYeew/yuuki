@@ -1,7 +1,6 @@
 // This code is part of yuuki. project. Licensed under the MIT License.
 // See the LICENSE file for full license text.
 
-using System;
 using NUnit.Framework;
 using Sakura.Framework.Extensions.ColorExtensions;
 using Sakura.Framework.Graphics.Colors;
@@ -17,7 +16,6 @@ namespace Yuuki.Game.Tests.Visuals.UserInterface;
 public partial class TestBubbleDisc : YuukiTestScene
 {
     private BubbleDisc bubble = null!;
-    private Beater beater = null!;
 
     [SetUp]
     public void SetUp()
@@ -38,7 +36,6 @@ public partial class TestBubbleDisc : YuukiTestScene
             });
             // Its near side, over what would be inside it (nothing here).
             Add(bubble.Front);
-            Add(beater = new Beater(bubble));
         });
     }
 
@@ -56,9 +53,6 @@ public partial class TestBubbleDisc : YuukiTestScene
         AddWaitStep("watch", 1500);
         AddStep("a hard wob (a rank landing)", () => bubble.Wob(strength: 2));
         AddWaitStep("watch", 1500);
-        AddStep("on the beat (128 BPM, a ripple a bar)", () => beater.Running = true);
-        AddWaitStep("watch", 4000);
-        AddStep("off the beat", () => beater.Running = false);
         AddStep("ripples in the S's color", () => bubble.LightColor = JudgementColors.For(ScoreRank.S).Blend(Color.White, 0.35f));
         AddStep("ripples in the All Perfect's", () => bubble.LightColor = JudgementColors.ALL_PERFECT.Blend(Color.White, 0.35f));
         AddStep("grey (a failed run)", () => bubble.Greyed = true);
@@ -95,44 +89,5 @@ public partial class TestBubbleDisc : YuukiTestScene
         AddStep("a wob a moment ago", () => bubble.Wob(bubble.Clock.CurrentTime - 300));
         AddAssert("a ripple", () => bubble.ActiveRipples == 1);
         AddAssert("kept round with no wobble", () => bubble.OutOfRound == 0);
-    }
-
-    /// <summary>
-    /// Drives the bubble as the screen could: breathing on each beat at 128 BPM, a wob on each bar.
-    /// </summary>
-    private partial class Beater : Component
-    {
-        private const double beat_length = 60000 / 128.0;
-
-        private readonly BubbleDisc bubble;
-        private int lastBeat = -1;
-
-        public bool Running;
-
-        public Beater(BubbleDisc bubble)
-        {
-            this.bubble = bubble;
-        }
-
-        public override void Update()
-        {
-            base.Update();
-
-            if (!Running)
-            {
-                bubble.Beat = 0;
-                lastBeat = -1;
-                return;
-            }
-
-            double now = Clock.CurrentTime;
-            int beat = (int)(now / beat_length);
-            bubble.Beat = MathF.Exp(-(float)(now % beat_length) / 120);
-
-            if (beat != lastBeat && beat % 4 == 0)
-                bubble.Wob(beat * beat_length, 0.8f);
-
-            lastBeat = beat;
-        }
     }
 }

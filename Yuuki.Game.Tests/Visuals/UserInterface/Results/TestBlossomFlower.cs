@@ -78,11 +78,6 @@ public partial class TestBlossomFlower : YuukiTestScene
             foreach (BlossomFlower flower in flowers)
                 flower.Grow = grow;
         });
-        AddSliderStep("beat", 0f, 1f, 0f, beat =>
-        {
-            foreach (BlossomFlower flower in flowers)
-                flower.Beat = beat;
-        });
 
         AddStep("open, one after another", () =>
         {

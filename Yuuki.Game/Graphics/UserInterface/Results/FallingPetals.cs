@@ -162,12 +162,6 @@ public class FallingPetals
     public float Gustiness { get; set; } = 0.03f;
 
     /// <summary>
-    /// A gust everything feels this step, pushing it sideways by this many units a ms each ms (the music's beat sets
-    /// it); it dies away as any push does.
-    /// </summary>
-    public float Gust { get; set; }
-
-    /// <summary>
     /// Where the pointer is, if it's over them: petals near it are pushed away.
     /// </summary>
     public Vector2? Pointer { get; set; }
@@ -209,10 +203,9 @@ public class FallingPetals
             Petal petal = petals[i];
             petal.Age += elapsed;
 
-            // Big petals are heavier: they come round to the wind more slowly. A gust shoves them all at once.
+            // Big petals are heavier: they come round to the wind more slowly.
             Vector2 wind = new Vector2(windAt(petal.Position), 0);
             petal.Drift += (wind - petal.Drift) * follow * (1.15f - 0.3f * petal.Depth);
-            petal.Push.X += Gust * dt;
 
             if (Pointer is Vector2 pointer)
             {

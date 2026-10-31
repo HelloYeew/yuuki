@@ -18,7 +18,6 @@ namespace Yuuki.Game.Tests.Visuals.UserInterface.Results;
 public partial class TestPetalEffects : YuukiTestScene
 {
     private PetalEffects effects = null!;
-    private GustDriver gusts = null!;
     private readonly Random random = new Random(7);
 
     [SetUp]
@@ -38,7 +37,6 @@ public partial class TestPetalEffects : YuukiTestScene
                 Alpha = 0.5f
             });
             Add(effects = new PetalEffects());
-            Add(gusts = new GustDriver(effects.Fall));
         });
     }
 
@@ -89,8 +87,6 @@ public partial class TestPetalEffects : YuukiTestScene
         AddSliderStep("most at once", 20, 400, 180, limit => effects.Fall.Limit = limit);
         AddSliderStep("wind", -0.1f, 0.1f, 0f, wind => effects.Fall.Wind = wind);
         AddSliderStep("gustiness", 0f, 0.1f, 0.03f, gustiness => effects.Fall.Gustiness = gustiness);
-        AddStep("the beat's gusts on (128 BPM)", () => gusts.Enabled = true);
-        AddStep("the beat's gusts off", () => gusts.Enabled = false);
         AddStep("the heroes' colors (an All Perfect)", () => effects.Fall.Colors = null);
         AddStep("pinks (any other rank)", () => effects.Fall.Colors = fallColors);
         AddStep("blast out from the middle", () => effects.Fall.Blast(middle, 0.9f));
@@ -135,36 +131,4 @@ public partial class TestPetalEffects : YuukiTestScene
 
     private void burst(IReadOnlyList<BurstPiece> pieces, double delay = 0) =>
         effects.Burst(middle, pieces, effects.Clock.CurrentTime + delay);
-
-    /// <summary>
-    /// Gusts on the music's beat, as the results music will give them: a push that dies away, the other way each beat.
-    /// </summary>
-    private partial class GustDriver : Component
-    {
-        private const double beat_length = 60000 / 128.0;
-
-        private readonly FallingPetals fall;
-
-        public bool Enabled;
-
-        public GustDriver(FallingPetals fall)
-        {
-            this.fall = fall;
-        }
-
-        public override void Update()
-        {
-            base.Update();
-
-            if (!Enabled)
-            {
-                fall.Gust = 0;
-                return;
-            }
-
-            double beats = Clock.CurrentTime / beat_length;
-            double phase = beats % 1;
-            fall.Gust = 0.0004f * MathF.Exp((float)(-phase * 5)) * (Math.Floor(beats) % 2 == 0 ? -1 : 1);
-        }
-    }
 }

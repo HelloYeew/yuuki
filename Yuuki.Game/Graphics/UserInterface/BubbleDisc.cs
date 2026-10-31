@@ -28,8 +28,8 @@ namespace Yuuki.Game.Graphics.UserInterface;
 /// whatever is inside, centred in the same parent. It keeps the disc's size.</para>
 /// <para>It fills its box, round its middle: give it a square one. Its glow and ripples reach out past it, up to
 /// <see cref="REACH"/> of its radius.</para>
-/// <para>It wobs by itself every <see cref="IdleInterval"/>; a screen can make it wob on cue instead (a rank landing, the
-/// beat) with <see cref="Wob"/>, which also holds off the next idle one.</para>
+/// <para>It wobs by itself every <see cref="IdleInterval"/>; a screen can make it wob on cue instead (a rank landing) with
+/// <see cref="Wob"/>, which also holds off the next idle one.</para>
 /// <para>The film is drawn by the game's bubble shaders (<c>bubble-back.frag</c>, <c>bubble-front.frag</c>). Where they
 /// can't draw (headless, or they won't build) the bubble is the disc and its ripples alone.</para>
 /// </remarks>
@@ -123,11 +123,6 @@ public partial class BubbleDisc : Container
     /// How bright the glow around it is.
     /// </summary>
     public float Glow { get; set; } = 1;
-
-    /// <summary>
-    /// The music's beat, 0–1 (1 on the beat): the disc breathes out with it.
-    /// </summary>
-    public float Beat { get; set; }
 
     /// <summary>
     /// How long the disc goes without a wob before it wobs by itself, in ms; 0 or less, never.
@@ -229,7 +224,6 @@ public partial class BubbleDisc : Container
     private void updateEdge(double now)
     {
         float seconds = (float)(now / 1000);
-        float breath = 0.012f * Beat;
 
         // Each wob squashes the disc along its own direction and back (a few wobbles, dying down), with a little of a
         // three-cornered wobble on top, and puffs it out a little as it's poked.
@@ -272,7 +266,7 @@ public partial class BubbleDisc : Container
             foreach ((float squash, float corners, float direction) in terms)
                 r += Wobble * (squash * MathF.Cos(2 * (angle - direction)) + corners * MathF.Cos(3 * (angle - direction) + 0.5f));
 
-            edge[i] = 1 + breath + Wobble * puff + r;
+            edge[i] = 1 + Wobble * puff + r;
             min = Math.Min(min, r);
             max = Math.Max(max, r);
         }

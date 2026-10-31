@@ -116,11 +116,6 @@ public partial class BlossomFlower : Container
     public float Grow { get; set; } = 1;
 
     /// <summary>
-    /// The music's beat, 0–1 (1 on the beat): open flowers and closed buds pulse with it.
-    /// </summary>
-    public float Beat { get; set; }
-
-    /// <summary>
     /// Greyed out, as on a failed run.
     /// </summary>
     public bool Greyed { get; set; }
@@ -314,8 +309,6 @@ public partial class BlossomFlower : Container
             glowAlpha = Math.Max(glowAlpha, 0.6f * MathF.Exp((float)(-sinceWave / 260)));
         }
 
-        scale *= 1 + 0.08f * Beat;
-
         if (sinceWilt >= 0)
         {
             float wilt = (float)sinceWilt;
@@ -339,7 +332,7 @@ public partial class BlossomFlower : Container
         budGroup.Alpha = open ? Math.Max(0, 1 - clamp01(sinceOpen / bud_fade)) : sinceWilt >= 0 ? alpha : 1;
         budGroup.Position = offset;
         budGroup.Rotation = Nod;
-        budGroup.Scale = new Vector2(swell * (0.4f + 0.6f * Grow) * (StaysClosed ? 1 + 0.06f * Beat : 1));
+        budGroup.Scale = new Vector2(swell * (0.4f + 0.6f * Grow));
         bud.Color = color;
 
         flowerGroup.Alpha = open ? alpha : 0;

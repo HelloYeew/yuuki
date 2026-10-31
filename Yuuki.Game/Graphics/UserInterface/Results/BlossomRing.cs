@@ -121,7 +121,6 @@ public partial class BlossomRing : Container
 
     private float fillAmount;
     private float pulse;
-    private float beat;
     private bool greyed;
 
     /// <summary>
@@ -356,19 +355,6 @@ public partial class BlossomRing : Container
     public float HeadAlpha { get; set; } = 1;
 
     /// <summary>
-    /// The music's beat, 0–1 (1 on the beat), which the flowers pulse to and the backdrop breathes to.
-    /// </summary>
-    public float Beat
-    {
-        get => beat;
-        set
-        {
-            beat = value;
-            backdrop.Beat = value;
-        }
-    }
-
-    /// <summary>
     /// How strongly the lit band ring shimmers, 0–1: specks of light drifting round it and twinkling, and a comet of
     /// light running round it every few seconds.
     /// </summary>
@@ -389,7 +375,7 @@ public partial class BlossomRing : Container
 
     /// <summary>
     /// The dark disc behind the rings, alive like a bubble. It wobs by itself every few seconds; the screen can make it
-    /// wob on cue instead (<see cref="BubbleDisc.Wob"/>: a rank landing, the beat), or calm it.
+    /// wob on cue instead (<see cref="BubbleDisc.Wob"/>: a rank landing), or calm it.
     /// </summary>
     public BubbleDisc Backdrop => backdrop;
 
@@ -458,9 +444,9 @@ public partial class BlossomRing : Container
             bandFills[i].Color = bandColor(i);
 
         foreach (Cluster cluster in clusters)
-            cluster.Update(Greyed, Beat, branch);
+            cluster.Update(Greyed, branch);
 
-        allPerfect.Update(Greyed, Beat, branch);
+        allPerfect.Update(Greyed, branch);
 
         updateShimmer();
     }
@@ -710,13 +696,12 @@ public partial class BlossomRing : Container
                 flower.Close();
         }
 
-        public void Update(bool greyed, float beat, SakuraBranch branch)
+        public void Update(bool greyed, SakuraBranch branch)
         {
             foreach ((BlossomFlower flower, _, float turn, float @out) in flowers)
             {
                 flower.Grow = Rank == null ? 1 : Grow;
                 flower.Greyed = greyed;
-                flower.Beat = beat;
 
                 // Riding the branch as the breeze moves it, nodding with it; a stem moves with its flower.
                 float angle = MathF.Tau * turn - MathF.PI / 2;
