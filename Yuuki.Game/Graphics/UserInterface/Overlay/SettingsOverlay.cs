@@ -330,6 +330,9 @@ public partial class SettingsOverlay : FocusedOverlayContainer
             settingRow("Disable video during play", "Show only the background image while playing. Menus and song select keep the video.",
                 toggle(configManager.Get<bool>(YuukiSetting.DisableGameplayVideo)),
                 "no-video", "performance"),
+            settingRow("Early or late on Critical", "Show EARLY or LATE under a Critical too, so you can tell which way you missed a BLOOM.",
+                toggle(configManager.Get<bool>(YuukiSetting.ShowCriticalTiming)),
+                "fast", "slow", "timing", "judgement", "judgment", "bloom"),
             // Only where there's a motor to feel.
             haptics?.IsSupported == true
                 ? settingRow("Haptics", "Feel your hits: a tap for every note you hit, firmer the better the hit, and a buzz for a full combo or a fail.",

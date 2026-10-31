@@ -171,5 +171,10 @@ public enum YuukiSetting
     /// <summary>
     /// Whether Yuuki speaks on the results screen once the reveal is over (<see cref="ResultsVoice"/>)
     /// </summary>
-    ResultsVoice
+    ResultsVoice,
+
+    /// <summary>
+    /// Whether a Critical show EARLY or LATE during play since which way it missed a Bloom.
+    /// </summary>
+    ShowCriticalTiming
 }

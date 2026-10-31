@@ -2,6 +2,7 @@
 // See the LICENSE file for full license text.
 
 using System;
+using Sakura.Framework.Allocation;
 using Sakura.Framework.Extensions.DrawableExtensions;
 using Sakura.Framework.Graphics.Colors;
 using Sakura.Framework.Graphics.Containers;
@@ -10,6 +11,8 @@ using Sakura.Framework.Graphics.Primitives;
 using Sakura.Framework.Graphics.Rendering;
 using Sakura.Framework.Graphics.Transforms;
 using Sakura.Framework.Maths;
+using Sakura.Framework.Reactive;
+using Yuuki.Game.Configurations;
 using Yuuki.Game.Gameplay.Scoring;
 using Yuuki.Game.Graphics;
 using Yuuki.Game.Graphics.Colors;
@@ -164,8 +167,8 @@ public partial class HitBurst : Container
 
 /// <summary>
 /// The judgement word above the judgement line — BLOOM (in the heroes' rainbow) / CRITICAL / BREAK / HIT / MISS — with
-/// EARLY or LATE under the near-misses. Each new judgement replaces the last with a pop, then it drifts and fades.
-/// The owner places this drawable; only its inner layer moves, so the placement is never lost.
+/// EARLY or LATE under the near-misses (<see cref="TimingWord"/>). Each new judgement replaces the last with a pop, then it
+/// drifts and fades. The owner places this drawable; only its inner layer moves, so the placement is never lost.
 /// </summary>
 public partial class JudgementPopup : Container
 {
@@ -176,6 +179,25 @@ public partial class JudgementPopup : Container
 
     // Bumped per judgement so a newer one cancels the previous one's pending drift-out.
     private int showVersion;
+
+    // Null with no settings to go by (some tests), which is as if it were on.
+    private Reactive<bool>? showCriticalTiming;
+
+    /// <summary>
+    /// What to say under a judgement: EARLY or LATE where that's useful, otherwise nothing. A Bloom is on time, a Miss never
+    /// had a press to time, and Pass/Touch notes aren't pressed at all.
+    /// </summary>
+    /// <param name="judgement">The judgement.</param>
+    /// <param name="onCritical">Whether a Critical says too, which way it missed a Bloom (<see cref="YuukiSetting.ShowCriticalTiming"/>).</param>
+    public static string? TimingWord(JudgementResult judgement, bool onCritical)
+    {
+        bool saysWhich = judgement.Result is HitResult.Break or HitResult.Hit || (onCritical && judgement.Result == HitResult.Critical);
+
+        if (!saysWhich || judgement.Note.Type is Beatmaps.NoteType.Pass or Beatmaps.NoteType.Touch || judgement.TimingError == 0)
+            return null;
+
+        return judgement.TimingError < 0 ? "EARLY" : "LATE";
+    }
 
     public JudgementPopup()
     {
@@ -235,6 +257,12 @@ public partial class JudgementPopup : Container
     /// </summary>
     private const float timing_overlap = 4;
 
+    [BackgroundDependencyLoader]
+    private void load([CanBeNull] YuukiConfigManager? config)
+    {
+        showCriticalTiming = config?.Get<bool>(YuukiSetting.ShowCriticalTiming);
+    }
+
     public void Show(JudgementResult judgement)
     {
         Color color = JudgementColors.For(judgement.Result);
@@ -245,14 +273,11 @@ public partial class JudgementPopup : Container
         word.Alpha = bloom ? 0 : 1;
         bloomWord.Alpha = bloom ? 1 : 0;
 
-        // Early/late only where it's useful: a Critical is on time, a Miss never had a press to time,
-        // and Pass/Touch notes aren't pressed at all.
-        bool showTiming = judgement.Result is HitResult.Break or HitResult.Hit
-                          && judgement.Note.Type is not (Beatmaps.NoteType.Pass or Beatmaps.NoteType.Touch);
-        timing.Text = showTiming ? (judgement.TimingError < 0 ? "EARLY" : "LATE") : "";
+        string? timingWord = TimingWord(judgement, showCriticalTiming?.Value ?? true);
+        timing.Text = timingWord ?? "";
         timing.Color = color;
         // Out of the flow when there's nothing to say, so the word alone sets the size.
-        timing.Alpha = showTiming ? 1 : 0;
+        timing.Alpha = timingWord != null ? 1 : 0;
 
         body.ClearTransforms();
         body.Alpha = 1;

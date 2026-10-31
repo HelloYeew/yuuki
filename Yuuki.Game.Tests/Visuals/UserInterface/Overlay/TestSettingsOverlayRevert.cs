@@ -87,6 +87,39 @@ public partial class TestSettingsOverlayRevert : YuukiManualInputManagerTestScen
         AddStep("back to full", () => config.Get<double>(YuukiSetting.HitsoundVolume).Value = 1.0);
     }
 
+    /// <summary>
+    /// The early or late on Critical row is bound to its setting both ways: of all the checkboxes, only its follows.
+    /// </summary>
+    [Test]
+    public void TestCriticalTimingBound()
+    {
+        YuukiCheckbox[] checkboxes = null!;
+        bool[] before = null!;
+        YuukiCheckbox? checkbox = null;
+
+        AddStep("open settings", () =>
+        {
+            TestContent.Add(overlay = new SettingsOverlay());
+            overlay.ToggleVisibility();
+        });
+        AddUntilStep("loaded", () => overlay.IsLoaded);
+
+        AddStep("note every checkbox", () =>
+        {
+            checkboxes = all(overlay).OfType<YuukiCheckbox>().ToArray();
+            before = checkboxes.Select(c => c.Current.Value).ToArray();
+        });
+        AddStep("turn it off", () => config.Get<bool>(YuukiSetting.ShowCriticalTiming).Value = false);
+        AddAssert("one checkbox follows", () =>
+        {
+            checkbox = checkboxes.Where((c, i) => c.Current.Value != before[i]).SingleOrDefault();
+            return checkbox != null;
+        });
+
+        AddStep("tick it", () => checkbox!.Current.Value = true);
+        AddAssert("the setting follows", () => config.Get<bool>(YuukiSetting.ShowCriticalTiming).Value);
+    }
+
     private static IEnumerable<RevertToDefaultButton> enabledReverts(Drawable root) => all(root).OfType<RevertToDefaultButton>().Where(b => b.Enabled.Value);
 
     private static IEnumerable<Drawable> all(Drawable root)

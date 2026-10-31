@@ -66,6 +66,9 @@ public partial class TestSettingsSearch : YuukiManualInputManagerTestScene
         AddAssert("frame limiter and the performance overlay", () =>
             overlay.ShownSettings.SequenceEqual(new[] { "Frame limiter", "Performance overlay" }));
 
+        AddStep("search a keyword: \"bloom\"", () => overlay.SearchText = "bloom");
+        AddAssert("early or late on Critical", () => overlay.ShownSettings.SequenceEqual(new[] { "Early or late on Critical" }));
+
         AddStep("search a dropdown choice: \"vsync\"", () => overlay.SearchText = "vsync");
         AddAssert("the frame limiter", () => overlay.ShownSettings.Contains("Frame limiter"));
 
