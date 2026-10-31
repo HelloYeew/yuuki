@@ -1449,7 +1449,7 @@ public partial class BeatmapInfoPanel : FlowContainer
             Color badgeColor = score.IsFullBloom ? JudgementColors.BLOOM : score.IsAllPerfect ? JudgementColors.ALL_PERFECT : JudgementColors.FULL_COMBO;
 
             date = score.Date;
-            agoText = text(ago(date), 14, FontWeight.Regular, Color.White.WithAlpha(0.7f), Anchor.CentreLeft, date_x, -11);
+            agoText = text(DateUtility.Ago(date), 14, FontWeight.Regular, Color.White.WithAlpha(0.7f), Anchor.CentreLeft, date_x, -11);
             dateText = text(score.Date.LocalDateTime.ToString("d MMM yyyy, HH:mm:ss", CultureInfo.InvariantCulture), 18, FontWeight.Bold, Color.White, Anchor.CentreLeft, date_x, 10);
 
             Child = inner = new Container
@@ -1617,34 +1617,7 @@ public partial class BeatmapInfoPanel : FlowContainer
                 return;
 
             shownSecond = second;
-            agoText.Text = ago(date);
-        }
-
-        /// <summary>
-        /// How long ago, to the second while it's recent, then in the two largest units:
-        /// "just now", "42s ago", "5m 12s ago", "3h 7m ago", "2d 4h ago", "4mo 2d ago", "1y 3mo ago".
-        /// </summary>
-        private static string ago(DateTimeOffset date)
-        {
-            // TODO: will convert this to central utils
-            TimeSpan age = DateTimeOffset.Now - date;
-
-            if (age.TotalSeconds < 1)
-                return "just now";
-            if (age.TotalMinutes < 1)
-                return $"{age.Seconds}s ago";
-            if (age.TotalHours < 1)
-                return $"{age.Minutes}m {age.Seconds}s ago";
-            if (age.TotalDays < 1)
-                return $"{age.Hours}h {age.Minutes}m ago";
-            if (age.TotalDays < 30)
-                return $"{age.Days}d {age.Hours}h ago";
-
-            int days = (int)age.TotalDays;
-            if (days < 365)
-                return $"{days / 30}mo {days % 30}d ago";
-
-            return $"{days / 365}y {days % 365 / 30}mo ago";
+            agoText.Text = DateUtility.Ago(date);
         }
 
         public override bool OnHover(MouseEvent e)
