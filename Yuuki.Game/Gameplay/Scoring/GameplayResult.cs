@@ -31,9 +31,19 @@ public class GameplayResult
 
     /// <summary>
     /// Every judgement of the run in order, for the detailed breakdown (early/late split, timing
-    /// distribution, timeline). May be empty for a result built from counts alone.
+    /// distribution, timeline). Empty for a result built from counts alone, as a saved play's is until its replay is
+    /// judged again (<see cref="WithJudgements"/>).
     /// </summary>
     public IReadOnlyList<JudgementResult> Judgements { get; init; } = Array.Empty<JudgementResult>();
+
+    /// <summary>
+    /// When each hold was let go of early (<see cref="HoldBreakCount"/>), in gameplay time, in order: where the combo broke
+    /// without a judgement. Empty where the judgements are.
+    /// </summary>
+    public IReadOnlyList<double> HoldBreakTimes { get; init; } = Array.Empty<double>();
+
+    /// <summary>The chart's lanes, for the breakdown by lane; 0 where it isn't known (a result built from counts alone).</summary>
+    public int LaneCount { get; init; }
 
     /// <summary>The timing windows the run was judged with, so the timing graph can draw its zones.</summary>
     public HitWindows HitWindows { get; init; } = new HitWindows();
@@ -56,8 +66,9 @@ public class GameplayResult
     public const int MINIMUM_OFFSET_SAMPLES = 20;
 
     /// <summary>
-    /// A saved play, for viewing it again: its totals, and — when a replay was saved with it — the
-    /// per-note judgements behind the timing breakdown. Without one the breakdown stays empty.
+    /// A saved play, for viewing it again: its totals, and what its replay says of how it was played (its windows,
+    /// offsets and length). Its judgements aren't saved: judging the replay again brings them (<see cref="ReplayJudge"/>,
+    /// <see cref="WithJudgements"/>).
     /// </summary>
     public static GameplayResult FromScore(ScoreInfo score, ReplayData? replay) => new GameplayResult
     {
@@ -71,11 +82,36 @@ public class GameplayResult
         HoldBreakCount = score.HoldBreakCount,
         Accuracy = score.Accuracy,
         Failed = score.Failed,
-        Judgements = replay?.Judgements.Select(j => j.ToJudgement()).ToArray() ?? Array.Empty<JudgementResult>(),
         HitWindows = replay?.HitWindows ?? new HitWindows(),
         ChartLength = replay?.ChartLength ?? 0,
         AudioOffset = replay?.AudioOffset ?? 0,
         SongOffset = replay?.SongOffset ?? 0
+    };
+
+    /// <summary>
+    /// This run with its judgements filled in, as judging its replay again found them: its totals stay as they were
+    /// saved, so the score and the counts never change from what was played (a replay judged again can rarely differ).
+    /// </summary>
+    public GameplayResult WithJudgements(IReadOnlyList<JudgementResult> judgements, IReadOnlyList<double> holdBreakTimes, int laneCount, double chartLength) => new GameplayResult
+    {
+        Score = Score,
+        MaxCombo = MaxCombo,
+        BloomCount = BloomCount,
+        CriticalCount = CriticalCount,
+        BreakCount = BreakCount,
+        HitCount = HitCount,
+        MissCount = MissCount,
+        HoldBreakCount = HoldBreakCount,
+        Accuracy = Accuracy,
+        Failed = Failed,
+        Judgements = judgements,
+        HoldBreakTimes = holdBreakTimes,
+        LaneCount = laneCount,
+        HitWindows = HitWindows,
+        ChartLength = chartLength > 0 ? chartLength : ChartLength,
+        AudioOffset = AudioOffset,
+        VisualOffset = VisualOffset,
+        SongOffset = SongOffset
     };
 
     /// <summary>The player ran out of health before the end.</summary>

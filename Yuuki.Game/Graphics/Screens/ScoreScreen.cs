@@ -5,6 +5,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using System;
+using System.Threading.Tasks;
 using Sakura.Framework;
 using Sakura.Framework.Allocation;
 using Sakura.Framework.Extensions.ColorExtensions;
@@ -17,6 +18,7 @@ using Sakura.Framework.Graphics.Screens;
 using Sakura.Framework.Graphics.Transforms;
 using Sakura.Framework.Input.Bindings;
 using Sakura.Framework.Input;
+using Sakura.Framework.Logging;
 using Sakura.Framework.Maths;
 using Yuuki.Game.Audio;
 using Yuuki.Game.Beatmaps;
@@ -30,13 +32,16 @@ using Yuuki.Game.Graphics.ScreenStacks;
 using Yuuki.Game.Graphics.Text;
 using Yuuki.Game.Graphics.UserInterface.Results;
 using Yuuki.Game.Graphics.UserInterface;
+using Yuuki.Game.Utilities;
 
 namespace Yuuki.Game.Graphics.Screens;
 
 /// <summary>
 /// The result screen: the run's accuracy filling a blossom ring, its rank landing in the middle with light and petals,
 /// then the badge, how it compares with the best, the music, and Yuuki's voice (<see cref="RevealTimeline"/> times it).
-/// A click, a tap or Space skips it, first to just before the rank lands, then to the end.
+/// A click, a tap or Space skips it, first to just before the rank lands, then to the end. Its second page, More info
+/// (Tab, or the tabs along the bottom), has every graph (<see cref="MoreInfoPage"/>); a saved play's come from judging
+/// its replay again, as its judgements aren't kept.
 /// </summary>
 public partial class ScoreScreen : YuukiScreen, IHaveScreenAction
 {
@@ -104,7 +109,11 @@ public partial class ScoreScreen : YuukiScreen, IHaveScreenAction
     [Resolved(canBeNull: true)]
     private ScoreStore? scoreStore { get; set; }
 
-    private readonly GameplayResult result;
+    [Resolved(canBeNull: true)]
+    private BeatmapNoteStore? noteStore { get; set; }
+
+    // The run: a saved play's gains its judgements once its replay is judged again.
+    private GameplayResult result;
 
     /// <summary>
     /// The run being shown.
@@ -163,6 +172,13 @@ public partial class ScoreScreen : YuukiScreen, IHaveScreenAction
     private const float summary_stacked_height = 180;
 
     private const float details_top = 48;
+
+    /// <summary>
+    /// Where More info's page starts, and how far in from the bottom left the tabs between the pages sit.
+    /// </summary>
+    private const float more_info_top = 34;
+
+    private const float tabs_x = 270;
     private const float details_max_width = 1080;
     private const float details_min_width = 600;
     private LeftBottomShearButton backButton = null!;
@@ -237,9 +253,34 @@ public partial class ScoreScreen : YuukiScreen, IHaveScreenAction
     private SpriteText? scoreDelta;
     private SpriteText? accuracyDelta;
     private SpriteText? comboDelta;
+    private SpriteText unstableRateText = null!;
     private JudgementBreakdown judgementBreakdown = null!;
-    private HitTimingGraph timingGraph = null!;
-    private JudgementTimeline timeline = null!;
+    private PlaysStrip? playsStrip;
+
+    // The two pages: the summary (the ring and the numbers) and More info (every graph).
+    private PageTabs tabs = null!;
+    private YuukiScrollableContainer moreInfoScroll = null!;
+    private MoreInfoPage moreInfo = null!;
+
+    // The chart a saved play's replay is judged again on, the judging, and the best's to compare with.
+    private PlayableBeatmap? chart;
+    private ReplayJudge? judge;
+    private ReplayJudge? bestJudge;
+
+    /// <summary>
+    /// Whether More info is showing, rather than the summary.
+    /// </summary>
+    public bool ShowingMoreInfo { get; private set; }
+
+    /// <summary>
+    /// The More info page.
+    /// </summary>
+    public MoreInfoPage MoreInfo => moreInfo;
+
+    /// <summary>
+    /// Whether a saved play's replay is still being judged again.
+    /// </summary>
+    public bool Judging => judge is { IsDone: false };
 
     private ResultsSoundPlayer sounds = null!;
     private ResultsVoice voice = null!;
@@ -255,7 +296,6 @@ public partial class ScoreScreen : YuukiScreen, IHaveScreenAction
     private bool bloomBadgeShown;
     private bool musicStarted;
     private bool voiceStarted;
-    private bool graphsShown;
 
     // The reveal's own randomness (the trail of petals), the same every time.
     private readonly Random revealRandom = new Random(77);
@@ -338,7 +378,7 @@ public partial class ScoreScreen : YuukiScreen, IHaveScreenAction
     private void load([CanBeNull] IYuukiColorProvider? colorProvider)
     {
         ScreenName.Value = "Results";
-        helperText = savedScore != null && viewing ? string.Create(CultureInfo.InvariantCulture, $"Played {savedScore.Date.LocalDateTime:d MMM yyyy, HH:mm}")
+        helperText = savedScore != null && viewing ? $"Played {DateUtility.FormatPlayed(savedScore.Date)}"
             : result.IsFullBloom ? "Full Bloom!"
             : result.IsAllPerfect ? "All Perfect!"
             : result.IsFullCombo ? "Full Combo!"
@@ -385,10 +425,15 @@ public partial class ScoreScreen : YuukiScreen, IHaveScreenAction
                                 Children = new Drawable[]
                                 {
                                     scorePanel = panel(createScoreSummary()),
-                                    panel(createJudgementSection()),
-                                    panel(createTimingSection())
+                                    panel(createJudgementSection())
                                 }
                             }
+                        },
+                        moreInfoScroll = new YuukiScrollableContainer
+                        {
+                            Position = new Vector2(48, more_info_top),
+                            Alpha = 0,
+                            Child = moreInfo = new MoreInfoPage(palette)
                         },
                         // As the ring charges, everything but it dims.
                         focusDimmer = new Box
@@ -431,8 +476,10 @@ public partial class ScoreScreen : YuukiScreen, IHaveScreenAction
                 Alpha = 0,
                 AlwaysPresent = true
             },
-            // The screen's edges glowing in the rank's color, as an arcade cabinet's lights.
-            edgeGlow = new EdgeGlow(),
+            edgeGlow = new EdgeGlow
+            {
+                Bleed = Edges.All
+            },
             backButton = new LeftBottomShearButton
             {
                 Anchor = Anchor.BottomLeft,
@@ -442,6 +489,14 @@ public partial class ScoreScreen : YuukiScreen, IHaveScreenAction
                 Text = "Back",
                 Action = onBack,
                 BackgroundColor = palette.Surface
+            },
+            tabs = new PageTabs(palette, "Summary", "More info")
+            {
+                Anchor = Anchor.BottomLeft,
+                Origin = Anchor.BottomLeft,
+                Position = new Vector2(tabs_x, LeftBottomShearButton.DEFAULT_POSITION.Y + 6),
+                Alpha = 0,
+                PagePicked = page => ShowPage(page == 1)
             },
             actionButtons = new Container
             {
@@ -454,6 +509,13 @@ public partial class ScoreScreen : YuukiScreen, IHaveScreenAction
         });
 
         scorePanel.Add(scoreShine = new ShineSweep());
+
+        unstableRateText.Text = formatUnstableRate();
+
+        moreInfo.ShowSong(workingBeatmap?.Beatmap, workingBeatmap?.BeatmapSet, savedScore?.Date ?? DateTimeOffset.Now);
+        moreInfo.SetRun(result);
+        moreInfo.SetAdvice(createOffsetAdvice());
+        moreInfo.WatchFrom = WatchReplay;
 
         if (result.IsAllPerfect)
             badge.Look(JudgementColors.ALL_PERFECT, "ALL PERFECT");
@@ -637,10 +699,12 @@ public partial class ScoreScreen : YuukiScreen, IHaveScreenAction
                     Spacing = new Vector2(56, 0),
                     Children = new Drawable[]
                     {
+                        statistic("Accuracy", accuracyText = statisticValue(),
+                            best == null ? null : accuracyDelta = deltaText((result.Accuracy - best.Accuracy) * 100, d => $"{(d >= 0 ? "+" : "−")}{Math.Abs(d).ToString("0.00", CultureInfo.InvariantCulture)}%", 16)),
                         statistic("Max combo", comboText = statisticValue(),
                             best == null ? null : comboDelta = deltaText(result.MaxCombo - best.MaxCombo, d => d == 0 ? "±0" : $"{(d > 0 ? "+" : "−")}{Math.Abs(d)}", 16)),
-                        statistic("Accuracy", accuracyText = statisticValue(),
-                            best == null ? null : accuracyDelta = deltaText((result.Accuracy - best.Accuracy) * 100, d => $"{(d >= 0 ? "+" : "−")}{Math.Abs(d).ToString("0.00", CultureInfo.InvariantCulture)}%", 16))
+                        // A saved play's comes in once its replay is judged again.
+                        statistic("Unstable rate", unstableRateText = statisticValue())
                     }
                 }
             }
@@ -661,6 +725,9 @@ public partial class ScoreScreen : YuukiScreen, IHaveScreenAction
         AlwaysPresent = true
     };
 
+    /// <summary>
+    /// The judgements, row by row, and under them where the run stands among the plays of its difficulty.
+    /// </summary>
     private Drawable createJudgementSection()
     {
         var section = new FlowContainer
@@ -668,7 +735,7 @@ public partial class ScoreScreen : YuukiScreen, IHaveScreenAction
             RelativeSizeAxes = Axes.X,
             AutoSizeAxes = Axes.Y,
             Direction = FlowDirection.Vertical,
-            Spacing = new Vector2(0, 10),
+            Spacing = new Vector2(0, 20),
             Children = new Drawable[]
             {
                 judgementBreakdown = new JudgementBreakdown(result, palette)
@@ -678,149 +745,115 @@ public partial class ScoreScreen : YuukiScreen, IHaveScreenAction
             }
         };
 
-        IReadOnlyList<string> byType = describeNoteTypes();
-        if (byType.Count > 0)
-        {
-            // Wraps between note types when the column is narrow.
-            section.Add(new FlowContainer
-            {
-                RelativeSizeAxes = Axes.X,
-                AutoSizeAxes = Axes.Y,
-                Direction = FlowDirection.Horizontal,
-                Spacing = new Vector2(0, 2),
-                Children = byType.Select((part, i) => new SpriteText
-                {
-                    Text = i < byType.Count - 1 ? part + "   ·   " : part,
-                    Font = YuukiFontUsage.GetFontUsage(Typeface.Nunito, 16, FontWeight.Regular),
-                    Color = palette.TextMuted
-                }).ToArray()
-            });
-        }
+        if (createPlaysStrip() is PlaysStrip strip)
+            section.Add(playsStrip = strip);
 
         return section;
     }
 
-    private Drawable createTimingSection() => new FlowContainer
-    {
-        RelativeSizeAxes = Axes.X,
-        AutoSizeAxes = Axes.Y,
-        Direction = FlowDirection.Vertical,
-        Spacing = new Vector2(0, 8),
-        Children = new Drawable[]
-        {
-            sectionTitle("Hit timing"),
-            timingGraph = new HitTimingGraph(result, palette)
-            {
-                RelativeSizeAxes = Axes.X
-            },
-            createOffsetSuggestion(),
-            sectionTitle("Timeline"),
-            timeline = new JudgementTimeline(result, palette)
-            {
-                RelativeSizeAxes = Axes.X
-            }
-        }
-    };
-
-
     /// <summary>
-    /// Offers to centre this run's taps by moving the judging (<see cref="GameplayResult.SuggestedOffsets"/>), and for a
-    /// large error, to calibrate. Where a lean past <see cref="lean_worth_mentioning"/> cost Criticals, says how many, and
-    /// offers the guide to the offsets.
+    /// Where the run stands among its difficulty's plays; none for a play that wasn't saved, or without the scores.
     /// </summary>
-    private Drawable createOffsetSuggestion()
+    private PlaysStrip? createPlaysStrip()
     {
-        Drawable suggestion = createOffsetButtons();
+        if (savedScore == null || scoreStore == null || workingBeatmap?.Beatmap is not Beatmap beatmap || beatmap.ID != savedScore.BeatmapId)
+            return null;
 
-        int lost = viewing || config == null || Math.Abs(result.MeanError ?? 0) < lean_worth_mentioning ? 0 : result.CriticalsLostToLean;
+        IReadOnlyList<ScoreInfo> ranking = scoreStore.GetRanking(beatmap);
+        int place = ranking.ToList().IndexOf(savedScore) + 1;
 
-        if (lost < criticals_worth_mentioning)
-            return suggestion;
-
-        return new FlowContainer
-        {
-            AutoSizeAxes = Axes.Both,
-            Direction = FlowDirection.Vertical,
-            Spacing = new Vector2(0, 10),
-            Children = new[]
-            {
-                suggestion,
-                new FlowContainer
-                {
-                    AutoSizeAxes = Axes.Both,
-                    Direction = FlowDirection.Horizontal,
-                    Spacing = new Vector2(16, 0),
-                    Children = new Drawable[]
-                    {
-                        new SpriteText
-                        {
-                            Anchor = Anchor.CentreLeft,
-                            Origin = Anchor.CentreLeft,
-                            Text = $"On time on average, {lost} more would have been Critical. A lean this big every play is your device's delay, not you.",
-                            Font = YuukiFontUsage.GetFontUsage(Typeface.Nunito, 16, FontWeight.Regular),
-                            Color = palette.Text
-                        },
-                        new PillButton(palette.Control, palette.TextLight)
-                        {
-                            Anchor = Anchor.CentreLeft,
-                            Origin = Anchor.CentreLeft,
-                            Text = "How offsets work",
-                            Action = openOffsetGuide
-                        }
-                    }
-                }
-            }
-        };
+        return new PlaysStrip(palette, savedScore, best, isNewBest, place > 0 ? place : ranking.Count + 1, scoreStore.GetPlayCount(beatmap));
     }
 
-    private Drawable createOffsetButtons()
+    private string formatUnstableRate() => result.UnstableRate is double unstableRate ? unstableRate.ToString("0", CultureInfo.InvariantCulture) : "—";
+
+    /// <summary>
+    /// What's offered for the offsets, in a strip of More info of its own: to centre this run's taps by moving the judging
+    /// (<see cref="GameplayResult.SuggestedOffsets"/>), and for a large error, to calibrate. Where a lean past
+    /// <see cref="lean_worth_mentioning"/> cost Criticals, says how many, and offers the guide to the offsets. A saved
+    /// play's offsets are history: only the play just finished is worth calibrating from.
+    /// </summary>
+    private IEnumerable<Drawable> createOffsetAdvice()
     {
-        var row = new FlowContainer
+        if (viewing || config == null || result.MeanError is not double mean)
+            yield break;
+
+        var said = new List<string>();
+        var buttons = new FlowContainer
         {
-            AutoSizeAxes = Axes.Both,
+            RelativeSizeAxes = Axes.X,
+            AutoSizeAxes = Axes.Y,
             Direction = FlowDirection.Horizontal,
-            Spacing = new Vector2(16, 0)
+            Spacing = new Vector2(8, 6)
         };
 
-        // A saved score's offsets are history; only the play just finished is worth calibrating from.
-        if (viewing || config == null || result.SuggestedOffsets == null || result.MeanError is not double mean)
-            return row;
+        if (result.SuggestedOffsets != null)
+        {
+            OffsetSuggestion suggestion = suggestOffset(mean);
+            bool offerCalibration = Math.Abs(mean) > calibrate_error_ms;
 
-        OffsetSuggestion suggestion = suggestOffset(mean);
-        bool offerCalibration = Math.Abs(mean) > calibrate_error_ms;
+            if (suggestion.Kind != OffsetSuggestionKind.None || offerCalibration)
+            {
+                said.Add(suggestion switch
+                {
+                    { Kind: OffsetSuggestionKind.Song, Plays: 1 } => $"You hit this song {describeLean(suggestion.Lean)} compared with your other songs.",
+                    { Kind: OffsetSuggestionKind.Song } => $"Over {suggestion.Plays} plays you hit this song {describeLean(suggestion.Lean)} compared with your other songs.",
+                    { Kind: OffsetSuggestionKind.Timing, Plays: > 1 } => $"Over your last {suggestion.Plays} plays you hit {describeLean(suggestion.Lean)}.",
+                    _ => $"You hit {describeLean(mean)}."
+                });
 
-        if (suggestion.Kind == OffsetSuggestionKind.None && !offerCalibration)
-            return row;
+                addOffsetButtons(buttons, suggestion, offerCalibration);
+            }
+        }
 
+        int lost = Math.Abs(mean) < lean_worth_mentioning ? 0 : result.CriticalsLostToLean;
+
+        if (lost >= criticals_worth_mentioning)
+        {
+            said.Add($"On time on average, {lost} more would have been Critical. A lean this big every play is your device's delay, not you.");
+            buttons.Add(new PillButton(palette.Control, palette.TextLight)
+            {
+                Text = "How offsets work",
+                Action = openOffsetGuide
+            });
+        }
+
+        // Nothing to do isn't worth a strip of the page: its card says so.
+        if (said.Count == 0)
+        {
+            moreInfo.SayOfTiming("Your timing is centered.");
+            yield break;
+        }
+
+        yield return new TextFlowContainer(word =>
+        {
+            word.Font = YuukiFontUsage.GetFontUsage(Typeface.Nunito, 15, FontWeight.SemiBold);
+            word.Color = palette.Text;
+        })
+        {
+            RelativeSizeAxes = Axes.X,
+            Spacing = new Vector2(0, 2),
+            Text = string.Join(" ", said)
+        };
+
+        if (buttons.Children.Count > 0)
+            yield return buttons;
+    }
+
+    private void addOffsetButtons(FlowContainer buttons, OffsetSuggestion suggestion, bool offerCalibration)
+    {
         PillButton? apply = null;
         int lean = suggestion.Lean;
 
-        row.Add(new SpriteText
-        {
-            Anchor = Anchor.CentreLeft,
-            Origin = Anchor.CentreLeft,
-            Text = suggestion switch
-            {
-                { Kind: OffsetSuggestionKind.Song, Plays: 1 } => $"You hit this song {describeLean(lean)} compared with your other songs.",
-                { Kind: OffsetSuggestionKind.Song } => $"Over {suggestion.Plays} plays you hit this song {describeLean(lean)} compared with your other songs.",
-                { Kind: OffsetSuggestionKind.Timing, Plays: > 1 } => $"Over your last {suggestion.Plays} plays you hit {describeLean(lean)}.",
-                _ => $"You hit {describeLean(mean)}."
-            },
-            Font = YuukiFontUsage.GetFontUsage(Typeface.Nunito, 16, FontWeight.Regular),
-            Color = palette.Text
-        });
-
         if (suggestion.Kind == OffsetSuggestionKind.Timing)
         {
-            row.Add(apply = new PillButton(palette.Control, palette.TextLight)
+            buttons.Add(apply = new PillButton(palette.Control, palette.TextLight)
             {
-                Anchor = Anchor.CentreLeft,
-                Origin = Anchor.CentreLeft,
                 Text = $"Shift timing {Math.Abs(lean)} ms {(lean > 0 ? "later" : "earlier")} · every device",
                 Action = () =>
                 {
                     shiftTiming(lean);
-                    apply!.Text = $"Audio {formatOffset(config.Get<int>(YuukiSetting.AudioOffset).Value)} · Visual {formatOffset(config.Get<int>(YuukiSetting.VisualOffset).Value)}";
+                    apply!.Text = $"Audio {formatOffset(config!.Get<int>(YuukiSetting.AudioOffset).Value)} · Visual {formatOffset(config.Get<int>(YuukiSetting.VisualOffset).Value)}";
                     apply.Enabled.Value = false;
                 }
             });
@@ -831,10 +864,8 @@ public partial class ScoreScreen : YuukiScreen, IHaveScreenAction
             string? difficulty = workingBeatmap?.Beatmap is { ID: var id } beatmap && id == beatmapId ? beatmap.DifficultyName : null;
 
             // A song hit late has its notes early against the music: lowering its offset moves them later.
-            row.Add(apply = new PillButton(palette.Control, palette.TextLight)
+            buttons.Add(apply = new PillButton(palette.Control, palette.TextLight)
             {
-                Anchor = Anchor.CentreLeft,
-                Origin = Anchor.CentreLeft,
                 Text = $"Fix this song: notes {Math.Abs(lean)} ms {(lean > 0 ? "later" : "earlier")} · "
                        + (string.IsNullOrEmpty(difficulty) ? "this difficulty only" : $"{difficulty} only"),
                 Action = () =>
@@ -848,10 +879,8 @@ public partial class ScoreScreen : YuukiScreen, IHaveScreenAction
 
         if (offerCalibration)
         {
-            row.Add(new PillButton(palette.Control, palette.TextLight)
+            buttons.Add(new PillButton(palette.Control, palette.TextLight)
             {
-                Anchor = Anchor.CentreLeft,
-                Origin = Anchor.CentreLeft,
                 Text = "Calibrate",
                 Action = () =>
                 {
@@ -863,8 +892,6 @@ public partial class ScoreScreen : YuukiScreen, IHaveScreenAction
                 }
             });
         }
-
-        return row;
     }
 
     private static string formatOffset(int ms) => ms > 0 ? $"+{ms} ms" : $"{ms} ms";
@@ -911,24 +938,6 @@ public partial class ScoreScreen : YuukiScreen, IHaveScreenAction
         config.Get<int>(YuukiSetting.VisualOffset).Value = visual;
     }
 
-    /// <summary>
-    /// Hits per note type, e.g. "Tap 120/124 · Hold 30/32 · Release 27/32", for the types the chart
-    /// used. A hold's release is its own judgement, so it's listed apart from the hold's press.
-    /// </summary>
-    private IReadOnlyList<string> describeNoteTypes()
-    {
-        var parts = result.Judgements
-                          .GroupBy(j => (j.Note.Type, j.IsHoldTail))
-                          .OrderBy(g => g.Key.Type).ThenBy(g => g.Key.IsHoldTail)
-                          .Select(g => $"{(g.Key.IsHoldTail ? "Release" : g.Key.Type.ToString())} {g.Count(j => j.Result.IsHit())}/{g.Count()}")
-                          .ToList();
-
-        if (result.HoldBreakCount > 0)
-            parts.Add($"Hold breaks {result.HoldBreakCount}");
-
-        return parts;
-    }
-
     private Container panel(Drawable content) => new Container
     {
         RelativeSizeAxes = Axes.X,
@@ -957,7 +966,7 @@ public partial class ScoreScreen : YuukiScreen, IHaveScreenAction
     {
         Text = text.ToUpperInvariant(),
         Font = YuukiFontUsage.GetFontUsage(Typeface.Quicksand, 16, FontWeight.Bold),
-        Color = palette.TextMuted
+        Color = ResultsInk.Secondary(palette)
     };
 
     private SpriteText statisticValue() => new SpriteText
@@ -1001,6 +1010,7 @@ public partial class ScoreScreen : YuukiScreen, IHaveScreenAction
         ringArea.MoveToX(ring_area_x, 600, Easing.OutQuint).FadeIn(500, Easing.OutQuint);
         detailsScroll.MoveToX(-48, 600, Easing.OutQuint).FadeIn(500, Easing.OutQuint);
         backButton.MoveTo(LeftBottomShearButton.DEFAULT_POSITION, 500, Easing.OutQuint).FadeIn(500, Easing.OutQuint);
+        tabs.FadeIn(500, Easing.OutQuint);
         actionButtons.MoveTo(action_buttons_position, 500, Easing.OutQuint).FadeIn(500, Easing.OutQuint);
 
         revealStart = Clock.CurrentTime;
@@ -1236,10 +1246,6 @@ public partial class ScoreScreen : YuukiScreen, IHaveScreenAction
         double sinceFirst = now - t.FirstLanding;
         double sinceCrack = t.RankLost ? now - t.Crack : double.NegativeInfinity;
 
-        // The music's beat, once it's in: 1 on the beat, falling away through it.
-        double? beatProgress = now >= t.Music ? audioManager?.ResultsMusicBeat : null;
-        float beat = beatProgress is double b ? MathF.Exp((float)(-b * 5)) : 0;
-
         // The fill and the numbers rolling up with it.
         float fill = t.FillAt(now);
         float roll = t.RollAt(now);
@@ -1261,7 +1267,6 @@ public partial class ScoreScreen : YuukiScreen, IHaveScreenAction
         blossom.Fill = fill;
         blossom.FillColor = color;
         blossom.Charge = charge;
-        blossom.Beat = beat;
 
         float pulse = 0;
         foreach ((_, double time) in t.Crossings)
@@ -1276,7 +1281,6 @@ public partial class ScoreScreen : YuukiScreen, IHaveScreenAction
         blossom.HeadAlpha = moving ? 1 : Math.Max(0, 1 - clamp01((now - t.FillEnd) / 300));
 
         float glow = charge * 0.9f;
-        glow = Math.Max(glow, 0.28f * beat);
         if (sinceFirst >= 0)
             glow = Math.Max(glow, 0.9f * MathF.Exp((float)(-Math.Min(sinceFirst, sinceLanding >= 0 ? sinceLanding : sinceFirst) / 200)));
         if (gather > 0)
@@ -1303,15 +1307,13 @@ public partial class ScoreScreen : YuukiScreen, IHaveScreenAction
             blossom.BandColors[i] = band;
         }
 
-        // The ring swells as it charges, gives as a rank hits, and beats with the music.
+        // The ring swells as it charges, and gives as a rank hits.
         float scale = 1;
         double sinceHit = t.RankLost && now < t.Landing ? sinceFirst : sinceLanding;
         if (sinceHit < 0 && sinceFirst < 0)
             scale = 1 + 0.03f * charge;
         else if (sinceHit >= 0)
             scale = 1 + 0.03f * Math.Max(0, 1 - (float)(sinceHit / 70)) - 0.045f * MathF.Sin(clamp01(sinceHit / 220) * MathF.PI);
-        if (beatProgress is double bp)
-            scale *= 1 + 0.014f * MathF.Exp((float)(-bp * 6));
 
         // Gathering, it draws in on itself, trembling; blooming, it bursts out and rings.
         if (gather > 0)
@@ -1341,7 +1343,7 @@ public partial class ScoreScreen : YuukiScreen, IHaveScreenAction
 
         Color landingColor = JudgementColors.For(t.RankLost && now < t.Landing - RankLetter.FALL ? ScoreRank.S : result.Rank);
 
-        renderLight(now, color, landingColor, beat, charge, sinceCrack, gather, sinceBloom);
+        renderLight(now, color, landingColor, charge, sinceCrack, gather, sinceBloom);
         renderNumbers(now, roll, shown);
         renderVoice(now);
     }
@@ -1350,7 +1352,7 @@ public partial class ScoreScreen : YuukiScreen, IHaveScreenAction
     /// The light round the ring and the screen: the rays behind the rank, the edges' glow, the flash of the rank's color,
     /// the dimming as it charges, the color draining while an S breaks, and the shake of a hit.
     /// </summary>
-    private void renderLight(double now, Color fillColor, Color landingColor, float beat, float charge, double sinceCrack, float gather, double sinceBloom)
+    private void renderLight(double now, Color fillColor, Color landingColor, float charge, double sinceCrack, float gather, double sinceBloom)
     {
         RevealTimeline t = Timeline;
         double sinceLanding = now - t.Landing;
@@ -1358,15 +1360,15 @@ public partial class ScoreScreen : YuukiScreen, IHaveScreenAction
         bool sBreaking = t.RankLost && now >= t.Crack && now < t.Landing - RankLetter.FALL;
 
         // Rays behind the rank once it's landed, stronger the better it is.
-        float strength = result.IsAllPerfect ? 0.8f : result.Rank switch
+        float strength = result.IsAllPerfect ? 0.69f : result.Rank switch
         {
-            ScoreRank.SS or ScoreRank.S => 0.62f,
-            ScoreRank.A => 0.32f,
-            ScoreRank.B => 0.15f,
+            ScoreRank.SS or ScoreRank.S => 0.53f,
+            ScoreRank.A => 0.27f,
+            ScoreRank.B => 0.13f,
             _ => 0
         };
 
-        rays.Peak = sinceLanding >= 0 ? strength * outCubic(clamp01(sinceLanding / 450)) * (0.82f + 0.18f * beat) : 0;
+        rays.Peak = sinceLanding >= 0 ? strength * outCubic(clamp01(sinceLanding / 450)) : 0;
         rays.Scale = new Vector2(0.85f + 0.15f * outCubic(clamp01(sinceLanding / 600)));
 
         // A Full Bloom's: broad, in every hero's color, flaring with the bloom.
@@ -1381,7 +1383,7 @@ public partial class ScoreScreen : YuukiScreen, IHaveScreenAction
         }
 
         // The edges: faint as the fill runs, brighter at each rank crossed, as it charges, and as a rank lands, then
-        // with the beat.
+        // steady once the music's in.
         float led = 0;
         Color ledColor = fillColor;
 
@@ -1410,7 +1412,7 @@ public partial class ScoreScreen : YuukiScreen, IHaveScreenAction
             }
 
             if (now >= t.Music)
-                led = Math.Max(led, 0.24f + 0.36f * beat);
+                led = Math.Max(led, 0.3f);
         }
 
         if (gather > 0)
@@ -1487,11 +1489,6 @@ public partial class ScoreScreen : YuukiScreen, IHaveScreenAction
             petals.Fall.Rate = sinceBloom < 2600 ? 60 : 30;
             petals.Fall.Limit = 340;
         }
-
-        // The petals falling sway with the beat, one way then the other.
-        petals.Fall.Gust = now >= t.Music && audioManager?.ResultsMusicBeat is double phase
-            ? 0.0004f * MathF.Exp((float)(-phase * 5)) * (Math.Floor(now / YuukiAudioManager.RESULTS_MUSIC_BEAT) % 2 == 0 ? 1 : -1)
-            : 0;
     }
 
     /// <summary>
@@ -1505,13 +1502,6 @@ public partial class ScoreScreen : YuukiScreen, IHaveScreenAction
         scoreText.Text = formatScore(result.Score * roll);
         comboText.Text = $"{(int)MathF.Round(result.MaxCombo * roll)}x / {result.TotalNotes}";
         accuracyText.Text = ringAccuracy.Text = $"{shown * 100:0.00}%";
-
-        if (!graphsShown && now >= RevealTimeline.FILL_START + RevealTimeline.FILL_DURATION * 0.4)
-        {
-            graphsShown = true;
-            timingGraph.AnimateIn();
-            timeline.AnimateIn();
-        }
 
         double sinceLanding = now - t.Landing;
         scoreBlock.Scale = new Vector2(sinceLanding >= 0 ? 1 + 0.05f * MathF.Exp((float)(-sinceLanding / 130)) : 1);
@@ -1534,6 +1524,8 @@ public partial class ScoreScreen : YuukiScreen, IHaveScreenAction
             newBestChip.Alpha = sinceBest < 0 ? 0 : clamp01(sinceBest / 120);
             newBestChip.Scale = new Vector2(sinceBest < 0 ? 1 : 1 + 0.4f * (1 - outCubic(clamp01(sinceBest / 300))));
         }
+
+        playsStrip?.Compare(clamp01(sinceBest / 300));
     }
 
     /// <summary>
@@ -1581,14 +1573,54 @@ public partial class ScoreScreen : YuukiScreen, IHaveScreenAction
         return true;
     }
 
-    public override bool OnClick(MouseButtonEvent e) => Skip() || base.OnClick(e);
+    // The reveal is the summary's: on More info a click is the graphs'.
+    public override bool OnClick(MouseButtonEvent e) => (!ShowingMoreInfo && Skip()) || base.OnClick(e);
 
     public override bool OnKeyDown(KeyEvent e)
     {
-        if (!e.IsRepeat && (e.Key == Key.Space || e.Key == Key.Enter) && Skip())
+        if (e.IsRepeat)
+            return base.OnKeyDown(e);
+
+        if (e.Key == Key.Tab)
+        {
+            ShowPage(!ShowingMoreInfo);
+            return true;
+        }
+
+        if ((e.Key == Key.Space || e.Key == Key.Enter) && !ShowingMoreInfo && Skip())
             return true;
 
         return base.OnKeyDown(e);
+    }
+
+    /// <summary>
+    /// Shows More info, or the summary again. The reveal plays out first: its light and petals would go over the graphs.
+    /// </summary>
+    public void ShowPage(bool showMoreInfo)
+    {
+        if (showMoreInfo == ShowingMoreInfo)
+            return;
+
+        ShowingMoreInfo = showMoreInfo;
+        tabs.Current = showMoreInfo ? 1 : 0;
+
+        if (showMoreInfo)
+        {
+            while (Skip())
+            {
+            }
+
+            moreInfo.Open();
+        }
+
+        float summary = showMoreInfo ? 0 : 1;
+        header.FadeTo(summary, 300, Easing.OutQuint);
+        ringArea.FadeTo(summary, 300, Easing.OutQuint);
+        detailsScroll.FadeTo(summary, 300, Easing.OutQuint);
+        moreInfoScroll.FadeTo(1 - summary, 300, Easing.OutQuint);
+
+        // Falling still, but fainter over the graphs.
+        petals.FadeTo(showMoreInfo ? 0.4f : 1, 300, Easing.OutQuint);
     }
 
     /// <summary>
@@ -1666,6 +1698,10 @@ public partial class ScoreScreen : YuukiScreen, IHaveScreenAction
         detailsScroll.Width = Math.Clamp(DrawSize.X - 48 - leftRight - 32, details_min_width, details_max_width);
         detailsScroll.Height = Math.Max(240, buttonsTop - details_top);
 
+        moreInfoScroll.Width = Math.Max(0, DrawSize.X - 96);
+        moreInfoScroll.Height = Math.Max(240, buttonsTop - more_info_top);
+        moreInfo.ViewHeight = moreInfoScroll.Height;
+
         bool stacked = scoreSummary.DrawWidth < summary_one_line_width;
 
         if (stacked != summaryStacked)
@@ -1711,6 +1747,8 @@ public partial class ScoreScreen : YuukiScreen, IHaveScreenAction
         header.AnimateOut();
         ringArea.FadeOut(300, Easing.OutQuint);
         detailsScroll.MoveToX(400, 400, Easing.OutQuint).FadeOut(300, Easing.OutQuint);
+        moreInfoScroll.FadeOut(300, Easing.OutQuint);
+        tabs.FadeOut(300, Easing.OutQuint);
         backButton.MoveTo(new Vector2(-200, LeftBottomShearButton.DEFAULT_POSITION.Y), 400, Easing.OutQuint).FadeOut(400, Easing.OutQuint);
         actionButtons.MoveTo(action_buttons_position + new Vector2(600, 0), 400, Easing.OutQuint).FadeOut(400, Easing.OutQuint);
         this.FadeOut(300, Easing.OutQuint);
@@ -1742,12 +1780,18 @@ public partial class ScoreScreen : YuukiScreen, IHaveScreenAction
     /// <summary>
     /// Opens the play's replay (what the Replay button, and R on a saved score, do). Nothing without one.
     /// </summary>
-    public void WatchReplay()
+    public void WatchReplay() => WatchReplay(0);
+
+    /// <summary>
+    /// Opens the play's replay at <paramref name="from"/>, in ms of the song (More info's "watch from"). Nothing without one.
+    /// </summary>
+    public void WatchReplay(double from)
     {
         if (!canWatch || savedScore == null || replay == null || screenStack == null)
             return;
 
-        replayButton?.Flash(Color.White);
+        if (from <= 0)
+            replayButton?.Flash(Color.White);
 
         // The replay brings the song; the results music would play over it.
         audioManager?.EndResultsMusic();
@@ -1756,9 +1800,126 @@ public partial class ScoreScreen : YuukiScreen, IHaveScreenAction
         {
             Anchor = Anchor.Centre,
             Origin = Anchor.Centre,
-            RelativeSizeAxes = Axes.Both
+            RelativeSizeAxes = Axes.Both,
+            StartAt = from
         });
     }
+
+    #region Judging again
+
+    protected override void LoadComplete()
+    {
+        base.LoadComplete();
+        startJudging();
+    }
+
+    /// <summary>
+    /// A saved play keeps its totals and its replay, not its judgements: they're worked out again here, from the
+    /// replay's inputs on the chart, and More info and the rows fill in once they're in. Where they can't be (no replay,
+    /// the chart changed or isn't here), More info says why. The best's replay is judged too, to compare with. All of it
+    /// on threads from the pool: the files read here, and the judging (<see cref="ReplayJudge"/>).
+    /// </summary>
+    private void startJudging()
+    {
+        bool judgeOwn = result.Judgements.Count == 0;
+
+        if (judgeOwn && replay is not { Inputs.Count: > 0 })
+            moreInfo.ShowUnavailable("This play was saved without a replay, so only its totals are kept.");
+
+        if (savedScore == null || workingBeatmap?.Beatmap is not Beatmap beatmap || beatmap.ID != savedScore.BeatmapId)
+        {
+            if (judgeOwn && replay is { Inputs.Count: > 0 })
+                moreInfo.ShowUnavailable("This play's chart isn't here, so its replay can't be judged again.");
+
+            return;
+        }
+
+        ScoreInfo? compared = best;
+        var scheduler = Scheduler;
+
+        Task.Run(() => (Chart: ReplayJudge.ChartFor(beatmap, noteStore), BestReplay: compared == null ? null : scoreStore?.GetReplay(compared)))
+            .ContinueWith(read =>
+            {
+                if (read.IsFaulted)
+                    Logger.Error("Failed to read a chart to judge a replay on.", read.Exception!);
+
+                scheduler.Add(() => startJudgingOn(read.IsFaulted ? null : read.Result.Chart, read.IsFaulted ? null : read.Result.BestReplay));
+            });
+    }
+
+    private void startJudgingOn(PlayableBeatmap? loadedChart, ReplayData? bestReplay)
+    {
+        if (exiting)
+            return;
+
+        chart = loadedChart;
+
+        if (result.Judgements.Count == 0 && replay is { Inputs.Count: > 0 })
+        {
+            if (chart == null)
+                moreInfo.ShowUnavailable("This play's chart isn't here, so its replay can't be judged again.");
+            else if (!replay.CanPlayOn(chart))
+                moreInfo.ShowUnavailable("The beatmap's notes have changed since this play, so its replay can't be judged again.");
+            else
+            {
+                ReplayJudge judging = judge = judgeFor(replay, savedScore != null && BloomlessJudgement.AppliesTo(savedScore));
+                judging.Completed += () =>
+                {
+                    if (judging.Faulted)
+                    {
+                        moreInfo.ShowUnavailable("This play's replay couldn't be judged again.");
+                        return;
+                    }
+
+                    result = result.WithJudgements(judging.Judgements, judging.HoldBreakTimes, chart.LaneCount, chart.LastNoteTime);
+                    showJudgements();
+                };
+
+                Add(judging);
+                moreInfo.JudgeFrom(judging);
+            }
+        }
+
+        if (best == null || chart == null || bestReplay == null || !bestReplay.CanPlayOn(chart))
+            return;
+
+        ReplayJudge judgingBest = bestJudge = judgeFor(bestReplay, BloomlessJudgement.AppliesTo(best));
+        ScoreInfo comparedWith = best;
+        judgingBest.Completed += () =>
+        {
+            if (judgingBest.Faulted)
+                return;
+
+            GameplayResult bestResult = GameplayResult.FromScore(comparedWith, bestReplay).WithJudgements(judgingBest.Judgements, judgingBest.HoldBreakTimes, chart.LaneCount, chart.LastNoteTime);
+            var scheduler = Scheduler;
+
+            Task.Run(() => new PlayAnalysis(bestResult)).ContinueWith(worked =>
+            {
+                if (!worked.IsFaulted)
+                    scheduler.Add(() => moreInfo.SetBest(worked.Result));
+            });
+        };
+
+        Add(judgingBest);
+    }
+
+    // A play saved without Blooms (before there were any) is judged without them, so it agrees with its counts.
+    private ReplayJudge judgeFor(ReplayData played, bool bloomless) => new ReplayJudge(chart!, played)
+    {
+        Preempt = GameplayScreen.ScrollPreempt(config, chart!),
+        StartTime = -GameplayScreen.LeadInFor(chart!),
+        CountsBloomAsCritical = bloomless
+    };
+
+    // The judgements are in: everything that waited for them.
+    private void showJudgements()
+    {
+        moreInfo.SetRun(result);
+        judgementBreakdown.ShowTiming(result);
+        unstableRateText.Text = formatUnstableRate();
+    }
+
+    #endregion
 
     private void onBack()
     {
@@ -1802,17 +1963,22 @@ public partial class ScoreScreen : YuukiScreen, IHaveScreenAction
     /// <summary>
     /// A small gold "NEW BEST" tag beside the score title, sheared as the badge. It stamps on when the run is compared.
     /// </summary>
+    /// <remarks>Slanted about its middle, so it's centered on its words, and its corners lean out past them evenly: its
+    /// margins keep them off what's beside it.</remarks>
     private Drawable newBestTag() => new Container
     {
         Anchor = Anchor.CentreLeft,
         Origin = Anchor.CentreLeft,
         AutoSizeAxes = Axes.Both,
+        Margin = new MarginPadding { Left = 10, Right = 10 },
         Alpha = 0,
         AlwaysPresent = true,
         Children = new Drawable[]
         {
             new Container
             {
+                Anchor = Anchor.Centre,
+                Origin = Anchor.Centre,
                 RelativeSizeAxes = Axes.Both,
                 Masking = true,
                 CornerRadius = 4,
@@ -1825,7 +1991,7 @@ public partial class ScoreScreen : YuukiScreen, IHaveScreenAction
             },
             new SpriteText
             {
-                Margin = new MarginPadding { Left = 12, Right = 12, Top = 3, Bottom = 4 },
+                Margin = new MarginPadding { Left = 14, Right = 14, Top = 3, Bottom = 4 },
                 Text = "NEW BEST",
                 Font = YuukiFontUsage.GetFontUsage(Typeface.Nunito, 14, FontWeight.ExtraBold),
                 Color = Color.White

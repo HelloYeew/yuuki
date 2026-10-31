@@ -3,7 +3,6 @@
 
 using System;
 using System.Collections.Generic;
-using System.Globalization;
 using Sakura.Framework.Allocation;
 using Sakura.Framework.Audio;
 using Sakura.Framework.Extensions.ColorExtensions;
@@ -27,6 +26,7 @@ using Yuuki.Game.Gameplay.Scoring;
 using Yuuki.Game.Graphics.Colors;
 using Yuuki.Game.Graphics.Text;
 using Yuuki.Game.Graphics.UserInterface;
+using Yuuki.Game.Utilities;
 
 namespace Yuuki.Game.Graphics.Screens;
 
@@ -114,6 +114,11 @@ public partial class ReplayScreen : YuukiScreen, IHaveScreenAction
     /// </summary>
     public double Speed => speeds[speedIndex];
 
+    /// <summary>
+    /// Where in the run it opens, in ms of the song: 0 (and before) from the start, lead-in and all.
+    /// </summary>
+    public double StartAt { get; init; }
+
     public ReplayScreen(ScoreInfo score, ReplayData replay)
     {
         this.score = score;
@@ -134,7 +139,7 @@ public partial class ReplayScreen : YuukiScreen, IHaveScreenAction
     private void load([CanBeNull] IYuukiColorProvider? colorProvider)
     {
         ScreenName.Value = "Replay";
-        ScreenHelperText.Value = string.Create(CultureInfo.InvariantCulture, $"Played {score.Date.LocalDateTime:d MMM yyyy, HH:mm}");
+        ScreenHelperText.Value = $"Played {DateUtility.FormatPlayed(score.Date)}";
 
         palette = Palette;
 
@@ -162,6 +167,8 @@ public partial class ReplayScreen : YuukiScreen, IHaveScreenAction
                 Origin = Anchor.Centre,
                 RelativeSizeAxes = Axes.Both,
                 Replay = replay,
+                // A play saved before BLOOM is watched as it was judged then.
+                CountsBloomAsCritical = BloomlessJudgement.AppliesTo(score),
                 // Played back as it was played: the same offset lines the inputs up with the music.
                 AudioOffset = replay.AudioOffset,
                 SongOffset = replay.SongOffset,
@@ -313,6 +320,9 @@ public partial class ReplayScreen : YuukiScreen, IHaveScreenAction
 
         gameplay.Restart();
         gameplay.ProgressBarSeek = onSeekRequested;
+
+        if (StartAt > 0)
+            SeekTo(StartAt);
     }
 
     public override void OnEntering(Screen? last)

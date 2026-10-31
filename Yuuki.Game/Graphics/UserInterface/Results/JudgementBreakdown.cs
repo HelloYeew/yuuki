@@ -35,6 +35,16 @@ public partial class JudgementBreakdown : FlowContainer
     }
 
     /// <summary>
+    /// Fills in how many of each were early or late, from <paramref name="result"/>'s judgements (a saved play's come in
+    /// once its replay is judged again).
+    /// </summary>
+    public void ShowTiming(GameplayResult result)
+    {
+        foreach (Row row in rows)
+            row.ShowTiming(result);
+    }
+
+    /// <summary>
     /// How far the counts and bars have rolled up, 0–1.
     /// </summary>
     public float Progress
@@ -52,10 +62,12 @@ public partial class JudgementBreakdown : FlowContainer
         private const float count_width = 90;
         private const float timing_width = 170;
 
+        private readonly HitResult hitResult;
         private readonly int count;
         private readonly float share;
 
         private readonly SpriteText countText;
+        private readonly SpriteText timingText;
         private readonly Drawable bar;
 
         public Row(HitResult hitResult, GameplayResult result, YuukiColorPalette palette)
@@ -63,6 +75,7 @@ public partial class JudgementBreakdown : FlowContainer
             RelativeSizeAxes = Axes.X;
             Height = 34;
 
+            this.hitResult = hitResult;
             count = countOf(hitResult, result);
             share = result.TotalNotes == 0 ? 0 : (float)count / result.TotalNotes;
 
@@ -70,11 +83,6 @@ public partial class JudgementBreakdown : FlowContainer
 
             // A Bloom's dot and bar take the heroes' rainbow, moving.
             bool rainbow = hitResult == HitResult.Bloom;
-
-            // A miss has no meaningful press timing (it was never pressed), so it skips the split.
-            string timing = hitResult == HitResult.Miss || result.Judgements.Count == 0
-                ? ""
-                : $"Early {result.EarlyCount(hitResult)}  ·  Late {result.LateCount(hitResult)}";
 
             Children = new Drawable[]
             {
@@ -113,14 +121,13 @@ public partial class JudgementBreakdown : FlowContainer
                     Font = YuukiFontUsage.GetFontUsage(Typeface.Quicksand, 24, FontWeight.Bold),
                     Color = color
                 },
-                new SpriteText
+                timingText = new SpriteText
                 {
                     Anchor = Anchor.CentreLeft,
                     Origin = Anchor.CentreLeft,
                     X = label_width + count_width + 20,
-                    Text = timing,
                     Font = YuukiFontUsage.GetFontUsage(Typeface.Nunito, 16, FontWeight.Regular),
-                    Color = palette.TextMuted
+                    Color = ResultsInk.Secondary(palette)
                 },
                 // Share-of-notes bar, filling the rest of the row.
                 new Container
@@ -159,7 +166,14 @@ public partial class JudgementBreakdown : FlowContainer
                     }
                 }
             };
+
+            ShowTiming(result);
         }
+
+        // A miss has no meaningful press timing (it was never pressed), so it skips the split.
+        public void ShowTiming(GameplayResult result) => timingText.Text = hitResult == HitResult.Miss || result.Judgements.Count == 0
+            ? ""
+            : $"Early {result.EarlyCount(hitResult)}  ·  Late {result.LateCount(hitResult)}";
 
         public float Progress
         {

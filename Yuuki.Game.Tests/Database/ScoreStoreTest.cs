@@ -148,11 +148,6 @@ public class ScoreStoreTest
             new ReplayInput(2100, ReplayInputKind.TouchDown, 1, 0),
             new ReplayInput(2200, ReplayInputKind.TouchSlide, 2, 0),
             new ReplayInput(2300, ReplayInputKind.TouchUp, 2, 0)
-        },
-        Judgements = new List<RecordedJudgement>
-        {
-            new RecordedJudgement(NoteType.Hold, 1000, 1400, 2, HitResult.Critical, 0.25, false),
-            new RecordedJudgement(NoteType.Swipe, 1500, 1500, 0, HitResult.Break, -50, false)
         }
     };
 
@@ -177,8 +172,60 @@ public class ScoreStoreTest
             Assert.That(loaded!.ChartHash, Is.EqualTo("ABC123"));
             Assert.That(loaded.AudioOffset, Is.EqualTo(-12));
             Assert.That(loaded.Inputs, Is.EqualTo(replay().Inputs));
-            Assert.That(loaded.Judgements, Is.EqualTo(replay().Judgements));
         }
+    }
+
+    /// <summary>
+    /// Replays saved before the results screen judged them again kept their judgements too: they still load, inputs and
+    /// all, the judgements left out.
+    /// </summary>
+    [Test]
+    public void Replay_SavedWithJudgements_StillLoads()
+    {
+        var score = play(hard, 750_000);
+        new ScoreStore(storage).Add(score, replay());
+
+        string path = Path.Combine(tempDir, "replays", $"{score.ReplayId}.json");
+        string json = File.ReadAllText(path);
+        File.WriteAllText(path, json.TrimEnd().TrimEnd('}') + ",\"Judgements\":[{\"n\":0,\"s\":1000,\"e\":1000,\"l\":2,\"r\":1,\"o\":0.25,\"h\":false}]}");
+
+        ReplayData? loaded = new ScoreStore(storage).GetReplay(score);
+
+        Assert.That(loaded?.Inputs, Is.EqualTo(replay().Inputs));
+    }
+
+    /// <summary>
+    /// A copy of the history aside, from before the first change: backing up again keeps it.
+    /// </summary>
+    [Test]
+    public void BackUp_KeepsTheFirstCopy()
+    {
+        var store = new ScoreStore(storage);
+        store.Add(play(hard, 100));
+        store.BackUp("backup.json").Wait();
+
+        store.Add(play(hard, 200));
+        store.BackUp("backup.json").Wait();
+
+        string copy = File.ReadAllText(Path.Combine(tempDir, "backup.json"));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(copy, Does.Contain("100"));
+            Assert.That(copy, Does.Not.Contain("\"Score\":200"));
+        }
+    }
+
+    /// <summary>
+    /// Plays saved before the rules were kept load as the oldest rules; plays saved now, the current ones.
+    /// </summary>
+    [Test]
+    public void RulesVersion_OldPlaysHaveNone()
+    {
+        File.WriteAllText(Path.Combine(tempDir, "scores.json"), "[{\"BeatmapId\":1,\"Score\":5}]");
+
+        Assert.That(new ScoreStore(storage).Scores.Single().RulesVersion, Is.Zero);
+        Assert.That(ScoreInfo.From(new GameplayResult(), 1, 1).RulesVersion, Is.EqualTo(ScoreInfo.CURRENT_RULES));
     }
 
     [Test]

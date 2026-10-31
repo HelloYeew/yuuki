@@ -12,9 +12,11 @@ namespace Yuuki.Game.Gameplay.Replays;
 
 /// <summary>
 /// Everything saved alongside a score: the run's inputs, so it can be watched again (fed back through
-/// the playfield, which judges them as it did live), and its judgments, so the result screen can
-/// show the full breakdown. Stored per score by the <see cref="Database.ScoreStore"/>.
+/// the playfield, which judges them as it did live). Its judgements aren't kept: the results screen judges the
+/// inputs again for its breakdown (<see cref="ReplayJudge"/>), so they're always today's judging of what was played.
+/// Stored per score by the <see cref="Database.ScoreStore"/>.
 /// </summary>
+/// <remarks>Replays saved before this kept their judgements too; reading one leaves them out.</remarks>
 public class ReplayData
 {
     public const int CURRENT_VERSION = 1;
@@ -51,8 +53,6 @@ public class ReplayData
     /// The run's inputs in the order they happened (and so in time order).
     /// </summary>
     public List<ReplayInput> Inputs { get; set; } = new List<ReplayInput>();
-
-    public List<RecordedJudgement> Judgements { get; set; } = new List<RecordedJudgement>();
 
     /// <summary>
     /// Whether this replay can be watched on <paramref name="chart"/>.

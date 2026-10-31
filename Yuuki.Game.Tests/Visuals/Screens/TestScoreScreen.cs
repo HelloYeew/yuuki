@@ -104,6 +104,26 @@ public partial class TestScoreScreen : TestYuukiScreenStack
     }
 
     /// <summary>
+    /// More info shows every graph of a play just finished, from its judgements in memory. Going there plays the reveal
+    /// out first, a click there is the graphs' rather than a skip, and Tab goes back and forth.
+    /// </summary>
+    [Test]
+    public void TestMoreInfo()
+    {
+        showResult("mixed run", build(critical: 210, breaks: 90, hits: 40, misses: 25, seed: 3), r => !r.IsFullCombo);
+        AddStep("more info", () => shown!.ShowPage(true));
+        AddAssert("the reveal played out", () => shown!.RankRevealed && !shown.Skip());
+        AddUntilStep("its graphs, from the judgements in memory", () => shown!.MoreInfo.Analysis is { Points.Count: 365 } && !shown.MoreInfo.Judging);
+        AddAssert("the hardest stretch has misses", () => shown!.MoreInfo.Analysis!.Hardest is { Misses: > 0 });
+        AddAssert("told the room it has", () => shown!.MoreInfo.ViewHeight > 0 && shown.MoreInfo.ViewHeight == shown.MoreInfo.Parent?.Parent?.DrawHeight);
+
+        AddStep("press Tab", () => shown!.OnKeyDown(new Sakura.Framework.Input.KeyEvent(Sakura.Framework.Input.Key.Tab, Sakura.Framework.Input.KeyModifiers.None, false)));
+        AddAssert("the summary again", () => !shown!.ShowingMoreInfo);
+        AddStep("press Tab", () => shown!.OnKeyDown(new Sakura.Framework.Input.KeyEvent(Sakura.Framework.Input.Key.Tab, Sakura.Framework.Input.KeyModifiers.None, false)));
+        AddAssert("more info again", () => shown!.ShowingMoreInfo);
+    }
+
+    /// <summary>
     /// The offer moves the judging alone: both offsets by the run's lean, the other way about.
     /// </summary>
     [Test]
@@ -111,6 +131,8 @@ public partial class TestScoreScreen : TestYuukiScreenStack
     {
         showResult("25 ms late, at -20 and +10", leaning(25, audio: -20, visual: 10), r => r.SuggestedOffsets == (-45, 35));
         AddAssert("no calibrating offered", () => pillOrNull("Calibrate") == null);
+
+        AddAssert("it has a strip of the page", () => shown!.MoreInfo.AdviceStrip != null);
 
         AddStep("shift", () => pill("Shift timing 25 ms later · every device").Action());
         AddAssert("audio -45, visual +35", () => config.Get<int>(YuukiSetting.AudioOffset).Value == -45 && config.Get<int>(YuukiSetting.VisualOffset).Value == 35);
@@ -125,6 +147,61 @@ public partial class TestScoreScreen : TestYuukiScreenStack
     {
         showResult("17 ms late", leaning(17), r => r.SuggestedOffsets != null);
         AddAssert("no shift offered", () => descendants(shown!).OfType<PillButton>().All(p => !p.Text.StartsWith("Shift timing", StringComparison.Ordinal)));
+    }
+
+    /// <summary>
+    /// The NEW BEST tag is slanted about its middle, so its shape is centered on its words, and what leans out past them
+    /// stays off the title beside it.
+    /// </summary>
+    [Test]
+    public void TestTheNewBestTagIsCenteredOnItsWords()
+    {
+        SpriteText words() => descendants(shown!).OfType<SpriteText>().Single(t => t.Text == "NEW BEST");
+        Container tag() => (Container)words().Parent!;
+        Drawable shape() => tag().Children[0];
+
+        AddStep("clear previous results", () =>
+        {
+            if (screenStack.CurrentScreen is ScoreScreen previous)
+                previous.Exit();
+        });
+        AddStep("push a new best", () => screenStack.Push(shown = new ScoreScreen(build(critical: 300, breaks: 20, seed: 6), isNewBest: true)
+        {
+            Anchor = Anchor.Centre,
+            Origin = Anchor.Centre,
+            RelativeSizeAxes = Axes.Both
+        }));
+        AddUntilStep("it's up", () => screenStack.CurrentScreen == shown && shown!.IsLoaded);
+        AddStep("skip to the end", () =>
+        {
+            shown!.Skip();
+            shown.Skip();
+        });
+        AddUntilStep("landed", () => shown!.RankRevealed);
+
+        AddAssert("the shape's on the words", () =>
+        {
+            Sakura.Framework.Maths.Vector2 middleOfShape = shape().ToScreenSpace(shape().DrawSize / 2);
+            Sakura.Framework.Maths.Vector2 middleOfWords = words().ToScreenSpace(words().DrawSize / 2);
+            return Math.Abs(middleOfShape.X - middleOfWords.X) < 1 && Math.Abs(middleOfShape.Y - middleOfWords.Y) < 2;
+        });
+        AddAssert("it's slanted", () => shape().Shear.X != 0);
+        AddAssert("its margins hold what leans out", () =>
+        {
+            float leaning = Math.Abs(shape().Shear.X) * shape().DrawHeight / 2;
+            return tag().Margin.Left >= leaning && tag().Margin.Right >= leaning;
+        });
+    }
+
+    /// <summary>
+    /// Nothing to do isn't worth a strip of the page: the timing card says so.
+    /// </summary>
+    [Test]
+    public void TestCenteredTimingSaysSoInItsCard()
+    {
+        showResult("on time", leaning(0.2), r => r.MeanError != null);
+        AddAssert("no strip", () => shown!.MoreInfo.AdviceStrip == null);
+        AddAssert("its card says", () => descendants(shown!).OfType<ResultsCard>().Any(c => c.Question == "Your timing is centered."));
     }
 
     /// <summary>

@@ -1,0 +1,121 @@
+// This code is part of yuuki. project. Licensed under the MIT License.
+// See the LICENSE file for full license text.
+
+using System;
+using System.Globalization;
+using Sakura.Framework.Extensions.ColorExtensions;
+using Sakura.Framework.Graphics.Containers;
+using Sakura.Framework.Graphics.Drawables;
+using Sakura.Framework.Graphics.Primitives;
+using Sakura.Framework.Graphics.Transforms;
+using Sakura.Framework.Maths;
+using Yuuki.Game.Gameplay.Scoring;
+using Yuuki.Game.Graphics.Colors;
+using Yuuki.Game.Graphics.Text;
+using Yuuki.Game.Utilities;
+
+namespace Yuuki.Game.Graphics.UserInterface.Results;
+
+/// <summary>
+/// Where the run stands among the plays of its difficulty, along the bottom of the results' summary: the best's mark (the
+/// run's stamping over it when it's a new best), its place of how many and when it was played (the footer that says so
+/// is hidden on a phone), and the best it's compared with.
+/// </summary>
+public partial class PlaysStrip : Container
+{
+    private readonly BestMark before;
+    private readonly BestMark after;
+    private readonly bool newBest;
+    private readonly bool hadBest;
+
+    /// <param name="palette">Its colors.</param>
+    /// <param name="run">The run, as saved.</param>
+    /// <param name="best">The best it's compared with: the best before it, or (a saved play looked at) the best but it.</param>
+    /// <param name="isNewBest">Whether the run beat <paramref name="best"/>.</param>
+    /// <param name="place">Its place among the difficulty's plays, from 1.</param>
+    /// <param name="plays">How many plays of the difficulty there are, the run's among them.</param>
+    public PlaysStrip(YuukiColorPalette palette, ScoreInfo run, ScoreInfo? best, bool isNewBest, int place, int plays)
+    {
+        newBest = isNewBest;
+
+        RelativeSizeAxes = Axes.X;
+        AutoSizeAxes = Axes.Y;
+
+        string where = (isNewBest ? $"New best · #1 of {plays} plays" : $"#{place} of {plays} plays") + $" · played {DateUtility.FormatPlayed(run.Date)}";
+        string compared = best == null ? isNewBest || place == 1 ? "Your first play of this difficulty" : ""
+            : $"{(isNewBest ? "Before" : "Your best")}: {((int)best.Score).ToString("D7")} · {(best.Accuracy * 100).ToString("0.00", CultureInfo.InvariantCulture)}% · {DateUtility.Ago(best.Date)}";
+
+        // The mark shown at first is the best's; a new best's own stamps over it.
+        before = new BestMark(17) { Anchor = Anchor.CentreLeft, Origin = Anchor.CentreLeft };
+        after = new BestMark(17) { Anchor = Anchor.CentreLeft, Origin = Anchor.CentreLeft, AlwaysPresent = true };
+        before.SetBest(best ?? (isNewBest ? null : run));
+        after.SetBest(run);
+        after.Alpha = 0;
+        hadBest = before.Alpha > 0;
+
+        Children = new Drawable[]
+        {
+            new Box
+            {
+                RelativeSizeAxes = Axes.X,
+                Height = 1.5f,
+                Color = palette.Text.WithAlpha(0.14f)
+            },
+            new FlowContainer
+            {
+                Y = 22,
+                AutoSizeAxes = Axes.Both,
+                Direction = FlowDirection.Horizontal,
+                Spacing = new Vector2(20, 0),
+                Children = new Drawable[]
+                {
+                    new Container
+                    {
+                        Anchor = Anchor.CentreLeft,
+                        Origin = Anchor.CentreLeft,
+                        Size = new Vector2(150, 34),
+                        Children = new Drawable[] { before, after }
+                    },
+                    new FlowContainer
+                    {
+                        Anchor = Anchor.CentreLeft,
+                        Origin = Anchor.CentreLeft,
+                        AutoSizeAxes = Axes.Both,
+                        Direction = FlowDirection.Vertical,
+                        Spacing = new Vector2(0, 2),
+                        Children = new Drawable[]
+                        {
+                            new SpriteText
+                            {
+                                Text = where,
+                                Font = YuukiFontUsage.GetFontUsage(Typeface.Nunito, 19, FontWeight.Bold),
+                                Color = palette.Text
+                            },
+                            new SpriteText
+                            {
+                                Text = compared,
+                                Font = YuukiFontUsage.GetFontUsage(Typeface.Nunito, 16, FontWeight.SemiBold),
+                                Color = ResultsInk.Secondary(palette)
+                            }
+                        }
+                    }
+                }
+            }
+        };
+    }
+
+    /// <summary>
+    /// How far the run has been compared with the best, 0–1: a new best's mark stamps over the old one.
+    /// </summary>
+    public void Compare(float progress)
+    {
+        if (!newBest)
+            return;
+
+        float stamped = (float)EasingFunctions.Apply(Easing.OutCubic, Math.Clamp(progress, 0, 1));
+        after.Alpha = Math.Clamp(progress * 3, 0, 1);
+        after.Scale = new Vector2(1 + 0.4f * (1 - stamped));
+        if (hadBest)
+            before.Alpha = 1 - after.Alpha;
+    }
+}

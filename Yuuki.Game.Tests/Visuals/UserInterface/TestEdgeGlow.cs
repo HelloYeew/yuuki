@@ -5,6 +5,7 @@ using System;
 using NUnit.Framework;
 using Sakura.Framework.Extensions.ColorExtensions;
 using Sakura.Framework.Graphics.Colors;
+using Sakura.Framework.Graphics.Containers;
 using Sakura.Framework.Graphics.Drawables;
 using Sakura.Framework.Graphics.Primitives;
 using Yuuki.Game.Gameplay.Scoring;
@@ -58,6 +59,38 @@ public partial class TestEdgeGlow : YuukiTestScene
             cycle.Running = false;
             glow.GlowColor = JudgementColors.For(ScoreRank.S);
         });
+    }
+
+    /// <summary>
+    /// On a screen with a notch and bars, bleeding, it lights the screen's real edges rather than the safe area's (as the
+    /// results screen has it).
+    /// </summary>
+    [Test]
+    public void TestReachesTheScreensEdges()
+    {
+        SafeAreaDefiningContainer screen = null!;
+        EdgeGlow bleeding = null!;
+
+        AddStep("a screen with a notch and bars", () =>
+        {
+            Clear();
+
+            Add(screen = new SafeAreaDefiningContainer
+            {
+                RelativeSizeAxes = Axes.Both,
+                OverrideSafeArea = new MarginPadding { Top = 40, Bottom = 20, Left = 30, Right = 30 },
+                Child = new SafeAreaContainer
+                {
+                    RelativeSizeAxes = Axes.Both,
+                    Children = new Drawable[]
+                    {
+                        new Box { RelativeSizeAxes = Axes.Both, Color = ColorExtensions.FromHex("#2A2F45") },
+                        bleeding = new EdgeGlow { Bleed = Edges.All, GlowColor = JudgementColors.For(ScoreRank.S), Intensity = 0.8f }
+                    }
+                }
+            });
+        });
+        AddUntilStep("the whole screen", () => Math.Abs(bleeding.DrawSize.X - screen.DrawSize.X) < 1 && Math.Abs(bleeding.DrawSize.Y - screen.DrawSize.Y) < 1);
     }
 
     /// <summary>

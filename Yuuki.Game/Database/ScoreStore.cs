@@ -6,6 +6,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
+using System.Threading.Tasks;
 using Sakura.Framework.Logging;
 using Sakura.Framework.Platform;
 using Yuuki.Game.Beatmaps;
@@ -35,6 +36,9 @@ public class ScoreStore
     /// Fired after a play is added, so screens showing counts or rankings can refresh.
     /// </summary>
     public event Action<ScoreInfo>? ScoreAdded;
+
+    // The last write off the update thread: each waits for the one before.
+    private Task writing = Task.CompletedTask;
 
     public ScoreStore(Storage? storage)
     {
@@ -161,6 +165,39 @@ public class ScoreStore
               .Take(count)
               .ToList();
 
+    /// <summary>
+    /// Saves the history after plays in it have been changed in place, on a thread from the pool, after any write still
+    /// going.
+    /// </summary>
+    /// <returns>When it's written.</returns>
+    public Task SaveChanges()
+    {
+        ScoreInfo[] snapshot = scores.ToArray();
+        return writing = writing.ContinueWith(_ => write(snapshot), TaskScheduler.Default);
+    }
+
+    /// <summary>
+    /// Copies the history aside as <paramref name="name"/>, beside it, on a thread from the pool, after any write still
+    /// going; a copy already there is kept, so it stays the one from before the first change.
+    /// </summary>
+    /// <returns>When it's copied.</returns>
+    public Task BackUp(string name) => writing = writing.ContinueWith(_ =>
+    {
+        if (storage == null || !storage.Exists(file_name) || storage.Exists(name))
+            return;
+
+        try
+        {
+            using Stream history = storage.GetStream(file_name);
+            using Stream copy = storage.CreateFileSafely(name);
+            history.CopyTo(copy);
+        }
+        catch (Exception e)
+        {
+            Logger.Error($"Failed to back up the score history to {name}.", e);
+        }
+    }, TaskScheduler.Default);
+
     private void load()
     {
         if (storage == null || !storage.Exists(file_name))
@@ -189,6 +226,13 @@ public class ScoreStore
 
     private void save()
     {
+        // After any write still going: they're one at a time, and in order.
+        writing.Wait();
+        write(scores);
+    }
+
+    private void write(IReadOnlyList<ScoreInfo> plays)
+    {
         if (storage == null)
             return;
 
@@ -196,7 +240,7 @@ public class ScoreStore
         {
             // Written to a temporary file and moved into place, so a crash mid-write can't corrupt it.
             using Stream stream = storage.CreateFileSafely(file_name);
-            JsonSerializer.Serialize(stream, scores);
+            JsonSerializer.Serialize(stream, plays);
         }
         catch (Exception e)
         {
