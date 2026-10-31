@@ -74,16 +74,17 @@ public partial class TestScoreScreenInput : YuukiManualInputManagerTestScene
         PillButton shift = null!;
 
         AddUntilStep("the shift offered", () => (shift = descendants(screen).OfType<PillButton>().FirstOrDefault(p => p.Text.StartsWith("Shift timing", System.StringComparison.Ordinal))!) != null);
-        AddWaitStep("let the stats slide in", 800);
-        // The window's short (800 by 600 headless): the timing is below the stats' fold.
-        AddStep("scroll to it", () => descendants(screen).OfType<YuukiScrollableContainer>().First().ScrollToEnd(false));
+        AddStep("more info", () => screen.ShowPage(true));
+        AddWaitStep("let it come in", 800);
+        // The window's short (800 by 600 headless): the timing card is below the page's fold.
+        AddStep("scroll to it", () => descendants(screen).OfType<YuukiScrollableContainer>().First(scroll => descendants(scroll).Contains(screen.MoreInfo)).ScrollToEnd(false));
         AddStep("click it", () =>
         {
             InputManager.MoveMouseTo(shift);
             InputManager.Click(MouseButton.Left);
         });
         AddAssert("the timing moved", () => config.Get<int>(YuukiSetting.AudioOffset).Value == -25);
-        AddAssert("and it didn't skip", () => screen.RevealTime < screen.Timeline.FirstLanding - RevealTimeline.SKIP_LEAD);
+        AddAssert("still on more info", () => screen.ShowingMoreInfo);
     }
 
     private static GameplayResult leaning(double error) => new GameplayResult
