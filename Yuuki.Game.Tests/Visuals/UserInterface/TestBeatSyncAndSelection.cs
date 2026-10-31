@@ -352,7 +352,7 @@ public partial class TestBeatSyncAndSelection : TestScene
         AddStep("as a strip", () => orientation.Value = CarouselOrientation.Horizontal);
         AddStep("show the song again", () => setCard.Apply(set, 0));
         AddAssert("the song still knows its range", () => setCard.LaneText == "4-7K");
-        AddAssert("each difficulty's caption has its count", () => texts(fourCard).Count(t => t.StartsWith("4K", StringComparison.Ordinal)) == 2);
+        AddAssert("each difficulty's caption has its count", () => fourCard.LaneText == "4K" && caption(fourCard).StartsWith("4K", StringComparison.Ordinal));
     }
 
     /// <summary>
@@ -395,6 +395,15 @@ public partial class TestBeatSyncAndSelection : TestScene
             foreach (var c in container.Children.SelectMany(covers))
                 yield return c;
         }
+    }
+
+    // The line under a difficulty's tile: its lanes, and its mapper if it has one.
+    private static string caption(Drawable root)
+    {
+        if (root is ScrollingText scrolling && scrolling.Text.Contains('K', StringComparison.Ordinal))
+            return scrolling.Text;
+
+        return root is Container container ? container.Children.Select(caption).FirstOrDefault(c => c.Length > 0) ?? string.Empty : string.Empty;
     }
 
     private static IEnumerable<string> texts(Drawable root)
