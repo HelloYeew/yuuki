@@ -28,7 +28,6 @@ using Yuuki.Game.Audio;
 using Yuuki.Game.Configurations;
 using Yuuki.Game.Database;
 using Yuuki.Game.Gameplay;
-using Yuuki.Game.Graphics;
 using Yuuki.Game.Graphics.Colors;
 using Yuuki.Game.Graphics.Containers;
 using Yuuki.Game.Graphics.Text;
@@ -291,10 +290,7 @@ public partial class SettingsOverlay : FocusedOverlayContainer
                 "speech", "character", "results", "tsumugi", "voicevox", "subtitles"),
             settingRow("Output device", "Where sound plays. The system default follows your system as its choice changes.",
                 outputDeviceDropdown(frameworkConfigManager.Get<string>(FrameworkSetting.AudioDevice)),
-                "device", "output", "speaker", "headphone", "bluetooth"),
-            phone ? null : settingRow("Audio driver", "The audio backend sound plays through.",
-                dropdown(frameworkConfigManager.Get<AudioBackend>(FrameworkSetting.AudioBackend), AudioBackends.GetSuitableBackends()),
-                "device", "output", "speaker", "headphone"));
+                "device", "output", "speaker", "headphone", "bluetooth"));
 
         // Everything the setup screen before a song offers, so it can be set up without picking one.
         addSection(content, IconUsage.SportsEsports, "Gameplay",
@@ -420,6 +416,9 @@ public partial class SettingsOverlay : FocusedOverlayContainer
                 dropdown(frameworkConfigManager.Get<int>(FrameworkSetting.AudioDeviceBufferFrames), new[] { 128, 256, 512, 1024, 2048 },
                     frames => $"{frames} frames"),
                 "delay", "stutter", "glitch"),
+            phone ? null : settingRow("Audio driver", "The audio backend sound plays through.",
+                dropdown(frameworkConfigManager.Get<AudioBackend>(FrameworkSetting.AudioBackend), AudioBackends.GetSuitableBackends()),
+                "device", "output", "speaker", "headphone"),
             phone ? null : settingRow("Relative mouse mode", "Lock and hide the cursor, reading raw mouse movement.",
                 toggle(frameworkConfigManager.Get<bool>(FrameworkSetting.RelativeMouseMode)),
                 "raw input", "cursor"),
@@ -427,12 +426,13 @@ public partial class SettingsOverlay : FocusedOverlayContainer
                 multiplierSlider(frameworkConfigManager.Get<double>(FrameworkSetting.CursorSensitivity), 0.1, 4),
                 "mouse", "speed", "velocity", "raw input"));
 
-        // Who and what the game is made with: its version and framework, then the voice, with links to them.
-        addSection(content, IconUsage.Info, "About", true,
-            createAbout(),
+        addSection(content, IconUsage.Info, "About",
             settingRow("Voice", $"Yuuki's voice on the results screen is 春日部つむぎ, made with VOICEVOX, a free text-to-speech engine. {ResultsVoice.CREDIT}",
                 links(("春日部つむぎ", ResultsVoice.CREDIT_URL), ("VOICEVOX", voicevox_url)),
                 "credits", "acknowledgements", "tsumugi", "kasukabe", "voicevox", "speech"));
+
+        // Under it all, whatever's searched for: not a section, so a search doesn't hide it.
+        content.Add(createAbout());
 
         searchBox.Text.BindValueChanged(e => applySearch(e.NewValue));
 
@@ -515,56 +515,40 @@ public partial class SettingsOverlay : FocusedOverlayContainer
     };
 
     // A row the platform doesn't have comes as null, and is left out.
-    private void addSection(FlowContainer content, IconUsage icon, string title, params Drawable?[] rows) => addSection(content, icon, title, false, rows);
-
-    /// <param name="separated">Whether a line sets it apart from the sections above, over its title.</param>
-    private void addSection(FlowContainer content, IconUsage icon, string title, bool separated, params Drawable?[] rows)
+    private void addSection(FlowContainer content, IconUsage icon, string title, params Drawable?[] rows)
     {
-        var heading = new List<Drawable>();
-
-        if (separated)
-        {
-            heading.Add(new Box
-            {
-                RelativeSizeAxes = Axes.X,
-                Height = 2,
-                Color = palette.Text,
-                Alpha = 0.15f
-            });
-        }
-
         var section = new FlowContainer
         {
             RelativeSizeAxes = Axes.X,
             AutoSizeAxes = Axes.Y,
             Direction = FlowDirection.Vertical,
             Spacing = new Vector2(0, 22),
-            Children = heading.Append(new FlowContainer
+            Child = new FlowContainer
+            {
+                AutoSizeAxes = Axes.Both,
+                Direction = FlowDirection.Horizontal,
+                Spacing = new Vector2(12, 0),
+                Children = new Drawable[]
                 {
-                    AutoSizeAxes = Axes.Both,
-                    Direction = FlowDirection.Horizontal,
-                    Spacing = new Vector2(12, 0),
-                    Children = new Drawable[]
+                    new IconSprite
                     {
-                        new IconSprite
-                        {
-                            Anchor = Anchor.CentreLeft,
-                            Origin = Anchor.CentreLeft,
-                            Icon = icon,
-                            IconSize = 30,
-                            Filled = true,
-                            Color = palette.Control
-                        },
-                        new SpriteText
-                        {
-                            Anchor = Anchor.CentreLeft,
-                            Origin = Anchor.CentreLeft,
-                            Text = title,
-                            Font = YuukiFontUsage.GetFontUsage(Typeface.Quicksand, 32, FontWeight.Bold),
-                            Color = palette.Control
-                        }
+                        Anchor = Anchor.CentreLeft,
+                        Origin = Anchor.CentreLeft,
+                        Icon = icon,
+                        IconSize = 30,
+                        Filled = true,
+                        Color = palette.Control
+                    },
+                    new SpriteText
+                    {
+                        Anchor = Anchor.CentreLeft,
+                        Origin = Anchor.CentreLeft,
+                        Text = title,
+                        Font = YuukiFontUsage.GetFontUsage(Typeface.Quicksand, 32, FontWeight.Bold),
+                        Color = palette.Control
                     }
-                }).ToArray()
+                }
+            }
         };
 
         foreach (Drawable? row in rows)
@@ -612,6 +596,14 @@ public partial class SettingsOverlay : FocusedOverlayContainer
         // What's left starts from the top; the old position could be past the end of it.
         scroll.ScrollToStart(false);
     }
+
+    private Drawable separator() => new Box
+    {
+        RelativeSizeAxes = Axes.X,
+        Height = 2,
+        Color = palette.Text,
+        Alpha = 0.15f
+    };
 
     private static bool matches(string term, string word) => term.Contains(word, StringComparison.OrdinalIgnoreCase);
 
@@ -1248,7 +1240,7 @@ public partial class SettingsOverlay : FocusedOverlayContainer
     };
 
     /// <summary>
-    /// The top of the About section: the game's logo, version and build, and the framework it runs on.
+    /// The foot of the settings, under a line: the game's logo, version and build, and the framework it runs on.
     /// </summary>
     private Drawable createAbout()
     {
@@ -1263,6 +1255,13 @@ public partial class SettingsOverlay : FocusedOverlayContainer
             Spacing = new Vector2(0, 24),
             Children = new Drawable[]
             {
+                new Box
+                {
+                    RelativeSizeAxes = Axes.X,
+                    Height = 2,
+                    Color = palette.Text,
+                    Alpha = 0.15f
+                },
                 new Container
                 {
                     RelativeSizeAxes = Axes.X,
