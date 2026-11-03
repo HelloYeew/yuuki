@@ -24,10 +24,39 @@ public partial class TestScoreScreen : TestYuukiScreenStack
     // A config so the "shift timing" suggestion shows (the built runs lean late).
     private readonly YuukiConfigManager config = new YuukiInMemoryConfigManager();
 
+    private static readonly BeatmapSet song = new BeatmapSet
+    {
+        ID = 73,
+        Title = "Dummy Song",
+        TitleUnicode = "ダミーソング",
+        Artist = "Dummy Artist",
+        ArtistUnicode = "ダミーアーティスト",
+        Source = "Dummy Source",
+        SourceUnicode = "ダミーソース",
+        TotalLength = 120000,
+        BPM = 180,
+        Creator = "Tester"
+    };
+
+    private readonly WorkingBeatmap workingBeatmap = new WorkingBeatmap
+    {
+        BeatmapSet = song,
+        Beatmap = new Beatmap
+        {
+            ID = 73,
+            BeatmapSet = song,
+            DifficultyName = "Expert",
+            Creator = "Tester",
+            DifficultyRating = 10.4,
+            LaneCount = 4
+        }
+    };
+
     [BackgroundDependencyLoader]
     private void load()
     {
         Cache(config);
+        Cache(workingBeatmap);
     }
 
     [Test]
