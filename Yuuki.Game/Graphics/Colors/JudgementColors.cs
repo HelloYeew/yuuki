@@ -37,6 +37,11 @@ public static class JudgementColors
     /// </summary>
     public static readonly Color SS = HeroColors.YUUNA.Main;
 
+    /// <summary>
+    /// FAILED in the ring, in place of a rank: a dulled red, sorry rather than alarming.
+    /// </summary>
+    public static readonly Color FAILED = ColorExtensions.FromHex("#C46A6A");
+
     private static readonly Color bloom_deep = BLOOM.Darken(0.35f);
     private static readonly Color critical_deep = CRITICAL.Darken(0.35f);
     private static readonly Color break_deep = BREAK.Darken(0.35f);

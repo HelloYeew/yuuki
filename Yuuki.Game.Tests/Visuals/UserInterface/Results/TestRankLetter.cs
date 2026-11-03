@@ -44,7 +44,27 @@ public partial class TestRankLetter : YuukiTestScene
             letter.Crack(now + 520);
             Scheduler.AddDelayed(() => letter.Land(ScoreRank.A, JudgementColors.For(ScoreRank.A), letter.Clock.CurrentTime + RankLetter.FALL), 1180);
         });
+        AddStep("fail", () => letter.LandFailed());
+        AddStep("land S after FAILED", () => letter.Land(ScoreRank.S, JudgementColors.For(ScoreRank.S)));
         AddStep("clear", () => letter.Clear());
+    }
+
+    /// <summary>
+    /// A run that failed: FAILED eases in where a rank drops, and isn't there at all before its time (a rank is, falling).
+    /// Landing a rank after it shows the rank again.
+    /// </summary>
+    [Test]
+    public void TestFailed()
+    {
+        AddSliderStep("zoom", 0.5f, 3f, 1.5f, scale => letter.Scale = new Vector2(scale));
+        AddStep("fail in half a second", () => letter.LandFailed(letter.Clock.CurrentTime + 500));
+        AddAssert("it says FAILED", () => letter.Failed && letter.Text == RankLetter.FAILED_TEXT);
+        AddAssert("unseen before its time", () => letter.Children[0].Alpha == 0);
+        AddUntilStep("there, at its size", () => letter.Children[0].Alpha == 1 && Precision.AlmostEquals(letter.Children[0].Scale.X, 1, 1e-3f));
+        AddStep("land A", () => letter.Land(ScoreRank.A, JudgementColors.For(ScoreRank.A)));
+        AddAssert("it says A again", () => !letter.Failed && letter.Text == "A" && letter.Rank == ScoreRank.A);
+        AddStep("fail again", () => letter.LandFailed());
+        AddAssert("it says FAILED again", () => letter.Text == RankLetter.FAILED_TEXT);
     }
 
     /// <summary>

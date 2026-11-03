@@ -97,6 +97,22 @@ public class BestMarkTest
         }
     }
 
+    /// <summary>
+    /// A play that ran out of health isn't ranked: its chip says so, in no rank's color, and has no medal whatever it held.
+    /// </summary>
+    [Test]
+    public void AFailedPlayIsMarkedFailed()
+    {
+        var pieces = BestMark.PiecesFor(new ScoreInfo { Rank = ScoreRank.A, Failed = true, IsFullCombo = true })!.Value;
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(pieces.Rank, Is.EqualTo(BestMark.FAILED));
+            Assert.That(pieces.Rank.Label, Is.EqualTo("FAILED"));
+            Assert.That(pieces.Medal, Is.Null);
+        }
+    }
+
     [Test]
     public void EveryBladeReads()
     {
@@ -104,7 +120,8 @@ public class BestMarkTest
         {
             new ScoreInfo { Rank = rank },
             new ScoreInfo { Rank = rank, IsFullCombo = true },
-            new ScoreInfo { Rank = rank, IsFullCombo = true, IsAllPerfect = true }
+            new ScoreInfo { Rank = rank, IsFullCombo = true, IsAllPerfect = true },
+            new ScoreInfo { Rank = rank, Failed = true }
         });
 
         using (Assert.EnterMultipleScope())

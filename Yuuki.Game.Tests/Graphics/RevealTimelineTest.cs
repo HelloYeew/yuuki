@@ -116,4 +116,31 @@ public class RevealTimelineTest
         Assert.That(timeline.Best, Is.EqualTo(timeline.Badge + RevealTimeline.BEST_AFTER));
         Assert.That(timeline.GatherAt(4300), Is.EqualTo(0));
     }
+
+    /// <summary>
+    /// A run that failed: one fill with nothing building up, FAILED just after it settles, then the music. No badge, never
+    /// compared with the best, and nothing lost or full, whatever it was told.
+    /// </summary>
+    [Test]
+    public void TestAFailedRun()
+    {
+        var timeline = new RevealTimeline(0.97, true, true, true, failed: true);
+
+        Assert.That(timeline.Failed);
+        Assert.That(timeline.RankLost, Is.False);
+        Assert.That(timeline.FullBloom, Is.False);
+        Assert.That(timeline.FirstLanding, Is.EqualTo(2620));
+        Assert.That(timeline.Landing, Is.EqualTo(2620));
+        Assert.That(timeline.Badge, Is.NaN);
+        Assert.That(timeline.Best, Is.EqualTo(double.PositiveInfinity));
+        Assert.That(timeline.Music, Is.EqualTo(3520));
+        Assert.That(timeline.Voice, Is.EqualTo(3870));
+        Assert.That(timeline.End, Is.EqualTo(4220));
+
+        // Nothing charges, but the fill still crosses the ranks for its color, and ends on the accuracy.
+        Assert.That(Enumerable.Range(0, 45).Select(i => timeline.ChargeAt(i * 100)), Has.All.EqualTo(0));
+        Assert.That(timeline.Crossings.Last().Rank, Is.EqualTo(ScoreRank.S));
+        Assert.That(timeline.FillAt(timeline.End), Is.EqualTo(0.97f).Within(1e-6));
+        Assert.That(timeline.SkipFrom(500), Is.EqualTo(2400));
+    }
 }

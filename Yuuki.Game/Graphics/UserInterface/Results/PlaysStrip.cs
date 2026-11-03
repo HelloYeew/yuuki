@@ -19,7 +19,8 @@ namespace Yuuki.Game.Graphics.UserInterface.Results;
 /// <summary>
 /// Where the run stands among the plays of its difficulty, along the bottom of the results' summary: the best's mark (the
 /// run's stamping over it when it's a new best), its place of how many and when it was played (the footer that says so
-/// is hidden on a phone), and the best it's compared with.
+/// is hidden on a phone), and the best it's compared with. A run that failed isn't placed: it says where it ran out, and
+/// that the best stays as it was (<see cref="Failed"/>).
 /// </summary>
 public partial class PlaysStrip : Container
 {
@@ -35,20 +36,36 @@ public partial class PlaysStrip : Container
     /// <param name="place">Its place among the difficulty's plays, from 1.</param>
     /// <param name="plays">How many plays of the difficulty there are, the run's among them.</param>
     public PlaysStrip(YuukiColorPalette palette, ScoreInfo run, ScoreInfo? best, bool isNewBest, int place, int plays)
+        : this(palette, best ?? (isNewBest ? null : run), run, isNewBest,
+            (isNewBest ? $"New best · #1 of {plays} plays" : $"#{place} of {plays} plays") + $" · played {DateUtility.FormatPlayed(run.Date)}",
+            best == null ? isNewBest || place == 1 ? "Your first play of this difficulty" : ""
+            : $"{(isNewBest ? "Before" : "Your best")}: {((int)best.Score).ToString("D7")} · {(best.Accuracy * 100).ToString("0.00", CultureInfo.InvariantCulture)}% · {DateUtility.Ago(best.Date)}")
+    {
+    }
+
+    /// <summary>
+    /// A run that ran out of health: not placed among the plays, so it says where it ran out and how many tries the song
+    /// has had today, and the best's mark stays (FAILED where there's no best yet).
+    /// </summary>
+    /// <param name="palette">Its colors.</param>
+    /// <param name="run">The run, as saved.</param>
+    /// <param name="best">The best, which the run leaves as it was; null where there's none.</param>
+    /// <param name="failedAt">Where health ran out, in ms of the song; null where that isn't known.</param>
+    /// <param name="triesToday">How many plays of the difficulty there have been today, the run's among them.</param>
+    public static PlaysStrip Failed(YuukiColorPalette palette, ScoreInfo run, ScoreInfo? best, double? failedAt, int triesToday) =>
+        new PlaysStrip(palette, best ?? run, run, false, FailedRun.Standing(failedAt), FailedRun.Tries(triesToday, best?.Score, best?.Accuracy));
+
+    private PlaysStrip(YuukiColorPalette palette, ScoreInfo? shown, ScoreInfo run, bool isNewBest, string where, string compared)
     {
         newBest = isNewBest;
 
         RelativeSizeAxes = Axes.X;
         AutoSizeAxes = Axes.Y;
 
-        string where = (isNewBest ? $"New best · #1 of {plays} plays" : $"#{place} of {plays} plays") + $" · played {DateUtility.FormatPlayed(run.Date)}";
-        string compared = best == null ? isNewBest || place == 1 ? "Your first play of this difficulty" : ""
-            : $"{(isNewBest ? "Before" : "Your best")}: {((int)best.Score).ToString("D7")} · {(best.Accuracy * 100).ToString("0.00", CultureInfo.InvariantCulture)}% · {DateUtility.Ago(best.Date)}";
-
         // The mark shown at first is the best's; a new best's own stamps over it.
         before = new BestMark(17) { Anchor = Anchor.CentreLeft, Origin = Anchor.CentreLeft };
         after = new BestMark(17) { Anchor = Anchor.CentreLeft, Origin = Anchor.CentreLeft, AlwaysPresent = true };
-        before.SetBest(best ?? (isNewBest ? null : run));
+        before.SetBest(shown);
         after.SetBest(run);
         after.Alpha = 0;
         hadBest = before.Alpha > 0;

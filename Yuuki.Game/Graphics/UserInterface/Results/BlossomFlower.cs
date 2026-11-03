@@ -116,7 +116,7 @@ public partial class BlossomFlower : Container
     public float Grow { get; set; } = 1;
 
     /// <summary>
-    /// Greyed out, as on a failed run.
+    /// Greyed out, as on a failed run: it opens without popping past its size or glowing.
     /// </summary>
     public bool Greyed { get; set; }
 
@@ -290,7 +290,9 @@ public partial class BlossomFlower : Container
         Vector2 offset = Vector2.Zero;
         Color color = Greyed ? FlowerColor.Blend(grey, 0.62f) : FlowerColor;
 
-        if (open)
+        if (open && Greyed)
+            scale = outCubic(clamp01(sinceOpen / pop_duration));
+        else if (open)
         {
             // Pops a little past its size, then settles.
             scale = sinceOpen < pop_duration

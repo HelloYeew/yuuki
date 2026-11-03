@@ -33,6 +33,7 @@ public partial class ResultsSoundPlayer : Component
     private const string petals = "petals.wav";
     private const string bloom_gather = "fb-charge.wav";
     private const string full_bloom = "fullbloom.wav";
+    private const string fail = "fail.wav";
 
     /// <summary>
     /// How long the charge rises before it falls into the hit, in ms: the hit lands this long after it starts.
@@ -62,7 +63,7 @@ public partial class ResultsSoundPlayer : Component
             return;
 
         // Preloaded so the first tick of the fill doesn't hitch on a disk read.
-        foreach (string file in new[] { tick, band, charge, impact_s, impact_a, impact_b, impact_low, lost, miss, full_combo, all_perfect, best, petals, bloom_gather, full_bloom })
+        foreach (string file in new[] { tick, band, charge, impact_s, impact_a, impact_b, impact_low, lost, miss, full_combo, all_perfect, best, petals, bloom_gather, full_bloom, fail })
             samples[file] = sampleStore!.Get(sample_directory + file);
     }
 
@@ -108,6 +109,11 @@ public partial class ResultsSoundPlayer : Component
     public void PlayBadge(bool allPerfect) => play(allPerfect ? all_perfect : full_combo);
 
     public void PlayNewBest() => play(best);
+
+    /// <summary>
+    /// FAILED coming in, in place of a rank's hit: soft and falling.
+    /// </summary>
+    public void PlayFail() => play(fail);
 
     /// <summary>
     /// The swirl of petals after a good rank lands.

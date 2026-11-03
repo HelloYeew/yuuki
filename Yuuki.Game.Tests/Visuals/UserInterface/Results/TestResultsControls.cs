@@ -2,6 +2,8 @@
 // See the LICENSE file for full license text.
 
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using NUnit.Framework;
 using Sakura.Framework.Allocation;
 using Sakura.Framework.Extensions.ColorExtensions;
@@ -14,6 +16,7 @@ using Yuuki.Game.Beatmaps;
 using Yuuki.Game.Configurations;
 using Yuuki.Game.Gameplay.Scoring;
 using Yuuki.Game.Graphics.Colors;
+using Yuuki.Game.Graphics.UserInterface;
 using Yuuki.Game.Graphics.UserInterface.Results;
 using Yuuki.Game.Resources;
 
@@ -176,5 +179,62 @@ public partial class TestResultsControls : YuukiTestScene
 
             newBest.Compare(1);
         });
+    }
+
+    /// <summary>
+    /// A run that failed isn't placed: it says where it ran out and how many tries today, the best's mark stays as it
+    /// was (FAILED where there's no best yet), and comparing it changes nothing.
+    /// </summary>
+    [Test]
+    public void TestWhereAFailedRunStands()
+    {
+        AddSliderStep("tries today", 1, 12, 3, tries => showFailedStrips(tries));
+        AddStep("three tries", () => showFailedStrips(3));
+        AddAssert("the best's mark stays, compared or not", () => marksShown(strips.Children[0]).SequenceEqual(new[] { "S", "FC" }));
+        AddAssert("FAILED where there's no best", () => marksShown(strips.Children[1]).SequenceEqual(new[] { "FAILED" }));
+        AddAssert("where it ran out, and the tries", () => textsOf(strips.Children[0]).Contains("Failed at 1:47 · not ranked")
+                                                         && textsOf(strips.Children[0]).Contains("Try 3 today · your best stays 0987654 · 96.13%")
+                                                         && textsOf(strips.Children[2]).Contains("Failed · not ranked")
+                                                         && textsOf(strips.Children[2]).Contains("Try 3 today · no best yet"));
+    }
+
+    // The labels of the marks a strip shows (its hidden one, a new best's, left out).
+    private static IEnumerable<string> marksShown(Drawable strip) =>
+        descendants(strip).OfType<BestMark>().Where(mark => mark.Alpha > 0)
+                          .SelectMany(mark => mark.Children.OfType<BestMark.Blade>().Where(blade => blade.Alpha > 0))
+                          .SelectMany(blade => descendants(blade).OfType<SpriteText>())
+                          .Select(text => text.Text);
+
+    private static IEnumerable<string> textsOf(Drawable drawable) => descendants(drawable).OfType<SpriteText>().Select(text => text.Text);
+
+    private static IEnumerable<Drawable> descendants(Drawable drawable)
+    {
+        yield return drawable;
+
+        if (drawable is Container container)
+        {
+            foreach (Drawable child in container.Children)
+            {
+                foreach (Drawable d in descendants(child))
+                    yield return d;
+            }
+        }
+    }
+
+    private void showFailedStrips(int tries)
+    {
+        YuukiColorPalette palette = ResultsTestRuns.Palette;
+        var best = new ScoreInfo { Score = 987_654, Accuracy = 0.9613, Rank = ScoreRank.S, IsFullCombo = true, Date = DateTimeOffset.Now.AddDays(-3) };
+        var run = new ScoreInfo { Score = 412_000, Accuracy = 0.8812, Rank = ScoreRank.B, Failed = true, Date = DateTimeOffset.Now };
+
+        PlaysStrip withBest;
+        strips.Children = new Drawable[]
+        {
+            withBest = PlaysStrip.Failed(palette, run, best, 107_400, tries),
+            PlaysStrip.Failed(palette, run, null, 107_400, tries),
+            PlaysStrip.Failed(palette, run, null, null, tries)
+        };
+
+        withBest.Compare(1);
     }
 }

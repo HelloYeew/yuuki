@@ -62,6 +62,14 @@ public class RevealTimeline
     public const double GATHER_DURATION = 640;
     public const double CUT_IN_DURATION = 1150;
 
+    /// <summary>
+    /// A run that failed has no charge, nothing to fall and no badge: FAILED comes in this long after the fill settles,
+    /// and the music comes in <see cref="FAILED_MUSIC_AFTER"/> after it came in.
+    /// </summary>
+    public const double FAILED_AFTER_FILL = 100;
+
+    public const double FAILED_MUSIC_AFTER = 900;
+
     public const double BEST_AFTER = 540;
     public const double MUSIC_AFTER_BEST = 700;
     public const double VOICE_AFTER_MUSIC = 350;
@@ -99,9 +107,15 @@ public class RevealTimeline
     public double ChargeFull => ChargeStart + CHARGE_DURATION;
 
     /// <summary>
-    /// When the first rank lands: the S that breaks, for a run a miss kept from it, or the rank.
+    /// The run ran out of health: nothing builds up to the landing, and FAILED comes in quietly in place of a rank.
     /// </summary>
-    public double FirstLanding => ChargeFull + STILL + LETTER_FALL;
+    public readonly bool Failed;
+
+    /// <summary>
+    /// When the first rank lands: the S that breaks, for a run a miss kept from it, or the rank; FAILED, for a run that
+    /// failed.
+    /// </summary>
+    public double FirstLanding => Failed ? FillEnd + FAILED_AFTER_FILL : ChargeFull + STILL + LETTER_FALL;
 
     /// <summary>
     /// When the S breaks; NaN for a run that keeps its rank.
@@ -114,12 +128,12 @@ public class RevealTimeline
     public readonly double Landing;
 
     /// <summary>
-    /// When the full combo's (or all perfect's) badge stamps; NaN without one.
+    /// When the full combo's (or all perfect's) badge stamps; NaN without one, as for a run that failed.
     /// </summary>
     public readonly double Badge;
 
     /// <summary>
-    /// When the run is compared with the best (and a new best stamps).
+    /// When the run is compared with the best (and a new best stamps); never, for a run that failed, which isn't.
     /// </summary>
     public readonly double Best;
 
@@ -134,7 +148,7 @@ public class RevealTimeline
 
     public bool FullBloom => !double.IsNaN(Bloom);
 
-    public double Music => Best + MUSIC_AFTER_BEST;
+    public double Music => Failed ? Landing + FAILED_MUSIC_AFTER : Best + MUSIC_AFTER_BEST;
 
     public double Voice => Music + VOICE_AFTER_MUSIC;
 
@@ -145,14 +159,25 @@ public class RevealTimeline
 
     public bool RankLost => !double.IsNaN(Crack);
 
-    public RevealTimeline(double accuracy, bool rankLost, bool fullCombo, bool fullBloom = false)
+    public RevealTimeline(double accuracy, bool rankLost, bool fullCombo, bool fullBloom = false, bool failed = false)
     {
         Target = (float)Math.Clamp(accuracy, 0, 1);
+        Failed = failed;
 
         Crossings = ScoreRankExtensions.THRESHOLD_RANKS
                                        .Where(rank => Target + 1e-9 >= rank.MinimumAccuracy() && Target > 0)
                                        .Select(rank => (rank, FILL_START + timeToReach((float)rank.MinimumAccuracy() / Target) * FILL_DURATION))
                                        .ToArray();
+
+        if (failed)
+        {
+            // Not ranked, so nothing is lost or full, no badge, and nothing to compare. The ranks it crossed are still
+            // worked out: the fill's color follows them.
+            Crack = Gather = Bloom = BloomBadge = Badge = double.NaN;
+            Landing = FirstLanding;
+            Best = double.PositiveInfinity;
+            return;
+        }
 
         if (rankLost)
         {
@@ -178,7 +203,8 @@ public class RevealTimeline
         Best = (FullBloom ? BloomBadge : fullCombo ? Badge : Landing) + BEST_AFTER;
     }
 
-    public static RevealTimeline For(GameplayResult result) => new RevealTimeline(result.Accuracy, result.RankLostToMiss, result.IsFullCombo, result.IsFullBloom);
+    public static RevealTimeline For(GameplayResult result) =>
+        new RevealTimeline(result.Accuracy, result.RankLostToMiss, result.IsFullCombo, result.IsFullBloom, result.Failed);
 
     /// <summary>
     /// How far the ring has gathered itself at <paramref name="time"/>, 0–1: building over the gather, short of the bloom by
@@ -216,9 +242,10 @@ public class RevealTimeline
     public float RollAt(double time) => ease(FillProgress(time));
 
     /// <summary>
-    /// How charged the ring is at <paramref name="time"/>, 0–1: building before the first landing, gone once it lands.
+    /// How charged the ring is at <paramref name="time"/>, 0–1: building before the first landing, gone once it lands;
+    /// never, for a run that failed.
     /// </summary>
-    public float ChargeAt(double time) => time >= FirstLanding ? 0 : (float)Math.Clamp((time - ChargeStart) / CHARGE_DURATION, 0, 1);
+    public float ChargeAt(double time) => Failed || time >= FirstLanding ? 0 : (float)Math.Clamp((time - ChargeStart) / CHARGE_DURATION, 0, 1);
 
     /// <summary>
     /// When the fill ticks: every <see cref="TICK_INTERVAL"/> while it's in the first three quarters of its motion.

@@ -1,6 +1,7 @@
 // This code is part of yuuki. project. Licensed under the MIT License.
 // See the LICENSE file for full license text.
 
+using Sakura.Framework.Extensions.ColorExtensions;
 using Sakura.Framework.Graphics.Colors;
 using Sakura.Framework.Graphics.Containers;
 using Sakura.Framework.Graphics.Drawables;
@@ -52,13 +53,21 @@ public partial class BestMark : FlowContainer
     public readonly record struct Piece(string Label, Color Fill, Color Ink, bool Rainbow = false);
 
     /// <summary>
+    /// How a play that ran out of health is marked, in place of a rank: a pale chip with dark ink, no rank's color.
+    /// </summary>
+    public static readonly Piece FAILED = new Piece("FAILED", ColorExtensions.FromHex("#D9D4E2"), ColorExtensions.FromHex("#4A4458"));
+
+    /// <summary>
     /// The chip for <paramref name="best"/>: its rank, and its medal when it has one (a full bloom over an all perfect
-    /// over a full combo). Null when there's no best to show.
+    /// over a full combo); <see cref="FAILED"/> alone for a play that failed. Null when there's no best to show.
     /// </summary>
     public static (Piece Rank, Piece? Medal)? PiecesFor(ScoreInfo? best)
     {
         if (best == null)
             return null;
+
+        if (best.Failed)
+            return (FAILED, null);
 
         var rank = piece(best.Rank.ToString(), JudgementColors.For(best.Rank));
 

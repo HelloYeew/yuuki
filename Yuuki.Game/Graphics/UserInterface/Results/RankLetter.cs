@@ -26,6 +26,17 @@ public partial class RankLetter : Container
     /// </summary>
     public const double FALL = 140;
 
+    /// <summary>
+    /// What a run that failed shows in place of a rank, set smaller than a two-letter rank to fit the ring.
+    /// </summary>
+    public const string FAILED_TEXT = "FAILED";
+
+    /// <summary>
+    /// FAILED's size against a one-letter rank's: the prototype's 62 px against its 150 px two-letter rank, as two letters
+    /// are set here.
+    /// </summary>
+    public const float FAILED_SIZE = 0.64f * 62 / 150;
+
     private static readonly Color shadow_color = ColorExtensions.FromHex("#1B1622");
 
     private readonly Container body;
@@ -34,6 +45,8 @@ public partial class RankLetter : Container
     private readonly Box slash;
 
     private ScoreRank rank = ScoreRank.D;
+    private bool failed;
+    private string shownText = string.Empty;
     private Color color = Color.White;
     private double landsAt = double.PositiveInfinity;
     private double cracksAt = double.PositiveInfinity;
@@ -89,6 +102,16 @@ public partial class RankLetter : Container
     public ScoreRank Rank => rank;
 
     /// <summary>
+    /// Whether it shows FAILED (<see cref="LandFailed"/>) in place of the rank.
+    /// </summary>
+    public bool Failed => failed;
+
+    /// <summary>
+    /// The text showing.
+    /// </summary>
+    public string Text => shownText;
+
+    /// <summary>
     /// Whether it takes the heroes' colors in turn, a Full Bloom's, rather than its own: lightened, so they read on the
     /// dark ring.
     /// </summary>
@@ -100,13 +123,25 @@ public partial class RankLetter : Container
     /// </summary>
     public void Land(ScoreRank landing, Color landingColor, double? time = null)
     {
-        if (landing != rank)
-        {
-            rank = landing;
-            setText();
-        }
+        rank = landing;
+        failed = false;
+        setText();
 
         color = landingColor;
+        landsAt = time ?? Clock.CurrentTime;
+        cracksAt = double.PositiveInfinity;
+    }
+
+    /// <summary>
+    /// Shows FAILED from <paramref name="time"/> (now if not given): it doesn't drop and hit as a rank does, but eases in
+    /// from a little larger, quietly. Anything it was doing is forgotten.
+    /// </summary>
+    public void LandFailed(double? time = null)
+    {
+        failed = true;
+        setText();
+
+        color = JudgementColors.FAILED;
         landsAt = time ?? Clock.CurrentTime;
         cracksAt = double.PositiveInfinity;
     }
@@ -128,7 +163,7 @@ public partial class RankLetter : Container
         double now = Clock.CurrentTime;
         double sinceLanding = now - landsAt;
 
-        if (sinceLanding < -FALL || double.IsNaN(sinceLanding))
+        if (sinceLanding < (failed ? 0 : -FALL) || double.IsNaN(sinceLanding))
         {
             body.Alpha = 0;
             return;
@@ -136,7 +171,13 @@ public partial class RankLetter : Container
 
         float scale, alpha;
 
-        if (sinceLanding < 0)
+        if (failed)
+        {
+            // Easing in from a little larger, with nothing to hit.
+            scale = 1.3f - 0.3f * (float)EasingFunctions.Apply(Easing.OutQuint, clamp01(sinceLanding / 400));
+            alpha = clamp01(sinceLanding / 200);
+        }
+        else if (sinceLanding < 0)
         {
             // Dropping from above its size, faster and faster, coming into view as it falls.
             float fall = (float)((sinceLanding + FALL) / FALL);
@@ -183,10 +224,15 @@ public partial class RankLetter : Container
 
     private void setText()
     {
-        string text = rank.ToString();
+        string text = failed ? FAILED_TEXT : rank.ToString();
 
-        // A two-letter rank is set smaller, to fit the ring as one does.
-        int size = (int)(text.Length > 1 ? LETTER_SIZE * 0.64f : LETTER_SIZE);
+        if (text == shownText)
+            return;
+
+        shownText = text;
+
+        // A two-letter rank is set smaller, to fit the ring as one does, and FAILED smaller again.
+        int size = (int)(failed ? LETTER_SIZE * FAILED_SIZE : text.Length > 1 ? LETTER_SIZE * 0.64f : LETTER_SIZE);
 
         letter.Text = shadow.Text = text;
         letter.Font = shadow.Font = YuukiFontUsage.GetFontUsage(Typeface.Quicksand, size, FontWeight.Bold);
