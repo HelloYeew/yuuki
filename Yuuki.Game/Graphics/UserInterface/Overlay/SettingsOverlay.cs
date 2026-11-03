@@ -1351,7 +1351,7 @@ public partial class SettingsOverlay : FocusedOverlayContainer
         Anchor = anchor,
         Origin = anchor,
         Text = text,
-        Font = YuukiFontUsage.GetFontUsage(bold ? Typeface.Quicksand : Typeface.Nunito, bold ? 18 : 15, bold ? FontWeight.Bold : FontWeight.Regular),
+        Font = YuukiFontUsage.GetFontUsage(Typeface.Quicksand, bold ? 18 : 15, bold ? FontWeight.Bold : FontWeight.Regular),
         Color = bold ? palette.Text : palette.TextMuted
     };
 
@@ -1501,8 +1501,8 @@ public partial class SettingsOverlay : FocusedOverlayContainer
             PlaceholderText = "type to search";
             ReleaseFocusOnCommit = false;
 
-            SpriteText.Font = YuukiFontUsage.GetFontUsage(Typeface.Quicksand, 22, FontWeight.Bold);
-            PlaceholderSprite.Font = YuukiFontUsage.GetFontUsage(Typeface.Quicksand, 22, FontWeight.Regular);
+            SpriteText.Font = YuukiFontUsage.GetFontUsage(Typeface.Nunito, 22, FontWeight.Bold);
+            PlaceholderSprite.Font = YuukiFontUsage.GetFontUsage(Typeface.Nunito, 22, FontWeight.Regular);
             PlaceholderSprite.Color = Color.White.WithAlpha(0.6f);
             ImeText.Font = SpriteText.Font;
 

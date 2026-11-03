@@ -192,7 +192,7 @@ public partial class OffsetStack : FlowContainer
                     Child = new SpriteText
                     {
                         Text = cells[c],
-                        Font = YuukiFontUsage.GetFontUsage(c == 0 || total ? Typeface.Quicksand : Typeface.Nunito, phone ? 18 : 15,
+                        Font = YuukiFontUsage.GetFontUsage(Typeface.Quicksand, phone ? 18 : 15,
                             c == 0 || total ? FontWeight.Bold : FontWeight.Regular),
                         Color = total && c == 1 ? palette.Control : palette.Text,
                         Alpha = c == 2 ? 0.7f : 1

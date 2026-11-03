@@ -126,7 +126,7 @@ public partial class BeatmapCard : CarouselCard<Beatmap>
                         Anchor = Anchor.Centre,
                         Origin = Anchor.Centre,
                         X = -14,
-                        Font = YuukiFontUsage.GetFontUsage(Typeface.Nunito, 34, FontWeight.ExtraBold)
+                        Font = YuukiFontUsage.GetFontUsage(Typeface.Quicksand, 34, FontWeight.Bold)
                     }
                 },
                 // Its width is the room left of the extras, set every frame, so long names scroll within it.
@@ -148,7 +148,7 @@ public partial class BeatmapCard : CarouselCard<Beatmap>
                         rowSub = new ScrollingText
                         {
                             RelativeSizeAxes = Axes.X,
-                            Font = YuukiFontUsage.GetFontUsage(Typeface.Nunito, 15, FontWeight.SemiBold)
+                            Font = YuukiFontUsage.GetFontUsage(Typeface.Quicksand, 15, FontWeight.SemiBold)
                         }
                     }
                 },
@@ -214,14 +214,14 @@ public partial class BeatmapCard : CarouselCard<Beatmap>
                         tileTier = new SpriteText
                         {
                             Position = new Vector2(10, 9),
-                            Font = YuukiFontUsage.GetFontUsage(Typeface.Nunito, 11, FontWeight.ExtraBold)
+                            Font = YuukiFontUsage.GetFontUsage(Typeface.Quicksand, 11, FontWeight.Bold)
                         },
                         tileLevel = new SpriteText
                         {
                             Anchor = Anchor.Centre,
                             Origin = Anchor.Centre,
                             Y = 6,
-                            Font = YuukiFontUsage.GetFontUsage(Typeface.Nunito, 44, FontWeight.ExtraBold)
+                            Font = YuukiFontUsage.GetFontUsage(Typeface.Quicksand, 44, FontWeight.Bold)
                         }
                     }
                 },
@@ -237,7 +237,7 @@ public partial class BeatmapCard : CarouselCard<Beatmap>
                     X = 6,
                     Y = tile_square_size + 28,
                     Width = tile_square_size + 10,
-                    Font = YuukiFontUsage.GetFontUsage(Typeface.Nunito, 12, FontWeight.SemiBold)
+                    Font = YuukiFontUsage.GetFontUsage(Typeface.Quicksand, 12, FontWeight.SemiBold)
                 }
             }
         });

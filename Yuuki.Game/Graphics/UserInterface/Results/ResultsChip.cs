@@ -102,7 +102,7 @@ public partial class ResultsChip : ClickableContainer
             Anchor = Anchor.CentreLeft,
             Origin = Anchor.CentreLeft,
             Text = text,
-            Font = YuukiFontUsage.GetFontUsage(Typeface.Nunito, 14, FontWeight.ExtraBold),
+            Font = YuukiFontUsage.GetFontUsage(Typeface.Quicksand, 14, FontWeight.Bold),
             Color = palette.Text
         });
 

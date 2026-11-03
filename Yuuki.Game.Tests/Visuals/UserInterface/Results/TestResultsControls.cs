@@ -7,11 +7,13 @@ using System.Linq;
 using NUnit.Framework;
 using Sakura.Framework.Allocation;
 using Sakura.Framework.Extensions.ColorExtensions;
+using Sakura.Framework.Graphics.Colors;
 using Sakura.Framework.Graphics.Containers;
 using Sakura.Framework.Graphics.Drawables;
 using Sakura.Framework.Graphics.Primitives;
 using Sakura.Framework.Maths;
 using Sakura.Framework.Platform;
+using Sakura.Framework.Utilities;
 using Yuuki.Game.Beatmaps;
 using Yuuki.Game.Configurations;
 using Yuuki.Game.Gameplay.Scoring;
@@ -24,7 +26,8 @@ namespace Yuuki.Game.Tests.Visuals.UserInterface.Results;
 
 /// <summary>
 /// The results' small controls and strips: the pages' tabs, More info's chips (one that starts on, one off), its header, and
-/// the summary's strip of where a run stands among its difficulty's plays.
+/// the summary's strip of where a run stands among its difficulty's plays. The backdrop stands in for the song's
+/// background: a step makes it a bright cover's.
 /// </summary>
 public partial class TestResultsControls : YuukiTestScene
 {
@@ -32,6 +35,7 @@ public partial class TestResultsControls : YuukiTestScene
     private ResultsChip filter = null!, pick = null!;
     private MoreInfoHeader header = null!;
     private FlowContainer strips = null!;
+    private Box backdrop = null!;
     private int? picked;
     private bool? filtered;
 
@@ -56,7 +60,7 @@ public partial class TestResultsControls : YuukiTestScene
             picked = null;
             filtered = null;
 
-            Add(new Box { RelativeSizeAxes = Axes.Both, Color = ColorExtensions.FromHex("#2A2F45") });
+            Add(backdrop = new Box { RelativeSizeAxes = Axes.Both, Color = ColorExtensions.FromHex("#2A2F45") });
             Add(new FlowContainer
             {
                 RelativeSizeAxes = Axes.X,
@@ -100,8 +104,71 @@ public partial class TestResultsControls : YuukiTestScene
         AddStep("click the filter", () => filter.Action!());
         AddAssert("off", () => filtered == false && !filter.On);
         AddStep("pick lane 3", () => pick.On = true);
-        AddStep("click more info", () => ((Sakura.Framework.Graphics.Containers.ClickableContainer)tabs.Children[1]).Action!());
+        AddStep("click more info", () => tabs.Tabs[1].Action!());
         AddAssert("picked", () => picked == 1 && tabs.Current == 1);
+    }
+
+    /// <summary>
+    /// The tabs sit on a plate of their own, as tall as Back (66) and slanted as it is, so their labels read whatever the
+    /// song's background is: before, they were white on the background, dimmed only a little, and near 1:1 on a bright
+    /// cover. Picked or not, each label reads on the plate.
+    /// </summary>
+    [Test]
+    public void TestTabsReadOnTheirPlate()
+    {
+        AddStep("a bright cover behind", () => backdrop.Color = ColorExtensions.FromHex("#F4EEF6"));
+        AddAssert("as tall as Back", () => Precision.AlmostEquals(tabs.DrawHeight, 66));
+        AddAssert("the plate behind every tab", () => tabs.Tabs.All(tab =>
+        {
+            Quad plate = tabs.Plate.ScreenSpaceDrawQuad, own = tab.ScreenSpaceDrawQuad;
+            return new[] { own.TopLeft, own.TopRight, own.BottomRight, own.BottomLeft }.All(corner => inside(plate, corner));
+        }));
+        AddAssert("summary's label reads on it, and more info's", labelsRead);
+        AddStep("pick more info", () => tabs.Current = 1);
+        AddAssert("and picked the other way round", labelsRead);
+        AddStep("the backdrop as it was", () => backdrop.Color = ColorExtensions.FromHex("#2A2F45"));
+    }
+
+    // Every tab's label, faded as it is, on the plate (its color as drawn): blended as the eye would see it least (in sRGB
+    // rather than the renderer's linear light, which comes out lighter on a dark plate).
+    private bool labelsRead()
+    {
+        Color plate = descendants(tabs.Plate).OfType<Box>().Single().Color;
+
+        return tabs.Tabs.All(tab =>
+        {
+            SpriteText label = descendants(tab).OfType<SpriteText>().Single();
+            Color shown = blend(label.Color, plate, label.Alpha);
+            return ColorContrast.Ratio(shown, plate) >= ColorContrast.TEXT;
+        });
+    }
+
+    private static Color blend(Color over, Color under, float alpha) => Color.FromArgb(255,
+        (int)Math.Round(over.R * alpha + under.R * (1 - alpha)),
+        (int)Math.Round(over.G * alpha + under.G * (1 - alpha)),
+        (int)Math.Round(over.B * alpha + under.B * (1 - alpha)));
+
+    // Whether a point is inside a convex quad: on the same side of each of its edges.
+    private static bool inside(Quad quad, Vector2 point)
+    {
+        Vector2[] corners = { quad.TopLeft, quad.TopRight, quad.BottomRight, quad.BottomLeft };
+        float? side = null;
+
+        for (int i = 0; i < 4; i++)
+        {
+            Vector2 a = corners[i], b = corners[(i + 1) % 4];
+            float cross = (b.X - a.X) * (point.Y - a.Y) - (b.Y - a.Y) * (point.X - a.X);
+
+            if (Math.Abs(cross) < 0.5f)
+                continue;
+
+            if (side is float s && Math.Sign(s) != Math.Sign(cross))
+                return false;
+
+            side = cross;
+        }
+
+        return true;
     }
 
     /// <summary>

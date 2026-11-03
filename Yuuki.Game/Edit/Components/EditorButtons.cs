@@ -62,7 +62,7 @@ public partial class EditorButton : Container
                 Origin = iconUsage.IsNull() ? Anchor.Centre : Anchor.CentreLeft,
                 X = iconUsage.IsNull() ? 0 : 30,
                 Text = text,
-                Font = YuukiFontUsage.GetFontUsage(Typeface.Nunito, fontSize, FontWeight.Bold)
+                Font = YuukiFontUsage.GetFontUsage(Typeface.Quicksand, fontSize, FontWeight.Bold)
             });
         }
     }

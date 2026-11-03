@@ -157,7 +157,7 @@ public partial class YuukiDropdown<T> : Container
                         Anchor = Anchor.CentreLeft,
                         Origin = Anchor.CentreLeft,
                         X = textX,
-                        Font = YuukiFontUsage.GetFontUsage(Typeface.Quicksand, 18, FontWeight.Bold),
+                        Font = YuukiFontUsage.GetFontUsage(Typeface.Nunito, 18, FontWeight.Bold),
                         Color = Color.White
                     },
                     new HoverClickSounds(null),
@@ -386,7 +386,7 @@ public partial class YuukiDropdown<T> : Container
                     Origin = Anchor.CentreLeft,
                     X = 16,
                     Text = text,
-                    Font = YuukiFontUsage.GetFontUsage(Typeface.Quicksand, 18, FontWeight.Regular),
+                    Font = YuukiFontUsage.GetFontUsage(Typeface.Nunito, 18, FontWeight.Regular),
                     Color = palette.Text
                 },
                 check = new IconSprite

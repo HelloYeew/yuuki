@@ -169,7 +169,8 @@ public partial class ScoreScreen : YuukiScreen, IHaveScreenAction
     /// </summary>
     private const float more_info_top = 34;
 
-    private const float tabs_x = 270;
+    // Back's slanted end and the tabs' plate as far apart as the action buttons are (36).
+    private const float tabs_x = 244;
     private const float details_max_width = 1080;
     private const float details_min_width = 600;
 
@@ -517,7 +518,8 @@ public partial class ScoreScreen : YuukiScreen, IHaveScreenAction
             {
                 Anchor = Anchor.BottomLeft,
                 Origin = Anchor.BottomLeft,
-                Position = new Vector2(tabs_x, LeftBottomShearButton.DEFAULT_POSITION.Y + 6),
+                // Level with Back, as tall as it.
+                Position = new Vector2(tabs_x, LeftBottomShearButton.DEFAULT_POSITION.Y),
                 Alpha = 0,
                 PagePicked = page => ShowPage(page == 1)
             },
@@ -670,7 +672,7 @@ public partial class ScoreScreen : YuukiScreen, IHaveScreenAction
                 Anchor = Anchor.Centre,
                 Origin = Anchor.TopCentre,
                 Y = result.Failed ? failed_accuracy_y : 70,
-                Font = YuukiFontUsage.GetFontUsage(Typeface.Nunito, 34, FontWeight.ExtraBold),
+                Font = YuukiFontUsage.GetFontUsage(Typeface.Quicksand, 34, FontWeight.Bold),
                 Color = palette.TextLight
             },
             // How far a run that failed got, under its accuracy.
@@ -679,7 +681,7 @@ public partial class ScoreScreen : YuukiScreen, IHaveScreenAction
                 Anchor = Anchor.Centre,
                 Origin = Anchor.TopCentre,
                 Y = failed_accuracy_y + 44,
-                Font = YuukiFontUsage.GetFontUsage(Typeface.Nunito, 16, FontWeight.Bold),
+                Font = YuukiFontUsage.GetFontUsage(Typeface.Quicksand, 16, FontWeight.Bold),
                 Color = palette.TextLight.WithAlpha(0.75f)
             }
         }
@@ -844,7 +846,7 @@ public partial class ScoreScreen : YuukiScreen, IHaveScreenAction
         Anchor = Anchor.CentreLeft,
         Origin = Anchor.CentreLeft,
         Text = format(change),
-        Font = YuukiFontUsage.GetFontUsage(Typeface.Nunito, size, FontWeight.ExtraBold),
+        Font = YuukiFontUsage.GetFontUsage(Typeface.Quicksand, size, FontWeight.Bold),
         Color = change >= 0 ? better : JudgementColors.MISS,
         Alpha = 0,
         AlwaysPresent = true
@@ -2236,7 +2238,7 @@ public partial class ScoreScreen : YuukiScreen, IHaveScreenAction
             {
                 Margin = new MarginPadding { Left = 14, Right = 14, Top = 3, Bottom = 4 },
                 Text = "NEW BEST",
-                Font = YuukiFontUsage.GetFontUsage(Typeface.Nunito, 14, FontWeight.ExtraBold),
+                Font = YuukiFontUsage.GetFontUsage(Typeface.Quicksand, 14, FontWeight.Bold),
                 Color = Color.White
             }
         }

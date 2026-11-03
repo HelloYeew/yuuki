@@ -253,7 +253,7 @@ public partial class ReplayScreen : YuukiScreen, IHaveScreenAction
                         new SpriteText
                         {
                             Text = $"{score.Score:N0}  ·  {score.Accuracy * 100:0.00}%  ·  {score.Rank}",
-                            Font = YuukiFontUsage.GetFontUsage(Typeface.Nunito, 18, FontWeight.Regular),
+                            Font = YuukiFontUsage.GetFontUsage(Typeface.Quicksand, 18, FontWeight.Regular),
                             Color = palette.TextLight
                         },
                         pauseButton = new PillButton(palette.Control, palette.TextLight)

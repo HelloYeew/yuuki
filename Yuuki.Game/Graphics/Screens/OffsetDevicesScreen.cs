@@ -763,7 +763,7 @@ public partial class OffsetDevicesScreen : YuukiScreen, IHaveScreenAction
             new SpriteText
             {
                 Text = "Hitting late, or early, on every song, whatever you play on?",
-                Font = YuukiFontUsage.GetFontUsage(Typeface.Quicksand, 19, FontWeight.Bold),
+                Font = YuukiFontUsage.GetFontUsage(Typeface.Nunito, 19, FontWeight.Bold),
                 Color = palette.Text
             },
             option($"That's your own timing, or your keys', not a device's. Each press moves the judging {OffsetStepper.STEP} ms on every device at once. "

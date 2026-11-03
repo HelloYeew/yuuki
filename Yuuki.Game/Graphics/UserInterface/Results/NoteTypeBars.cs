@@ -101,7 +101,7 @@ public partial class NoteTypeBars : FlowContainer
                 Origin = Anchor.CentreLeft,
                 X = name_width + 12,
                 Text = "holds let go early",
-                Font = YuukiFontUsage.GetFontUsage(Typeface.Nunito, 14, FontWeight.SemiBold),
+                Font = YuukiFontUsage.GetFontUsage(Typeface.Quicksand, 14, FontWeight.SemiBold),
                 Color = ResultsInk.Secondary(palette)
             },
             text(count.ToString(), JudgementColors.MISS, Anchor.CentreRight)
@@ -113,7 +113,7 @@ public partial class NoteTypeBars : FlowContainer
         Anchor = anchor,
         Origin = anchor,
         Text = value,
-        Font = YuukiFontUsage.GetFontUsage(Typeface.Nunito, 14, FontWeight.Bold),
+        Font = YuukiFontUsage.GetFontUsage(Typeface.Quicksand, 14, FontWeight.Bold),
         Color = color
     };
 }

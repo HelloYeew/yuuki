@@ -62,7 +62,7 @@ public partial class TimingSpread : FlowContainer
             line = new ScrollingText
             {
                 RelativeSizeAxes = Axes.X,
-                Font = YuukiFontUsage.GetFontUsage(Typeface.Nunito, 15, FontWeight.Bold),
+                Font = YuukiFontUsage.GetFontUsage(Typeface.Quicksand, 15, FontWeight.Bold),
                 Color = palette.Text
             }
         };
@@ -183,7 +183,7 @@ public partial class TimingSpread : FlowContainer
         Origin = origin,
         Position = new Vector2(x, graph_height + 3),
         Text = text,
-        Font = YuukiFontUsage.GetFontUsage(Typeface.Nunito, 12, FontWeight.Bold),
+        Font = YuukiFontUsage.GetFontUsage(Typeface.Quicksand, 12, FontWeight.Bold),
         Color = ResultsInk.Secondary(palette)
     };
 

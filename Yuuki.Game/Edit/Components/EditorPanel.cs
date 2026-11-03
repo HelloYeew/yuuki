@@ -50,7 +50,7 @@ public partial class EditorPanel : Container
             {
                 Position = new Vector2(padding + 2, padding),
                 Text = title.ToUpperInvariant(),
-                Font = YuukiFontUsage.GetFontUsage(Typeface.Nunito, 13, FontWeight.Bold),
+                Font = YuukiFontUsage.GetFontUsage(Typeface.Quicksand, 13, FontWeight.Bold),
                 Color = Color.White.WithAlpha(0.6f)
             },
             rows = new FlowContainer
@@ -148,7 +148,7 @@ public partial class EditorToolButton : Container
                 Origin = Anchor.CentreLeft,
                 X = 36,
                 Text = text,
-                Font = YuukiFontUsage.GetFontUsage(Typeface.Nunito, 15, FontWeight.Bold)
+                Font = YuukiFontUsage.GetFontUsage(Typeface.Quicksand, 15, FontWeight.Bold)
             },
             hotkeyText = new SpriteText
             {
@@ -156,7 +156,7 @@ public partial class EditorToolButton : Container
                 Origin = Anchor.CentreRight,
                 X = -10,
                 Text = hotkey ?? string.Empty,
-                Font = YuukiFontUsage.GetFontUsage(Typeface.Nunito, 13, FontWeight.Bold),
+                Font = YuukiFontUsage.GetFontUsage(Typeface.Quicksand, 13, FontWeight.Bold),
                 Color = Color.White.WithAlpha(0.45f)
             }
         };

@@ -268,7 +268,7 @@ public partial class BeatmapInfoPanel : FlowContainer
             Color = palette.Text
         }));
 
-        addRow(titleRow = new PanelRow(new Vector2(title_width, title_height), palette.Surface.Lighten(0.2f), createTitle()));
+        addRow(titleRow = new PanelRow(new Vector2(title_width, title_height), titleBackground, createTitle()));
 
         // The names (source and genre; mapper and difficulty) are cut short when a row runs out of room. Their
         // widths follow the title's slanted end (see lineUpRows).
@@ -341,6 +341,9 @@ public partial class BeatmapInfoPanel : FlowContainer
         (parent ?? this).Add(row);
     }
 
+    // What the title and artist are on.
+    private Color titleBackground => palette.Surface.Lighten(0.2f);
+
     private Drawable createTitle()
     {
         // The cover starts where the rows below start their icons, so the block shares one left edge.
@@ -377,8 +380,11 @@ public partial class BeatmapInfoPanel : FlowContainer
                         artistText = new ScrollingText
                         {
                             Size = new Vector2(lineWidth(artistFoot), artist_line_height),
-                            Font = YuukiFontUsage.GetFontUsage(Typeface.Quicksand, 20, FontWeight.Regular),
-                            Color = palette.Text
+                            // As every artist line under a song's title is (its card's, the dock's). A little softer than
+                            // the title, so it sits under it without a lighter weight (Japanese in a lighter one goes
+                            // thin), but still 4.5:1 on the panel: on the play palette #50505D, 4.54:1 (the title 6.50).
+                            Font = YuukiFontUsage.GetFontUsage(Typeface.Quicksand, 20, FontWeight.SemiBold),
+                            Color = ColorContrast.SoftInk(palette.Text, titleBackground, 0.25f)
                         }
                     }
                 }
@@ -505,7 +511,7 @@ public partial class BeatmapInfoPanel : FlowContainer
             new SpriteText
             {
                 Text = value,
-                Font = YuukiFontUsage.GetFontUsage(Typeface.Nunito, 16, FontWeight.Regular),
+                Font = YuukiFontUsage.GetFontUsage(Typeface.Quicksand, 16, FontWeight.Regular),
                 Color = palette.Text
             }
         }
@@ -804,9 +810,9 @@ public partial class BeatmapInfoPanel : FlowContainer
         };
 
         chartStats.Children = summary == null
-            ? new Drawable[] { chartLine("Reading the chart…") }
+            ? new Drawable[] { chartLine("Reading the chart…", Typeface.Nunito) }
             : summary.IsEmpty
-                ? new Drawable[] { chartLine("No notes yet — a chart will be generated for play.") }
+                ? new Drawable[] { chartLine("No notes yet — a chart will be generated for play.", Typeface.Nunito) }
                 : new Drawable[]
                 {
                     chartLine($"Tap {summary.TapCount:N0}   ·   Hold {summary.HoldCount:N0}   ·   Swipe {summary.SwipeCount:N0}"),
@@ -1083,10 +1089,11 @@ public partial class BeatmapInfoPanel : FlowContainer
     private static void mirrorBackground(Container background, bool mirrored) =>
         background.Anchor = background.Origin = mirrored ? Anchor.CentreLeft : Anchor.CentreRight;
 
-    private SpriteText chartLine(string text) => new SpriteText
+    // The chart's figures ("Tap 312 · Hold 40"); a sentence about it is text, in Nunito.
+    private SpriteText chartLine(string text, Typeface face = Typeface.Quicksand) => new SpriteText
     {
         Text = text,
-        Font = YuukiFontUsage.GetFontUsage(Typeface.Nunito, 16, FontWeight.Regular),
+        Font = YuukiFontUsage.GetFontUsage(face, 16, FontWeight.Regular),
         Color = palette.Text
     };
 
@@ -1720,7 +1727,10 @@ public partial class BeatmapInfoPanel : FlowContainer
         }
     }
 
-    /// <summary>A thin row of icon + text pairs; pairs with empty text are left out.</summary>
+    /// <summary>
+    /// A thin row of icon + text pairs; pairs with empty text are left out. Names too long for the row scroll, as the
+    /// difficulty cards' do, rather than being cut short.
+    /// </summary>
     private partial class IconRow : PanelRow
     {
         /// <summary>
@@ -1729,15 +1739,20 @@ public partial class BeatmapInfoPanel : FlowContainer
         private const float trailing = 24;
 
         /// <summary>
-        /// The least a name is cut down to.
+        /// The least room a name is given.
         /// </summary>
         private const float min_name_width = 28;
 
+        private static readonly Sakura.Framework.Graphics.Text.FontUsage font = YuukiFontUsage.GetFontUsage(Typeface.Quicksand, 16, FontWeight.Regular);
+
         private readonly FlowContainer flow;
 
-        // Which items (by their place in SetItems) are names, cut short when the row runs out of room.
+        // Which items (by their place in SetItems) are names, given less room (and scrolling) when the row runs out of it.
         private readonly int[] nameItems;
-        private readonly List<SpriteText> names = new List<SpriteText>();
+        private readonly List<ScrollingText> names = new List<ScrollingText>();
+
+        // Reads how wide a name is in full: a scrolling one is as wide as it's given.
+        private readonly SpriteText measure = new SpriteText { Font = font, Alpha = 0 };
 
         // Set when the items or the row's width change, so the names are fitted again.
         private bool needsFit;
@@ -1768,6 +1783,8 @@ public partial class BeatmapInfoPanel : FlowContainer
             this.flow = flow;
             this.nameItems = nameItems;
             textColor = palette.Text;
+
+            Add(measure);
         }
 
         /// <summary>Recolours the row's fill and its icons and text, easing over when on screen.</summary>
@@ -1782,6 +1799,9 @@ public partial class BeatmapInfoPanel : FlowContainer
 
                 foreach (Drawable item in flow.Children)
                     item.Color = text;
+
+                foreach (ScrollingText name in names)
+                    name.Color = text;
 
                 return;
             }
@@ -1823,22 +1843,34 @@ public partial class BeatmapInfoPanel : FlowContainer
                     Filled = true,
                     Color = textColor
                 });
-                var sprite = new SpriteText
-                {
-                    Anchor = Anchor.CentreLeft,
-                    Origin = Anchor.CentreLeft,
-                    Text = text,
-                    Font = YuukiFontUsage.GetFontUsage(Typeface.Nunito, 16, FontWeight.Regular),
-                    Color = textColor
-                };
 
                 if (nameItems.Contains(i))
                 {
-                    sprite.Truncate = true;
-                    names.Add(sprite);
+                    // Its own color is what fades (as the icons' does), and its text follows it (see Update): a
+                    // container's color doesn't reach what's in it.
+                    var name = new ScrollingText
+                    {
+                        Anchor = Anchor.CentreLeft,
+                        Origin = Anchor.CentreLeft,
+                        Text = text,
+                        Font = font
+                    };
+                    ((Drawable)name).Color = textColor;
+                    name.Color = textColor;
+                    names.Add(name);
+                    flow.Add(name);
                 }
-
-                flow.Add(sprite);
+                else
+                {
+                    flow.Add(new SpriteText
+                    {
+                        Anchor = Anchor.CentreLeft,
+                        Origin = Anchor.CentreLeft,
+                        Text = text,
+                        Font = font,
+                        Color = textColor
+                    });
+                }
             }
 
             needsFit = true;
@@ -1850,19 +1882,30 @@ public partial class BeatmapInfoPanel : FlowContainer
 
             if (needsFit || Math.Abs(fittedWidth - DrawWidth) > 0.5f)
                 fitTexts();
+
+            foreach (ScrollingText name in names)
+            {
+                Color fading = ((Drawable)name).Color;
+
+                if (name.Color != fading)
+                    name.Color = fading;
+            }
         }
 
         /// <summary>
-        /// Cuts the longest names short (a long difficulty name, say) so the row's items end before its
-        /// slant; the numbers, and names short enough, stay whole.
+        /// Gives the longest names less room (a long difficulty name, say), to scroll in, so the row's items end before
+        /// its slant; the numbers, and names short enough, stay as they are.
         /// </summary>
         private void fitTexts()
         {
             needsFit = false;
             fittedWidth = DrawWidth;
 
-            foreach (SpriteText name in names)
-                name.MaxWidth = float.PositiveInfinity;
+            foreach (ScrollingText name in names)
+            {
+                measure.Text = name.Text;
+                name.Width = measure.DrawWidth;
+            }
 
             float overflow = flow.DrawWidth - (DrawWidth - content_inset - trailing);
 
@@ -1870,7 +1913,7 @@ public partial class BeatmapInfoPanel : FlowContainer
                 return;
 
             // The cap that takes the overflow off the longest names, evening them out from the top.
-            float[] widths = names.Select(t => t.DrawWidth).OrderByDescending(w => w).ToArray();
+            float[] widths = names.Select(t => t.Width).OrderByDescending(w => w).ToArray();
             float budget = widths.Sum() - overflow;
             float cap = 0;
 
@@ -1886,8 +1929,8 @@ public partial class BeatmapInfoPanel : FlowContainer
                 }
             }
 
-            foreach (SpriteText name in names)
-                name.MaxWidth = Math.Max(min_name_width, cap);
+            foreach (ScrollingText name in names)
+                name.Width = Math.Min(name.Width, Math.Max(min_name_width, cap));
         }
     }
 }

@@ -147,7 +147,7 @@ public partial class EditorTimeline : Container, IBlockGlobalAltScrollVolume
         {
             var label = new SpriteText
             {
-                Font = YuukiFontUsage.GetFontUsage(Typeface.Nunito, 12, FontWeight.Bold),
+                Font = YuukiFontUsage.GetFontUsage(Typeface.Quicksand, 12, FontWeight.Bold),
                 Color = EditorColors.TIMING_POINT
             };
 

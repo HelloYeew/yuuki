@@ -87,7 +87,7 @@ public partial class FooterKeybindItem : FlowContainer
                 Anchor = Anchor.CentreLeft,
                 Origin = Anchor.CentreLeft,
                 Text = KeybindName,
-                Font = YuukiFontUsage.GetFontUsage(Typeface.Nunito, 20),
+                Font = YuukiFontUsage.GetFontUsage(Typeface.Quicksand, 20),
                 Color = Color.White
             }
         };

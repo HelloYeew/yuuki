@@ -111,7 +111,7 @@ public partial class EditorOption : Container
                         Anchor = Anchor.CentreLeft,
                         Origin = Anchor.CentreLeft,
                         Text = text,
-                        Font = YuukiFontUsage.GetFontUsage(Typeface.Nunito, 13, FontWeight.Bold)
+                        Font = YuukiFontUsage.GetFontUsage(Typeface.Quicksand, 13, FontWeight.Bold)
                     }
                 }
             }

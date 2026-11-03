@@ -112,14 +112,14 @@ public partial class PlaysStrip : Container
                             {
                                 RelativeSizeAxes = Axes.X,
                                 Text = where,
-                                Font = YuukiFontUsage.GetFontUsage(Typeface.Nunito, 19, FontWeight.Bold),
+                                Font = YuukiFontUsage.GetFontUsage(Typeface.Quicksand, 19, FontWeight.Bold),
                                 Color = palette.Text
                             },
                             new ScrollingText
                             {
                                 RelativeSizeAxes = Axes.X,
                                 Text = compared,
-                                Font = YuukiFontUsage.GetFontUsage(Typeface.Nunito, 16, FontWeight.SemiBold),
+                                Font = YuukiFontUsage.GetFontUsage(Typeface.Quicksand, 16, FontWeight.SemiBold),
                                 Color = ResultsInk.Secondary(palette)
                             }
                         }

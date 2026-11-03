@@ -161,7 +161,7 @@ public partial class JudgementBreakdown : FlowContainer
                     Anchor = Anchor.CentreLeft,
                     Origin = Anchor.CentreLeft,
                     X = label_width + count_width + 20,
-                    Font = YuukiFontUsage.GetFontUsage(Typeface.Nunito, 16, FontWeight.Regular),
+                    Font = YuukiFontUsage.GetFontUsage(Typeface.Quicksand, 16, FontWeight.Regular),
                     Color = ResultsInk.Secondary(palette)
                 },
                 // Share-of-notes bar, filling the rest of the row.

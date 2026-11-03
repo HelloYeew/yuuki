@@ -426,7 +426,7 @@ public partial class GameplayHud : Container
         Origin = Anchor.TopCentre,
         Y = y,
         Text = "COMBO",
-        Font = YuukiFontUsage.GetFontUsage(Typeface.Nunito, (int)combo_label_size, FontWeight.Bold),
+        Font = YuukiFontUsage.GetFontUsage(Typeface.Quicksand, (int)combo_label_size, FontWeight.Bold),
         Color = color
     };
 

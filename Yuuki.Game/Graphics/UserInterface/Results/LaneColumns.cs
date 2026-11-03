@@ -132,8 +132,8 @@ public partial class LaneColumns : FlowContainer
                     Y = -20,
                     Color = palette.Text.WithAlpha(0.5f)
                 },
-                text($"LANE {lane.Lane + 1}", 8, 13, FontWeight.ExtraBold, ResultsInk.Secondary(palette)),
-                text(lane.Count == 0 ? "—" : (lane.Accuracy * 100).ToString("0.0", CultureInfo.InvariantCulture) + "%", 28, 19, FontWeight.ExtraBold, palette.Text),
+                text($"LANE {lane.Lane + 1}", 8, 13, FontWeight.Bold, ResultsInk.Secondary(palette)),
+                text(lane.Count == 0 ? "—" : (lane.Accuracy * 100).ToString("0.0", CultureInfo.InvariantCulture) + "%", 28, 19, FontWeight.Bold, palette.Text),
                 text(timing, 54, 13, FontWeight.Bold, palette.Text),
                 text(misses, 71, 13, FontWeight.Bold, palette.Text)
             };
@@ -145,7 +145,7 @@ public partial class LaneColumns : FlowContainer
             Origin = Anchor.TopCentre,
             Y = y,
             Text = value,
-            Font = YuukiFontUsage.GetFontUsage(Typeface.Nunito, size, weight),
+            Font = YuukiFontUsage.GetFontUsage(Typeface.Quicksand, size, weight),
             Color = color
         };
 

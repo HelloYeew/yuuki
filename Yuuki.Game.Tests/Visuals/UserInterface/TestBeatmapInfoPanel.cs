@@ -6,6 +6,7 @@ using System.Collections.Generic;
 using System.Linq;
 using NUnit.Framework;
 using Sakura.Framework.Allocation;
+using Sakura.Framework.Graphics.Colors;
 using Sakura.Framework.Graphics.Drawables;
 using Sakura.Framework.Graphics.Primitives;
 using Sakura.Framework.Maths;
@@ -248,6 +249,100 @@ public partial class TestBeatmapInfoPanel : TestScene
         Container container => container.Children.Select(child => find(child, text)).FirstOrDefault(found => found != null),
         _ => null
     };
+
+    private const string long_name = "Another Lunatic Special Extra Long Difficulty Name";
+    private const string long_mapper = "A Mapper With A Very Long Name Indeed";
+
+    // Picked after another difficulty, as in song select: the panel's on screen, so its colors fade over.
+    private void showLongNames(double rating = 12)
+    {
+        AddStep("a difficulty", () => panel.ShowBeatmap(beatmap));
+        AddUntilStep("shown", () => panel.IsLoaded);
+        AddStep("then one with long names", () =>
+        {
+            Beatmap b = beatmap;
+            b.DifficultyName = long_name;
+            b.Creator = long_mapper;
+            b.DifficultyRating = rating;
+            panel.ShowBeatmap(b);
+        });
+    }
+
+    private static IEnumerable<ScrollingText> scrollingNames(Drawable drawable) => drawable switch
+    {
+        ScrollingText text => new[] { text },
+        Container container => container.Children.SelectMany(scrollingNames),
+        _ => Enumerable.Empty<ScrollingText>()
+    };
+
+    /// <summary>
+    /// The difficulty row's names, too long for it, are there whole, to scroll (as the difficulty cards' do), not cut
+    /// short with an ellipsis.
+    /// </summary>
+    [Test]
+    public void TestLongNamesAreWhole()
+    {
+        Color first = DifficultyColors.Ink(DifficultyColors.For(7.4));
+        bool between = false;
+
+        add();
+        showLongNames();
+
+        // Filled again once the tabs below have loaded, already in this one's ink: only a fade on the way shows it
+        // follows its own color, as the icons do, rather than holding the first one's until then.
+        AddUntilStep("the names fade over from the first difficulty's ink, as the icons do", () =>
+        {
+            between |= longNameTexts().Any(t => t.Color != first && t.Color != DifficultyColors.Ink(DifficultyColors.For(12)));
+            return between;
+        });
+        AddAssert("the difficulty's name and mapper, whole", () =>
+            scrollingNames(panel).Select(n => n.Text).Contains(long_name) && scrollingNames(panel).Select(n => n.Text).Contains(long_mapper));
+        AddAssert("nothing cut short", () => !descendants(panel).OfType<SpriteText>().Any(t => t.Truncate));
+
+        // And ends in this one's.
+        Color ink = DifficultyColors.Ink(DifficultyColors.For(12));
+        AddAssert("not the first difficulty's", () => ink != DifficultyColors.Ink(DifficultyColors.For(7.4)));
+        AddUntilStep("in the difficulty's ink, as its icons are", () => longNameTexts().All(t => t.Color == ink));
+    }
+
+    // The text of the long names (each scrolling name draws its text twice, to loop).
+    private IEnumerable<SpriteText> longNameTexts() =>
+        scrollingNames(panel).Where(n => n.Text is long_name or long_mapper).SelectMany(n => descendants(n).OfType<SpriteText>());
+
+    /// <summary>
+    /// In a window, where text has its width: the long names scroll in the room the row has, ending before its slant, and
+    /// a short name sits still, as wide as it is.
+    /// </summary>
+    [Test]
+    [VisualTestOnly("headless text is 0 wide, so nothing is too long")]
+    public void TestLongNamesScrollWithinTheRow()
+    {
+        add();
+        showLongNames();
+        AddUntilStep("they scroll", () => scrollingNames(panel).Where(n => n.Text is long_name or long_mapper).All(n => n.ScrollOffset != 0));
+        AddAssert("ending before the row's slant", () => scrollingNames(panel).Where(n => n.Text == long_name).All(n =>
+        {
+            Drawable flow = n.Parent!, row = flow.Parent!.Parent!;
+            return flow.X + flow.DrawWidth <= row.DrawWidth - 24 + 0.5f;
+        }));
+        AddStep("a short name", () => panel.ShowBeatmap(beatmap));
+        AddWaitStep("past when it would scroll", 30);
+        AddAssert("still", () => scrollingNames(panel).Where(n => n.Text == "Hard").All(n => n.ScrollOffset == 0));
+    }
+
+    private static IEnumerable<Drawable> descendants(Drawable drawable)
+    {
+        yield return drawable;
+
+        if (drawable is Container container)
+        {
+            foreach (Drawable child in container.Children)
+            {
+                foreach (Drawable d in descendants(child))
+                    yield return d;
+            }
+        }
+    }
 
     [Test]
     public void TestNothingSelected()

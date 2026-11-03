@@ -211,7 +211,7 @@ public partial class BeatmapSetCarouselCard : CarouselCard<BeatmapSet>
                         rowArtist = new ScrollingText
                         {
                             RelativeSizeAxes = Axes.X,
-                            Font = YuukiFontUsage.GetFontUsage(Typeface.Nunito, sizes.ArtistFont, FontWeight.SemiBold),
+                            Font = YuukiFontUsage.GetFontUsage(Typeface.Quicksand, sizes.ArtistFont, FontWeight.SemiBold),
                             Color = SetlistColors.Secondary(ink)
                         }
                     }
@@ -331,7 +331,7 @@ public partial class BeatmapSetCarouselCard : CarouselCard<BeatmapSet>
                     X = 6,
                     Y = sizes.TileCover + sizes.TileArtistOffset,
                     Width = sizes.TileCover + 10,
-                    Font = YuukiFontUsage.GetFontUsage(Typeface.Nunito, sizes.TileArtistFont, FontWeight.SemiBold),
+                    Font = YuukiFontUsage.GetFontUsage(Typeface.Quicksand, sizes.TileArtistFont, FontWeight.SemiBold),
                     Color = SetlistColors.Secondary(ink)
                 }
             }

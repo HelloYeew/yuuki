@@ -108,7 +108,7 @@ public partial class MoreInfoHeader : Container
                     details = new ScrollingText
                     {
                         RelativeSizeAxes = Axes.X,
-                        Font = YuukiFontUsage.GetFontUsage(Typeface.Nunito, 16, FontWeight.SemiBold),
+                        Font = YuukiFontUsage.GetFontUsage(Typeface.Quicksand, 16, FontWeight.SemiBold),
                         Color = ResultsInk.Secondary(palette)
                     }
                 }
@@ -257,7 +257,7 @@ public partial class MoreInfoHeader : Container
             new SpriteText
             {
                 Text = value,
-                Font = YuukiFontUsage.GetFontUsage(Typeface.Nunito, 26, FontWeight.ExtraBold),
+                Font = YuukiFontUsage.GetFontUsage(Typeface.Quicksand, 26, FontWeight.Bold),
                 Color = palette.Text
             }
         }

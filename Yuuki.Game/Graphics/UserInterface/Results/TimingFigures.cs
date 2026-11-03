@@ -61,7 +61,7 @@ public partial class TimingFigures : FlowContainer
             new SpriteText
             {
                 Text = title.ToUpperInvariant(),
-                Font = YuukiFontUsage.GetFontUsage(Typeface.Nunito, 12, FontWeight.Bold),
+                Font = YuukiFontUsage.GetFontUsage(Typeface.Quicksand, 12, FontWeight.Bold),
                 Color = ResultsInk.Secondary(palette)
             },
             shown
@@ -70,7 +70,7 @@ public partial class TimingFigures : FlowContainer
 
     private SpriteText value() => new SpriteText
     {
-        Font = YuukiFontUsage.GetFontUsage(Typeface.Nunito, 20, FontWeight.ExtraBold),
+        Font = YuukiFontUsage.GetFontUsage(Typeface.Quicksand, 20, FontWeight.Bold),
         Color = palette.Text
     };
 }

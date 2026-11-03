@@ -63,7 +63,7 @@ public partial class EditorTopBar : Container
             {
                 Anchor = Anchor.Centre,
                 Origin = Anchor.Centre,
-                Font = YuukiFontUsage.GetFontUsage(Typeface.Nunito, 15, FontWeight.Bold),
+                Font = YuukiFontUsage.GetFontUsage(Typeface.Quicksand, 15, FontWeight.Bold),
                 Color = Color.White.WithAlpha(0.7f),
                 Truncate = true
             },

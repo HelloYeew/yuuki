@@ -186,7 +186,7 @@ public abstract partial class SongTimeGraph : Container
                     judgingText = new SpriteText
                     {
                         Margin = new MarginPadding { Left = 11, Right = 11, Top = 4, Bottom = 4 },
-                        Font = YuukiFontUsage.GetFontUsage(Typeface.Nunito, 13, FontWeight.ExtraBold),
+                        Font = YuukiFontUsage.GetFontUsage(Typeface.Quicksand, 13, FontWeight.Bold),
                         Color = Color.White
                     }
                 }
@@ -243,7 +243,7 @@ public abstract partial class SongTimeGraph : Container
         Origin = Anchor.CentreRight,
         Position = new Vector2(LEFT - 10, y),
         Text = text,
-        Font = YuukiFontUsage.GetFontUsage(Typeface.Nunito, size, FontWeight.Bold),
+        Font = YuukiFontUsage.GetFontUsage(Typeface.Quicksand, size, FontWeight.Bold),
         Color = color ?? ResultsInk.Secondary(Palette)
     });
 
@@ -255,7 +255,7 @@ public abstract partial class SongTimeGraph : Container
         Origin = Anchor.CentreLeft,
         Position = at,
         Text = text,
-        Font = YuukiFontUsage.GetFontUsage(Typeface.Nunito, size, FontWeight.Bold),
+        Font = YuukiFontUsage.GetFontUsage(Typeface.Quicksand, size, FontWeight.Bold),
         Color = color ?? ResultsInk.Secondary(Palette)
     });
 
@@ -378,7 +378,7 @@ public abstract partial class SongTimeGraph : Container
                 Origin = Anchor.TopCentre,
                 Position = new Vector2(XOf(at), PlotBottom + 12),
                 Text = formatTime(at),
-                Font = YuukiFontUsage.GetFontUsage(Typeface.Nunito, 13, FontWeight.Bold),
+                Font = YuukiFontUsage.GetFontUsage(Typeface.Quicksand, 13, FontWeight.Bold),
                 Color = ResultsInk.Secondary(Palette)
             });
         }

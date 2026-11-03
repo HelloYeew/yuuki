@@ -159,7 +159,7 @@ public partial class BeatmapSetFocusWindow : CarouselFocusWindow<BeatmapSet>
                         artist = new ScrollingText
                         {
                             RelativeSizeAxes = Axes.X,
-                            Font = YuukiFontUsage.GetFontUsage(Typeface.Nunito, 18, FontWeight.SemiBold)
+                            Font = YuukiFontUsage.GetFontUsage(Typeface.Quicksand, 18, FontWeight.SemiBold)
                         },
                         details = new IconStats(15)
                         {
@@ -207,7 +207,7 @@ public partial class BeatmapSetFocusWindow : CarouselFocusWindow<BeatmapSet>
             phone = value;
 
             title.Font = YuukiFontUsage.GetFontUsage(Typeface.Quicksand, phone ? 31 : 30, FontWeight.Bold);
-            artist.Font = YuukiFontUsage.GetFontUsage(Typeface.Nunito, phone ? 19 : 18, FontWeight.SemiBold);
+            artist.Font = YuukiFontUsage.GetFontUsage(Typeface.Quicksand, phone ? 19 : 18, FontWeight.SemiBold);
 
             // Sized when they were made, so scaled up as a whole: 16 for 15, as the phone's text is.
             details.Scale = new Vector2(phone ? 16 / 15f : 1);

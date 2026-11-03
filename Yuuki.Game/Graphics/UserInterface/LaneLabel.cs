@@ -39,7 +39,7 @@ public partial class LaneLabel : FlowContainer
             {
                 Anchor = Anchor.CentreLeft,
                 Origin = Anchor.CentreLeft,
-                Font = YuukiFontUsage.GetFontUsage(Typeface.Nunito, (int)textSize, FontWeight.ExtraBold)
+                Font = YuukiFontUsage.GetFontUsage(Typeface.Quicksand, (int)textSize, FontWeight.Bold)
             }
         };
     }

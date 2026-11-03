@@ -90,7 +90,7 @@ public partial class BeatmapFocusWindow : CarouselFocusWindow<Beatmap>
                                 Anchor = Anchor.Centre,
                                 Origin = Anchor.Centre,
                                 X = -16,
-                                Font = YuukiFontUsage.GetFontUsage(Typeface.Nunito, 42, FontWeight.ExtraBold)
+                                Font = YuukiFontUsage.GetFontUsage(Typeface.Quicksand, 42, FontWeight.Bold)
                             }
                         },
                         // Its width is the room left of the extras, set every frame, so long names scroll within it.
@@ -112,7 +112,7 @@ public partial class BeatmapFocusWindow : CarouselFocusWindow<Beatmap>
                                 wideSub = new ScrollingText
                                 {
                                     RelativeSizeAxes = Axes.X,
-                                    Font = YuukiFontUsage.GetFontUsage(Typeface.Nunito, 18, FontWeight.SemiBold)
+                                    Font = YuukiFontUsage.GetFontUsage(Typeface.Quicksand, 18, FontWeight.SemiBold)
                                 }
                             }
                         },
@@ -159,14 +159,14 @@ public partial class BeatmapFocusWindow : CarouselFocusWindow<Beatmap>
                                 heroTier = new SpriteText
                                 {
                                     Position = new Vector2(14, 12),
-                                    Font = YuukiFontUsage.GetFontUsage(Typeface.Nunito, 13, FontWeight.ExtraBold)
+                                    Font = YuukiFontUsage.GetFontUsage(Typeface.Quicksand, 13, FontWeight.Bold)
                                 },
                                 heroLevel = new SpriteText
                                 {
                                     Anchor = Anchor.Centre,
                                     Origin = Anchor.Centre,
                                     Y = 8,
-                                    Font = YuukiFontUsage.GetFontUsage(Typeface.Nunito, 84, FontWeight.ExtraBold)
+                                    Font = YuukiFontUsage.GetFontUsage(Typeface.Quicksand, 84, FontWeight.Bold)
                                 }
                             }
                         },

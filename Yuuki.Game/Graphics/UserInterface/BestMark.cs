@@ -140,7 +140,7 @@ public partial class BestMark : FlowContainer
                 {
                     // Wide enough that the letters clear the slanted ends.
                     Margin = new MarginPadding { Left = textSize * 0.55f, Right = textSize * 0.55f, Top = textSize * 0.2f, Bottom = textSize * 0.2f },
-                    Font = YuukiFontUsage.GetFontUsage(Typeface.Nunito, (int)textSize, FontWeight.ExtraBold)
+                    Font = YuukiFontUsage.GetFontUsage(Typeface.Quicksand, (int)textSize, FontWeight.Bold)
                 }
             };
         }

@@ -12,6 +12,7 @@ using Sakura.Framework.Graphics.Primitives;
 using Sakura.Framework.Graphics.Transforms;
 using Sakura.Framework.Input;
 using Sakura.Framework.Maths;
+using Yuuki.Game.Graphics.Colors;
 using Yuuki.Game.Graphics.Text;
 
 namespace Yuuki.Game.Graphics.UserInterface;
@@ -93,12 +94,19 @@ public partial class MenuShearButton : ShearButton
                         Origin = Anchor.CentreLeft,
                         Text = Text.ToUpper(),
                         Font = YuukiFontUsage.GetFontUsage(Typeface.Quicksand, (int)Math.Round(48 * scale), FontWeight.Bold),
-                        Color = BackgroundColor.Darken(0.5f)
+                        // A deep shade of the fill, deep enough to read on it (half its brightness reached only 2.5–3.5:1).
+                        Color = LabelColor
                     }
                 }
             }
         };
     }
+
+    /// <summary>
+    /// The label's color: the fill's own hue, dark enough to read against it at rest (<see cref="ColorContrast.TEXT"/>).
+    /// Hovered, the fill lightens, so it only reads better.
+    /// </summary>
+    public Color LabelColor => ColorContrast.DarkInk(BackgroundColor, 0.5f);
 
     protected override void LoadComplete()
     {

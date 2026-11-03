@@ -90,7 +90,7 @@ public partial class TimeInfoDisplay : EditorBarPanel
             details = new SpriteText
             {
                 Position = new Vector2(17, 36),
-                Font = YuukiFontUsage.GetFontUsage(Typeface.Nunito, 13, FontWeight.Bold),
+                Font = YuukiFontUsage.GetFontUsage(Typeface.Quicksand, 13, FontWeight.Bold),
                 Color = Color.White.WithAlpha(0.6f)
             }
         });

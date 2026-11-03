@@ -220,7 +220,7 @@ public partial class MoreInfoPage : FlowContainer
                 Anchor = Anchor.CentreLeft,
                 Origin = Anchor.CentreLeft,
                 Margin = new MarginPadding { Left = 5, Right = 5 },
-                Font = YuukiFontUsage.GetFontUsage(Typeface.Nunito, 14, FontWeight.ExtraBold),
+                Font = YuukiFontUsage.GetFontUsage(Typeface.Quicksand, 14, FontWeight.Bold),
                 Color = palette.Text
             },
             zoomInChip = zoomChip("+", view.ZoomIn),
@@ -692,7 +692,7 @@ public partial class MoreInfoPage : FlowContainer
                     Anchor = Anchor.CentreLeft,
                     Origin = Anchor.CentreLeft,
                     Text = text,
-                    Font = YuukiFontUsage.GetFontUsage(Typeface.Nunito, 13, FontWeight.ExtraBold),
+                    Font = YuukiFontUsage.GetFontUsage(Typeface.Quicksand, 13, FontWeight.Bold),
                     Color = ResultsInk.Secondary(palette)
                 }
             }
@@ -726,7 +726,7 @@ public partial class MoreInfoPage : FlowContainer
                 {
                     Anchor = Anchor.CentreLeft,
                     Origin = Anchor.CentreLeft,
-                    Font = YuukiFontUsage.GetFontUsage(Typeface.Nunito, 16, FontWeight.Bold),
+                    Font = YuukiFontUsage.GetFontUsage(Typeface.Quicksand, 16, FontWeight.Bold),
                     Color = palette.Text
                 },
                 // Not until there's a stretch to watch.

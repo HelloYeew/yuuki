@@ -16,8 +16,8 @@ namespace Yuuki.Game.Graphics.UserInterface.Results;
 
 /// <summary>
 /// Every press of the run where it fell in the song and how early or late it was, over the judgements' windows: a dot of
-/// its judgement's color (a ring for a hold's release), misses as ticks along the top, the notes a second under it all,
-/// and a line of how the timing drifted. It answers "where did I drift?".
+/// its judgement's color (a ring for a hold's release, see <see cref="PlottedError"/>), misses as ticks along the top, the
+/// notes a second under it all, and a line of how the timing drifted. It answers "where did I drift?".
 /// </summary>
 /// <remarks>
 /// The judgements and lanes shown can be picked (<see cref="Shows"/>, <see cref="Lanes"/>), one lane brought out
@@ -128,6 +128,14 @@ public partial class TimingScatter : SongTimeGraph
         }
     }
 
+    /// <summary>
+    /// How early or late a judgement is drawn: as it was, but for a hold's release, whose windows are
+    /// <see cref="HitWindows.ReleaseLenience"/> times as wide, by as much less, so it sits in its own judgement's band (a
+    /// Critical release 60 ms early is drawn at 40, in Critical's band rather than Break's). The tooltip says the real time.
+    /// </summary>
+    public static double PlottedError(in PlayPoint point, double error, HitWindows windows) =>
+        point.IsHoldTail ? error / windows.ReleaseLenience : error;
+
     private bool visible(in PlayPoint point) => shown.Contains(point.Result) && (lanes.Count == 0 || lanes.Contains(point.Lane));
 
     private float yOf(double error) => (timing_top + timingBottom) / 2 - (float)(Math.Clamp(error, -range, range) / range) * (timingBottom - timing_top) / 2;
@@ -195,7 +203,7 @@ public partial class TimingScatter : SongTimeGraph
             foreach (PlayPoint point in best.Points)
             {
                 if (point.Error is double error && visible(point))
-                    Marks.Dot(new Vector2(XOf(point.Time), yOf(error)), 2.2f, Palette.Text.WithAlpha(0.28f));
+                    Marks.Dot(new Vector2(XOf(point.Time), yOf(PlottedError(point, error, best.Result.HitWindows))), 2.2f, Palette.Text.WithAlpha(0.28f));
             }
         }
 
@@ -216,7 +224,7 @@ public partial class TimingScatter : SongTimeGraph
             if (point.Error is not double error)
                 Marks.Line(new Vector2(x, miss_top), new Vector2(x, miss_top + 14), 2.5f, color);
             else if (point.IsHoldTail)
-                Marks.Ring(new Vector2(x, yOf(error)), dotRadius + 0.1f, 1.7f, color);
+                Marks.Ring(new Vector2(x, yOf(PlottedError(point, error, windows))), dotRadius + 0.1f, 1.7f, color);
             else
                 Marks.Dot(new Vector2(x, yOf(error)), dotRadius, color);
         }
@@ -248,7 +256,7 @@ public partial class TimingScatter : SongTimeGraph
             if (!visible(point))
                 continue;
 
-            var where = new Vector2(XOf(point.Time), point.Error is double error ? yOf(error) : miss_top + 7);
+            var where = new Vector2(XOf(point.Time), point.Error is double error ? yOf(PlottedError(point, error, run.Result.HitWindows)) : miss_top + 7);
 
             if (where.X < PlotLeft || where.X > PlotRight)
                 continue;
