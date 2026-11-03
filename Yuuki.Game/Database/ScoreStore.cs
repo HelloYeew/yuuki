@@ -131,6 +131,16 @@ public class ScoreStore
     public int GetPlayCount(BeatmapSet set) => scores.Count(s => s.BeatmapSetId == set.ID);
 
     /// <summary>
+    /// Plays of one difficulty on the day of <paramref name="now"/> (today if not given), by the local clock, failed ones
+    /// included: the tries a failed run counts itself among.
+    /// </summary>
+    public int GetPlaysToday(Beatmap beatmap, DateTimeOffset? now = null)
+    {
+        DateTime today = (now ?? DateTimeOffset.Now).LocalDateTime.Date;
+        return scores.Count(s => s.BeatmapId == beatmap.ID && s.Date.LocalDateTime.Date == today);
+    }
+
+    /// <summary>
     /// The highest-scoring play of a difficulty that wasn't a fail, if any.
     /// </summary>
     public ScoreInfo? GetPersonalBest(Beatmap beatmap) => GetRanking(beatmap, 1).FirstOrDefault();

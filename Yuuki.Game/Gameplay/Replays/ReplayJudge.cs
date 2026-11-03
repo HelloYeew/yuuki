@@ -215,6 +215,7 @@ public partial class ReplayJudge : Container
         HoldBreakCount = holdBreakTimes.Count,
         Accuracy = score.Accuracy.Value,
         Failed = FailedAt != null,
+        FailedAt = FailedAt,
         Judgements = judgements.ToArray(),
         HoldBreakTimes = holdBreakTimes.ToArray(),
         LaneCount = chart.LaneCount,

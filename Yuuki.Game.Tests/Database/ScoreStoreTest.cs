@@ -1,6 +1,7 @@
 // This code is part of yuuki. project. Licensed under the MIT License.
 // See the LICENSE file for full license text.
 
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -66,6 +67,34 @@ public class ScoreStoreTest
             Assert.That(store.GetPlayCount(easy), Is.EqualTo(2));
             Assert.That(store.GetPlayCount(hard), Is.EqualTo(1));
             Assert.That(store.GetPlayCount(set), Is.EqualTo(3));
+        }
+    }
+
+    /// <summary>
+    /// The tries a failed run counts itself among: the difficulty's plays that day, by the local clock, failed ones too.
+    /// </summary>
+    [Test]
+    public void PlaysToday_CountOnlyThatDaysPlaysOfTheDifficulty()
+    {
+        var store = new ScoreStore(storage);
+        var now = new DateTimeOffset(2026, 11, 2, 20, 0, 0, TimeZoneInfo.Local.GetUtcOffset(new DateTime(2026, 11, 2, 20, 0, 0)));
+
+        store.Add(at(play(easy, 500_000), now.AddHours(-2)));
+        store.Add(at(play(easy, 100_000, failed: true), now.AddMinutes(-5)));
+        store.Add(at(play(easy, 700_000), now.AddDays(-1)));
+        store.Add(at(play(hard, 900_000), now));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(store.GetPlaysToday(easy, now), Is.EqualTo(2));
+            Assert.That(store.GetPlaysToday(hard, now), Is.EqualTo(1));
+            Assert.That(store.GetPlaysToday(easy, now.AddDays(1)), Is.Zero);
+        }
+
+        static ScoreInfo at(ScoreInfo score, DateTimeOffset date)
+        {
+            score.Date = date;
+            return score;
         }
     }
 

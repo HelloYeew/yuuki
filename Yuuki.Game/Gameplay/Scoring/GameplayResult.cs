@@ -92,7 +92,9 @@ public class GameplayResult
     /// This run with its judgements filled in, as judging its replay again found them: its totals stay as they were
     /// saved, so the score and the counts never change from what was played (a replay judged again can rarely differ).
     /// </summary>
-    public GameplayResult WithJudgements(IReadOnlyList<JudgementResult> judgements, IReadOnlyList<double> holdBreakTimes, int laneCount, double chartLength) => new GameplayResult
+    /// <remarks>Where health ran out (<paramref name="failedAt"/>) comes from the judging too, which a saved play doesn't keep.</remarks>
+    public GameplayResult WithJudgements(IReadOnlyList<JudgementResult> judgements, IReadOnlyList<double> holdBreakTimes, int laneCount, double chartLength,
+                                         double? failedAt = null) => new GameplayResult
     {
         Score = Score,
         MaxCombo = MaxCombo,
@@ -104,6 +106,7 @@ public class GameplayResult
         HoldBreakCount = HoldBreakCount,
         Accuracy = Accuracy,
         Failed = Failed,
+        FailedAt = failedAt ?? FailedAt,
         Judgements = judgements,
         HoldBreakTimes = holdBreakTimes,
         LaneCount = laneCount,
@@ -116,6 +119,17 @@ public class GameplayResult
 
     /// <summary>The player ran out of health before the end.</summary>
     public bool Failed { get; init; }
+
+    /// <summary>
+    /// Where health ran out, in ms of the song; null where it didn't, or where that isn't known (a saved play, until its
+    /// replay is judged again).
+    /// </summary>
+    public double? FailedAt { get; init; }
+
+    /// <summary>
+    /// How far through the chart the run got before health ran out, 0–1; null where that isn't known.
+    /// </summary>
+    public double? Reached => FailedAt is double at && ChartLength > 0 ? Math.Clamp(at / ChartLength, 0, 1) : null;
 
     public int TotalNotes => BloomCount + CriticalCount + BreakCount + HitCount + MissCount;
 
@@ -153,14 +167,16 @@ public class GameplayResult
     public ScoreRank Rank => ScoreRankExtensions.ForRun(Accuracy, MissCount);
 
     /// <summary>
-    /// Accurate enough for a higher rank than it got, and held back by a miss (S -> A).
+    /// Accurate enough for a higher rank than it got, and held back by a miss (S -> A). Never for a run that failed: it
+    /// isn't ranked at all.
     /// </summary>
-    public bool RankLostToMiss => Rank < AccuracyRank;
+    public bool RankLostToMiss => !Failed && Rank < AccuracyRank;
 
     /// <summary>
-    /// The combo never broke — no misses and no hold breaks (FC).
+    /// The combo never broke — no misses and no hold breaks (FC). Never for a run that failed, whose notes after it ran out
+    /// went unplayed.
     /// </summary>
-    public bool IsFullCombo => TotalNotes > 0 && MissCount == 0 && HoldBreakCount == 0;
+    public bool IsFullCombo => !Failed && TotalNotes > 0 && MissCount == 0 && HoldBreakCount == 0;
 
     /// <summary>
     /// Every judgement was a Critical or a Bloom (AP). Implies <see cref="IsFullCombo"/>.

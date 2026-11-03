@@ -252,6 +252,7 @@ public partial class GameplayContainer : Container
     private int missCount;
     private int holdBreakCount;
     private bool failed;
+    private double? failedAt;
 
     /// <summary>
     /// Fired once per run, the moment health runs out.
@@ -347,6 +348,7 @@ public partial class GameplayContainer : Container
         HoldBreakCount = holdBreakCount,
         Accuracy = Score.Accuracy.Value,
         Failed = failed,
+        FailedAt = failedAt,
         Judgements = judgements.ToArray(),
         HoldBreakTimes = holdBreakTimes.ToArray(),
         LaneCount = chart.LaneCount,
@@ -477,6 +479,7 @@ public partial class GameplayContainer : Container
         if (Health.IsFailed && !failed)
         {
             failed = true;
+            failedAt = judgingTime;
             Failed?.Invoke();
         }
 
@@ -553,6 +556,7 @@ public partial class GameplayContainer : Container
         Skills.Reset();
         bloomCount = criticalCount = breakCount = hitCount = missCount = holdBreakCount = 0;
         failed = false;
+        failedAt = null;
         playfield.InputPaused = false;
         judgements.Clear();
         holdBreakTimes.Clear();

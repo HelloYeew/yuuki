@@ -157,7 +157,10 @@ public class PlayAnalysis
         Drift = drift(timed, Length);
         Density = density(Points, Length);
 
-        (Health, Combo, ComboBreaks, MaxCombo, FailedAt) = walk(result);
+        (Health, Combo, ComboBreaks, MaxCombo, double? walkedTo) = walk(result);
+
+        // Where the run itself said it ran out, when it knows, so the graphs say what the rest of the screen does.
+        FailedAt = result.FailedAt ?? walkedTo;
 
         Hardest = hardest(Points);
         Lanes = lanes(Points, result.LaneCount);
