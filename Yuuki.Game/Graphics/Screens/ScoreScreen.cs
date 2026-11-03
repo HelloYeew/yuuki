@@ -561,8 +561,8 @@ public partial class ScoreScreen : YuukiScreen, IHaveScreenAction
             {
                 X = x,
                 ButtonSize = action_button_size,
-                // A run that failed is watched from a little before it ran out.
-                Text = result.Failed && !viewing ? "Watch the fall" : "Replay",
+                // A run that just failed is watched from a little before it ran out (see WatchReplay).
+                Text = "Replay",
                 Icon = canWatch ? IconUsage.PlayCircle : IconUsage.Lock,
                 Locked = !canWatch,
                 Action = WatchReplay,
@@ -2011,7 +2011,7 @@ public partial class ScoreScreen : YuukiScreen, IHaveScreenAction
 
     /// <summary>
     /// Opens the play's replay (what the Replay button, and R on a saved score, do): from the start, or for a run that
-    /// just failed ("Watch the fall"), from <see cref="FALL_LEAD"/> before it ran out. Nothing without one.
+    /// just failed, from <see cref="FALL_LEAD"/> before it ran out. Nothing without one.
     /// </summary>
     public void WatchReplay()
     {
@@ -2022,7 +2022,7 @@ public partial class ScoreScreen : YuukiScreen, IHaveScreenAction
     }
 
     /// <summary>
-    /// How long before a failed run ran out its replay starts, from the results ("Watch the fall"): enough to see it go.
+    /// How long before a run that just failed ran out its replay starts, from the results: enough to see it go.
     /// </summary>
     public const double FALL_LEAD = 8000;
 
