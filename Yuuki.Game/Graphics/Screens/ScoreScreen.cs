@@ -162,15 +162,6 @@ public partial class ScoreScreen : YuukiScreen, IHaveScreenAction
 
     private const float header_width = 680;
 
-    /// <summary>
-    /// The score summary's width below which max combo and accuracy go under the score instead of
-    /// beside it.
-    /// </summary>
-    private const float summary_one_line_width = 800;
-
-    private const float summary_height = 104;
-    private const float summary_stacked_height = 180;
-
     private const float details_top = 48;
 
     /// <summary>
@@ -181,6 +172,15 @@ public partial class ScoreScreen : YuukiScreen, IHaveScreenAction
     private const float tabs_x = 270;
     private const float details_max_width = 1080;
     private const float details_min_width = 600;
+
+    /// <summary>
+    /// How far the song header shrinks, at most, to give the stats column the width for the score's statistics as rows
+    /// (on a canvas a step smaller than a phone's at UI scale 1). Past that it stays as it is and they go under the score.
+    /// </summary>
+    private const float header_shrink_floor = 0.85f;
+
+    // The panels' padding at each side.
+    private const float panel_side_padding = 28;
     private LeftBottomShearButton backButton = null!;
 
     private Container actionButtons = null!;
@@ -222,8 +222,29 @@ public partial class ScoreScreen : YuukiScreen, IHaveScreenAction
 
     private Container scoreSummary = null!;
     private Drawable scoreBlock = null!;
-    private Drawable statsBlock = null!;
-    private bool summaryStacked;
+    private Drawable scoreTitleRow = null!;
+    private FlowContainer statsBlock = null!;
+    private readonly List<Statistic> statistics = new List<Statistic>();
+    private ScoreSummaryArrangement summaryArrangement = ScoreSummaryArrangement.OneLine;
+
+    // How wide the summary's pieces are once the numbers have rolled up; measured again when a value's end changes.
+    private SummaryStatisticWidths[]? statisticWidths;
+    private float finalScoreWidth;
+
+    /// <summary>
+    /// How the score summary sits in its column, by the column's width.
+    /// </summary>
+    public ScoreSummaryArrangement SummaryArrangement => summaryArrangement;
+
+    /// <summary>
+    /// The score and its statistics in the summary, to see they don't overlap.
+    /// </summary>
+    public (Drawable Score, Drawable Statistics) SummaryBlocks => (scoreBlock, statsBlock);
+
+    /// <summary>
+    /// Whether the stats column has room for everything in it, without scrolling.
+    /// </summary>
+    public bool DetailsFit => details.DrawHeight <= detailsScroll.DrawHeight + 0.5f;
 
     // Everything that shakes when a rank lands, and whose color drains while an S breaks.
     private BufferedContainer colorDrain = null!;
@@ -697,10 +718,18 @@ public partial class ScoreScreen : YuukiScreen, IHaveScreenAction
         if (best != null)
             titleRow.Add(scoreDelta = deltaText(result.Score - best.Score, d => $"{(d >= 0 ? "+" : "−")}{Math.Abs(d).ToString("N0", CultureInfo.InvariantCulture)}", 22));
 
+        statistics.Add(new Statistic("Accuracy", accuracyText = statisticValue(),
+            best == null ? null : accuracyDelta = deltaText((result.Accuracy - best.Accuracy) * 100, d => $"{(d >= 0 ? "+" : "−")}{Math.Abs(d).ToString("0.00", CultureInfo.InvariantCulture)}%", 16),
+            () => formatAccuracy(result.Accuracy), sectionTitle));
+        statistics.Add(new Statistic("Max combo", comboText = statisticValue(),
+            best == null ? null : comboDelta = deltaText(result.MaxCombo - best.MaxCombo, d => d == 0 ? "±0" : $"{(d > 0 ? "+" : "−")}{Math.Abs(d)}", 16),
+            () => formatCombo(result.MaxCombo), sectionTitle));
+        // A saved play's comes in once its replay is judged again.
+        statistics.Add(new Statistic("Unstable rate", unstableRateText = statisticValue(), null, formatUnstableRate, sectionTitle));
+
         return scoreSummary = new Container
         {
             RelativeSizeAxes = Axes.X,
-            Height = summary_height,
             Children = new Drawable[]
             {
                 scoreBlock = new FlowContainer
@@ -711,7 +740,7 @@ public partial class ScoreScreen : YuukiScreen, IHaveScreenAction
                     Direction = FlowDirection.Vertical,
                     Children = new Drawable[]
                     {
-                        new FlowContainer
+                        scoreTitleRow = new FlowContainer
                         {
                             AutoSizeAxes = Axes.Both,
                             Direction = FlowDirection.Horizontal,
@@ -732,19 +761,79 @@ public partial class ScoreScreen : YuukiScreen, IHaveScreenAction
                     Origin = Anchor.CentreRight,
                     AutoSizeAxes = Axes.Both,
                     Direction = FlowDirection.Horizontal,
-                    Spacing = new Vector2(56, 0),
-                    Children = new Drawable[]
-                    {
-                        statistic("Accuracy", accuracyText = statisticValue(),
-                            best == null ? null : accuracyDelta = deltaText((result.Accuracy - best.Accuracy) * 100, d => $"{(d >= 0 ? "+" : "−")}{Math.Abs(d).ToString("0.00", CultureInfo.InvariantCulture)}%", 16)),
-                        statistic("Max combo", comboText = statisticValue(),
-                            best == null ? null : comboDelta = deltaText(result.MaxCombo - best.MaxCombo, d => d == 0 ? "±0" : $"{(d > 0 ? "+" : "−")}{Math.Abs(d)}", 16)),
-                        // A saved play's comes in once its replay is judged again.
-                        statistic("Unstable rate", unstableRateText = statisticValue())
-                    }
+                    Spacing = new Vector2(ScoreSummaryLayout.COLUMN_SPACING, 0),
+                    Children = statistics.Select(s => (Drawable)s.Flow).ToArray()
                 }
             }
         };
+    }
+
+    private static string formatAccuracy(double accuracy) => $"{accuracy * 100:0.00}%";
+
+    private string formatCombo(int combo) => $"{combo}x / {result.TotalNotes}";
+
+    /// <summary>
+    /// One of the score's statistics: its title over its value and change, or beside them in a row. The value is laid out by
+    /// the text it ends on, so the arrangement doesn't change while it rolls up.
+    /// </summary>
+    private sealed class Statistic
+    {
+        public readonly FlowContainer Flow;
+        public readonly SpriteText Title;
+        public readonly SpriteText Value;
+        public readonly SpriteText? Delta;
+
+        private readonly Container titleSlot;
+        private readonly Func<string> final;
+
+        public Statistic(string title, SpriteText value, SpriteText? delta, Func<string> final, Func<string, SpriteText> titleText)
+        {
+            Title = titleText(title);
+            Value = value;
+            Delta = delta;
+            this.final = final;
+
+            titleSlot = new Container { AutoSizeAxes = Axes.Both, Child = Title };
+            Flow = new FlowContainer
+            {
+                AutoSizeAxes = Axes.Both,
+                Children = delta == null ? new Drawable[] { titleSlot, value } : new Drawable[] { titleSlot, value, delta }
+            };
+            LayOut(ScoreSummaryArrangement.OneLine, 0);
+        }
+
+        /// <summary>
+        /// How wide its pieces are, with the value as it ends and at its full size (on one line).
+        /// </summary>
+        public SummaryStatisticWidths Measure()
+        {
+            string shown = Value.Text;
+            Value.Text = final();
+            float value = Value.ContentSize.X * ScoreSummaryLayout.VALUE_SIZE / Value.Font.Size;
+            Value.Text = shown;
+
+            return new SummaryStatisticWidths(Title.ContentSize.X, value, Delta?.ContentSize.X);
+        }
+
+        /// <summary>
+        /// Over each other in a column, or along a row whose titles' column is <paramref name="titleColumn"/> wide.
+        /// </summary>
+        public void LayOut(ScoreSummaryArrangement arrangement, float titleColumn)
+        {
+            bool row = arrangement == ScoreSummaryArrangement.Rows;
+
+            Flow.Direction = row ? FlowDirection.Horizontal : FlowDirection.Vertical;
+            Flow.Spacing = row ? new Vector2(ScoreSummaryLayout.ROW_SPACING, 0) : new Vector2(0, 2);
+
+            titleSlot.AutoSizeAxes = row ? Axes.Y : Axes.Both;
+            if (row)
+                titleSlot.Width = titleColumn;
+            titleSlot.Anchor = titleSlot.Origin = row ? Anchor.CentreLeft : Anchor.TopLeft;
+
+            // Under its title it's set against the right; along a row it follows the titles' column.
+            Value.Anchor = Value.Origin = row ? Anchor.CentreLeft : Anchor.TopRight;
+            Value.Font = YuukiFontUsage.GetFontUsage(Typeface.Quicksand, row ? ScoreSummaryLayout.ROW_VALUE_SIZE : ScoreSummaryLayout.VALUE_SIZE, FontWeight.Bold);
+        }
     }
 
     /// <summary>
@@ -996,7 +1085,7 @@ public partial class ScoreScreen : YuukiScreen, IHaveScreenAction
             {
                 RelativeSizeAxes = Axes.X,
                 AutoSizeAxes = Axes.Y,
-                Padding = new MarginPadding { Top = 16, Bottom = 18, Left = 28, Right = 28 },
+                Padding = new MarginPadding { Top = 16, Bottom = 18, Left = panel_side_padding, Right = panel_side_padding },
                 Child = content
             }
         }
@@ -1009,22 +1098,8 @@ public partial class ScoreScreen : YuukiScreen, IHaveScreenAction
         Color = ResultsInk.Secondary(palette)
     };
 
-    private SpriteText statisticValue() => new SpriteText
-    {
-        Anchor = Anchor.TopRight,
-        Origin = Anchor.TopRight,
-        Font = YuukiFontUsage.GetFontUsage(Typeface.Quicksand, 36, FontWeight.Bold),
-        Color = palette.Text
-    };
-
-    // A statistic's title over its value, and under that, if given, how it changed against the best.
-    private Drawable statistic(string title, SpriteText value, SpriteText? delta = null) => new FlowContainer
-    {
-        AutoSizeAxes = Axes.Both,
-        Direction = FlowDirection.Vertical,
-        Spacing = new Vector2(0, 2),
-        Children = delta == null ? new Drawable[] { sectionTitle(title), value } : new Drawable[] { sectionTitle(title), value, delta }
-    };
+    // Its place and size are the Statistic's to set, by the arrangement.
+    private SpriteText statisticValue() => new SpriteText { Color = palette.Text };
 
     /// <summary>
     /// Zero-padded to seven digits, matching the gameplay HUD's score readout.
@@ -1587,7 +1662,7 @@ public partial class ScoreScreen : YuukiScreen, IHaveScreenAction
 
         judgementBreakdown.Progress = roll;
         scoreText.Text = formatScore(result.Score * roll);
-        comboText.Text = $"{(int)MathF.Round(result.MaxCombo * roll)}x / {result.TotalNotes}";
+        comboText.Text = formatCombo((int)MathF.Round(result.MaxCombo * roll));
         accuracyText.Text = ringAccuracy.Text = $"{shown * 100:0.00}%";
 
         double sinceLanding = now - t.Landing;
@@ -1764,12 +1839,16 @@ public partial class ScoreScreen : YuukiScreen, IHaveScreenAction
     /// Keeps the layout inside the canvas, which is smaller on a phone and shrinks as the UI scale grows.
     /// The song header and the ring share the left, giving up width before the stats column goes below
     /// its narrowest; the ring moves up under the header only as far as it has to, then shrinks to fit
-    /// above the buttons. The stats column scrolls if it's taller than the room above the buttons.
+    /// above the buttons. The stats column scrolls if it's taller than the room above the buttons, once
+    /// its judgement rows have closed up.
     /// </summary>
     private void fitToCanvas()
     {
+        measureSummary();
+
         float buttonsTop = DrawSize.Y + LeftBottomShearButton.DEFAULT_POSITION.Y - backButton.DrawSize.Y - 16;
-        float leftRoom = DrawSize.X - 48 - 32 - details_min_width;
+        float narrowest = narrowestColumn();
+        float leftRoom = DrawSize.X - 48 - 32 - narrowest;
 
         float headerScale = Math.Clamp((leftRoom - header_position.X) / header_width, 0.5f, 1);
         setScale(header, headerScale);
@@ -1782,20 +1861,73 @@ public partial class ScoreScreen : YuukiScreen, IHaveScreenAction
         setScale(ringArea, ringScale);
 
         float leftRight = Math.Max(header_position.X + header_width * headerScale, ring_area_x + ringSize.X * ringScale);
-        detailsScroll.Width = Math.Clamp(DrawSize.X - 48 - leftRight - 32, details_min_width, details_max_width);
+        detailsScroll.Width = Math.Clamp(DrawSize.X - 48 - leftRight - 32, narrowest, details_max_width);
         detailsScroll.Height = Math.Max(240, buttonsTop - details_top);
 
         moreInfoScroll.Width = Math.Max(0, DrawSize.X - 96);
         moreInfoScroll.Height = Math.Max(240, buttonsTop - more_info_top);
         moreInfo.ViewHeight = moreInfoScroll.Height;
 
-        bool stacked = scoreSummary.DrawWidth < summary_one_line_width;
+        fitSummary();
 
-        if (stacked != summaryStacked)
+        // Judged by its height with the rows as they are, so closing them up doesn't open them again.
+        float fullHeight = details.DrawHeight - judgementBreakdown.DrawHeight + judgementBreakdown.FullHeight;
+        judgementBreakdown.Compact = fullHeight > detailsScroll.Height + 0.5f;
+    }
+
+    /// <summary>
+    /// How narrow the stats column may go: as wide as the score's statistics need to go beside it as rows, where the header
+    /// (and the ring, if it's the wider) only has to give up a little for that, to <see cref="header_shrink_floor"/>.
+    /// Otherwise its usual narrowest, with them under the score.
+    /// </summary>
+    private float narrowestColumn()
+    {
+        float rows = ScoreSummaryLayout.RowsNeed(summaryScoreWidth, statisticWidths!) + 2 * panel_side_padding + 1;
+
+        if (rows <= details_min_width)
+            return details_min_width;
+
+        float leftRoom = DrawSize.X - 48 - 32 - rows;
+        return leftRoom >= header_position.X + header_width * header_shrink_floor ? rows : details_min_width;
+    }
+
+    /// <summary>
+    /// How wide the summary's pieces are once the numbers have rolled up, measured once (and again when a value's end
+    /// changes) by showing each its last text.
+    /// </summary>
+    private void measureSummary()
+    {
+        if (statisticWidths != null)
+            return;
+
+        statisticWidths = statistics.Select(s => s.Measure()).ToArray();
+        string shown = scoreText.Text;
+        scoreText.Text = formatScore(result.Score);
+        finalScoreWidth = scoreText.ContentSize.X;
+        scoreText.Text = shown;
+    }
+
+    // The score's title row or its number, whichever is wider.
+    private float summaryScoreWidth => Math.Max(scoreTitleRow.DrawWidth, finalScoreWidth);
+
+    /// <summary>
+    /// The score summary in the arrangement that fits its column, chosen by the numbers it ends on, and as tall as what's
+    /// in it.
+    /// </summary>
+    private void fitSummary()
+    {
+        ScoreSummaryArrangement arrangement = ScoreSummaryLayout.Choose(scoreSummary.DrawWidth, summaryScoreWidth, statisticWidths!);
+
+        if (arrangement != summaryArrangement)
         {
-            summaryStacked = stacked;
+            summaryArrangement = arrangement;
             layOutSummary();
         }
+
+        float height = ScoreSummaryLayout.Height(summaryArrangement, scoreBlock.DrawHeight, statsBlock.DrawHeight);
+
+        if (Math.Abs(scoreSummary.Height - height) > 0.5f)
+            scoreSummary.Height = height;
     }
 
     private static void setScale(Drawable drawable, float scale)
@@ -1805,13 +1937,24 @@ public partial class ScoreScreen : YuukiScreen, IHaveScreenAction
     }
 
     /// <summary>
-    /// Score with max combo and accuracy beside it, or (in a narrow column) under it.
+    /// The score with its statistics beside it in a line or as rows, or (in the narrowest column) in a line under it.
     /// </summary>
     private void layOutSummary()
     {
-        scoreSummary.Height = summaryStacked ? summary_stacked_height : summary_height;
-        scoreBlock.Anchor = scoreBlock.Origin = summaryStacked ? Anchor.TopLeft : Anchor.CentreLeft;
-        statsBlock.Anchor = statsBlock.Origin = summaryStacked ? Anchor.BottomLeft : Anchor.CentreRight;
+        bool stacked = summaryArrangement == ScoreSummaryArrangement.Stacked;
+        bool rows = summaryArrangement == ScoreSummaryArrangement.Rows;
+
+        scoreBlock.Anchor = scoreBlock.Origin = stacked ? Anchor.TopLeft : Anchor.CentreLeft;
+        statsBlock.Anchor = statsBlock.Origin = stacked ? Anchor.BottomLeft : Anchor.CentreRight;
+        statsBlock.Direction = rows ? FlowDirection.Vertical : FlowDirection.Horizontal;
+        statsBlock.Spacing = rows
+            ? new Vector2(0, ScoreSummaryLayout.ROWS_SPACING)
+            : new Vector2(stacked ? ScoreSummaryLayout.STACKED_COLUMN_SPACING : ScoreSummaryLayout.COLUMN_SPACING, 0);
+
+        float titleColumn = ScoreSummaryLayout.TitleColumnWidth(statisticWidths ?? Array.Empty<SummaryStatisticWidths>());
+
+        foreach (Statistic statistic in statistics)
+            statistic.LayOut(summaryArrangement, titleColumn);
     }
 
     #endregion
@@ -2014,6 +2157,9 @@ public partial class ScoreScreen : YuukiScreen, IHaveScreenAction
         moreInfo.SetRun(result);
         judgementBreakdown.ShowTiming(result);
         unstableRateText.Text = formatUnstableRate();
+
+        // The unstable rate it ends on has changed: the summary is measured again for it.
+        statisticWidths = null;
     }
 
     #endregion

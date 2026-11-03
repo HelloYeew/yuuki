@@ -24,6 +24,10 @@ namespace Yuuki.Game.Graphics.UserInterface.Results;
 /// </summary>
 public partial class PlaysStrip : Container
 {
+    // The marks' room at the left, and the space before the lines.
+    private const float mark_width = 150;
+    private const float mark_spacing = 20;
+
     private readonly BestMark before;
     private readonly BestMark after;
     private readonly bool newBest;
@@ -78,38 +82,42 @@ public partial class PlaysStrip : Container
                 Height = 1.5f,
                 Color = palette.Text.WithAlpha(0.14f)
             },
-            new FlowContainer
+            new Container
             {
                 Y = 22,
-                AutoSizeAxes = Axes.Both,
-                Direction = FlowDirection.Horizontal,
-                Spacing = new Vector2(20, 0),
+                RelativeSizeAxes = Axes.X,
+                AutoSizeAxes = Axes.Y,
                 Children = new Drawable[]
                 {
                     new Container
                     {
                         Anchor = Anchor.CentreLeft,
                         Origin = Anchor.CentreLeft,
-                        Size = new Vector2(150, 34),
+                        Size = new Vector2(mark_width, 34),
                         Children = new Drawable[] { before, after }
                     },
+                    // The rest of the width, the lines scrolling where a narrow column cuts them short.
                     new FlowContainer
                     {
                         Anchor = Anchor.CentreLeft,
                         Origin = Anchor.CentreLeft,
-                        AutoSizeAxes = Axes.Both,
+                        RelativeSizeAxes = Axes.X,
+                        AutoSizeAxes = Axes.Y,
+                        Padding = new MarginPadding { Left = mark_width + mark_spacing },
                         Direction = FlowDirection.Vertical,
                         Spacing = new Vector2(0, 2),
                         Children = new Drawable[]
                         {
-                            new SpriteText
+                            new ScrollingText
                             {
+                                RelativeSizeAxes = Axes.X,
                                 Text = where,
                                 Font = YuukiFontUsage.GetFontUsage(Typeface.Nunito, 19, FontWeight.Bold),
                                 Color = palette.Text
                             },
-                            new SpriteText
+                            new ScrollingText
                             {
+                                RelativeSizeAxes = Axes.X,
                                 Text = compared,
                                 Font = YuukiFontUsage.GetFontUsage(Typeface.Nunito, 16, FontWeight.SemiBold),
                                 Color = ResultsInk.Secondary(palette)

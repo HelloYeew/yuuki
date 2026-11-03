@@ -160,9 +160,18 @@ public partial class TestResultsControls : YuukiTestScene
         AddAssert("romanised again", () => header.Title == "Hanabira Signal");
     }
 
+    /// <summary>
+    /// The lines take the width left of the marks, and scroll where a narrow column (a phone's at a larger UI scale) cuts
+    /// them short, rather than run past the strip.
+    /// </summary>
     [Test]
     public void TestWhereARunStands()
     {
+        AddSliderStep("width", 0.3f, 1f, 1f, width =>
+        {
+            strips.RelativeSizeAxes = Axes.X;
+            strips.Width = width;
+        });
         AddStep("a new best, and second of nine", () =>
         {
             YuukiColorPalette palette = ResultsTestRuns.Palette;
@@ -179,6 +188,14 @@ public partial class TestResultsControls : YuukiTestScene
 
             newBest.Compare(1);
         });
+        AddStep("a phone's column, 608 wide", () =>
+        {
+            strips.RelativeSizeAxes = Axes.None;
+            strips.Width = 608;
+        });
+        AddAssert("the lines keep inside the strip", () => strips.Children.All(strip =>
+            descendants(strip).OfType<ScrollingText>().Count() == 2
+            && descendants(strip).OfType<ScrollingText>().All(line => line.ScreenSpaceDrawQuad.BottomRight.X <= strip.ScreenSpaceDrawQuad.BottomRight.X + 0.5f)));
     }
 
     /// <summary>

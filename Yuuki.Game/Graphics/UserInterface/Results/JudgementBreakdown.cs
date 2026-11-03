@@ -21,18 +21,53 @@ public partial class JudgementBreakdown : FlowContainer
 {
     private static readonly HitResult[] shown_results = { HitResult.Bloom, HitResult.Critical, HitResult.Break, HitResult.Hit, HitResult.Miss };
 
+    /// <summary>
+    /// A row's height and the space between rows, and the same when <see cref="Compact"/>: still the height of the
+    /// tallest text in a row (the count's).
+    /// </summary>
+    public const float ROW_HEIGHT = 34;
+
+    public const float ROW_SPACING = 6;
+    public const float COMPACT_ROW_HEIGHT = 30;
+    public const float COMPACT_ROW_SPACING = 4;
+
     private readonly Row[] rows;
+    private bool compact;
 
     public JudgementBreakdown(GameplayResult result, YuukiColorPalette palette)
     {
         Direction = FlowDirection.Vertical;
-        Spacing = new Vector2(0, 6);
+        Spacing = new Vector2(0, ROW_SPACING);
         AutoSizeAxes = Axes.Y;
 
         rows = new Row[shown_results.Length];
         for (int i = 0; i < shown_results.Length; i++)
             Add(rows[i] = new Row(shown_results[i], result, palette));
     }
+
+    /// <summary>
+    /// Rows a little shorter and closer together, for a column without the room for them as they are.
+    /// </summary>
+    public bool Compact
+    {
+        get => compact;
+        set
+        {
+            if (compact == value)
+                return;
+
+            compact = value;
+            Spacing = new Vector2(0, value ? COMPACT_ROW_SPACING : ROW_SPACING);
+
+            foreach (Row row in rows)
+                row.Height = value ? COMPACT_ROW_HEIGHT : ROW_HEIGHT;
+        }
+    }
+
+    /// <summary>
+    /// How tall it is when it isn't <see cref="Compact"/>, whether it is or not.
+    /// </summary>
+    public float FullHeight => rows.Length * ROW_HEIGHT + Math.Max(0, rows.Length - 1) * ROW_SPACING;
 
     /// <summary>
     /// Fills in how many of each were early or late, from <paramref name="result"/>'s judgements (a saved play's come in
@@ -73,7 +108,7 @@ public partial class JudgementBreakdown : FlowContainer
         public Row(HitResult hitResult, GameplayResult result, YuukiColorPalette palette)
         {
             RelativeSizeAxes = Axes.X;
-            Height = 34;
+            Height = ROW_HEIGHT;
 
             this.hitResult = hitResult;
             count = countOf(hitResult, result);
