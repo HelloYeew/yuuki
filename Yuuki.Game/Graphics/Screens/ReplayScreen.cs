@@ -157,6 +157,13 @@ public partial class ReplayScreen : YuukiScreen, IHaveScreenAction
         borrowedChannel = audioManager?.InGameplay == true && audioManager.GameplayChannel != null;
 
         IAudioChannel? channel = borrowedChannel ? audioManager!.GameplayChannel : audioManager?.BeginGameplay();
+
+        // A run that ran out of health wound its song down to a near stop through the channel's frequency, and left
+        // it there. This screen's clock sets only the tempo, so the replay would crawl along at that speed: the song
+        // goes back to its own.
+        if (borrowedChannel)
+            channel!.Frequency.Value = 1;
+
         IAdjustableClock? source = channel != null ? new TrackClock(channel) : null;
 
         AddRange(new Drawable[]
@@ -256,11 +263,21 @@ public partial class ReplayScreen : YuukiScreen, IHaveScreenAction
                             Font = YuukiFontUsage.GetFontUsage(Typeface.Quicksand, 18, FontWeight.Regular),
                             Color = palette.TextLight
                         },
-                        pauseButton = new PillButton(palette.Control, palette.TextLight)
+                        new FlowContainer
                         {
                             Margin = new MarginPadding { Top = 4 },
-                            Text = pauseLabel,
-                            Action = togglePause
+                            AutoSizeAxes = Axes.Both,
+                            Direction = FlowDirection.Horizontal,
+                            Spacing = new Vector2(8, 0),
+                            Children = new Drawable[]
+                            {
+                                pauseButton = new PillButton(palette.Control, palette.TextLight)
+                                {
+                                    Text = pauseLabel,
+                                    Action = togglePause
+                                },
+                                exitButton()
+                            }
                         },
                         new SpriteText
                         {
@@ -300,11 +317,19 @@ public partial class ReplayScreen : YuukiScreen, IHaveScreenAction
             },
             new SpriteText
             {
-                Text = $"{body}  Press Escape to go back.",
+                Text = body,
                 Font = YuukiFontUsage.GetFontUsage(Typeface.Nunito, 20, FontWeight.Regular),
                 Color = palette.TextLight
-            }
+            },
+            exitButton(new MarginPadding { Top = 8 })
         }
+    };
+
+    private PillButton exitButton(MarginPadding margin = default) => new PillButton(palette.Control, palette.TextLight)
+    {
+        Margin = margin,
+        Text = "Exit  ·  Esc",
+        Action = Exit
     };
 
     #endregion
