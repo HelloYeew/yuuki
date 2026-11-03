@@ -30,6 +30,11 @@ public partial class ScreenFooter : Container
     private const float phone_button_scale = 1.25f;
 
     /// <summary>
+    /// How tall the line between the clock and Settings is, of the buttons' 38.
+    /// </summary>
+    private const float settings_separator_height = 22;
+
+    /// <summary>
     /// The bar's height, and a phone's: there it keeps only its lower strip (and the line above it), and
     /// the screen's name and hint go, so the screens get the room.
     /// </summary>
@@ -51,6 +56,7 @@ public partial class ScreenFooter : Container
     private FooterMusicButton settingsButton = null!;
     private FooterNotificationButton notificationButton = null!;
     private FooterClock clock = null!;
+    private Box settingsSeparator = null!;
     private FlowContainer buttons = null!;
 
     [Resolved(canBeNull: true)]
@@ -200,6 +206,21 @@ public partial class ScreenFooter : Container
                     Anchor = Anchor.BottomRight,
                     Origin = Anchor.BottomRight
                 },
+                new Container
+                {
+                    Anchor = Anchor.BottomRight,
+                    Origin = Anchor.BottomRight,
+                    Size = new Vector2(2, settings_separator_height),
+                    Margin = new MarginPadding { Left = 4, Right = 4, Bottom = (38 - settings_separator_height) / 2 },
+                    Masking = true,
+                    CornerRadius = 1,
+                    Child = settingsSeparator = new Box
+                    {
+                        RelativeSizeAxes = Axes.Both,
+                        Color = Color.White,
+                        Alpha = 0.3f
+                    }
+                },
                 settingsButton = new FooterMusicButton(() => game?.ToggleSettingsOverlay(), IconUsage.Settings)
                 {
                     Anchor = Anchor.BottomRight,
@@ -232,6 +253,7 @@ public partial class ScreenFooter : Container
             musicButton.SetAccent(e.NewValue.Text);
             notificationButton.SetAccent(e.NewValue.Text);
             clock.SetAccent(e.NewValue.Text, e.NewValue.TextMuted, e.NewValue.Surface);
+            settingsSeparator.FadeToColor(e.NewValue.Text, 250, Easing.OutQuint);
         };
     }
 
