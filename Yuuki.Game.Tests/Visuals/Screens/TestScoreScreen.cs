@@ -114,7 +114,7 @@ public partial class TestScoreScreen : TestYuukiScreenStack
             RelativeSizeAxes = Axes.Both
         }));
         AddUntilStep("results is current", () => screenStack.CurrentScreen == shown && shown!.IsLoaded);
-        AddAssert("Watch the fall", () => shown!.CanWatchReplay && descendants(shown).OfType<MenuShearButton>().Any(b => b.Text == "Watch the fall"));
+        AddAssert("Replay", () => shown!.CanWatchReplay && descendants(shown).OfType<MenuShearButton>().Any(b => b.Text == "Replay"));
     }
 
     /// <summary>
