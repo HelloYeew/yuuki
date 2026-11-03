@@ -179,6 +179,9 @@ public partial class GameplayScreen : YuukiScreen, IHaveScreenAction
     // Set by the results screen's Retry, read when it hands control back.
     private bool retryRequested;
 
+    // The run that ran out of health, for the fail menu's Results; null until it's over.
+    private GameplayResult? failedResult;
+
     // Which try in a row on this chart the run is: Yuuki says so on the results screen after a few.
     private int attempt = 1;
 
@@ -320,6 +323,7 @@ public partial class GameplayScreen : YuukiScreen, IHaveScreenAction
             },
             failMenu = new GameplayMenuOverlay("Failed", "Your health ran out.", palette,
                 (IconUsage.Replay, "Retry", Restart),
+                (IconUsage.BarChart, "Results", ShowFailedResults),
                 (IconUsage.Logout, "Quit", quit))
         });
 
@@ -448,6 +452,14 @@ public partial class GameplayScreen : YuukiScreen, IHaveScreenAction
             retryRequested = false;
             this.FadeIn(300);
             Restart();
+            return;
+        }
+
+        // Back from a failed run's results: to the fail menu, to try again or leave from there.
+        if (state == PlayState.Failed)
+        {
+            this.FadeIn(300);
+            failMenu.Show();
             return;
         }
 
@@ -701,8 +713,27 @@ public partial class GameplayScreen : YuukiScreen, IHaveScreenAction
 
         state = PlayState.Failed;
         gameplay.Stop();
-        saveRun(gameplay.BuildResult());
+        failedResult = gameplay.BuildResult();
+        saveRun(failedResult);
         failMenu.Show();
+    }
+
+    /// <summary>
+    /// The fail menu's Results: the run that ran out of health on the results screen, which comes back to the menu.
+    /// </summary>
+    public void ShowFailedResults()
+    {
+        if (state != PlayState.Failed || failedResult == null || !this.IsCurrentScreen)
+            return;
+
+        failMenu.Hide();
+
+        screenStack.Push(new ScoreScreen(failedResult, false, () => retryRequested = true, savedScore, savedReplay, attempt)
+        {
+            Anchor = Anchor.Centre,
+            Origin = Anchor.Centre,
+            RelativeSizeAxes = Axes.Both
+        });
     }
 
     #endregion
@@ -783,6 +814,7 @@ public partial class GameplayScreen : YuukiScreen, IHaveScreenAction
         saved = false;
         savedScore = null;
         savedReplay = null;
+        failedResult = null;
         retryHoldStart = null;
         countdownVersion++;
         lastCountInBeat = long.MinValue;
@@ -848,7 +880,8 @@ public partial class GameplayScreen : YuukiScreen, IHaveScreenAction
 
         switch (e.Key)
         {
-            case Key.Grave when state is PlayState.Playing or PlayState.Paused or PlayState.Failed:
+            // Not under the results a failed run can open from the fail menu.
+            case Key.Grave when IsCurrentScreen && state is PlayState.Playing or PlayState.Paused or PlayState.Failed:
                 retryHoldStart = Clock.CurrentTime;
                 return true;
         }
