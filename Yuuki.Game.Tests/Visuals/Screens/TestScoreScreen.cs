@@ -10,7 +10,9 @@ using Sakura.Framework.Graphics.Drawables;
 using Sakura.Framework.Graphics.Primitives;
 using Yuuki.Game.Beatmaps;
 using Yuuki.Game.Configurations;
+using Yuuki.Game.Gameplay.Replays;
 using Yuuki.Game.Gameplay.Scoring;
+using Yuuki.Game.Graphics.Colors;
 using Yuuki.Game.Graphics.Screens;
 using Yuuki.Game.Graphics.UserInterface;
 using Yuuki.Game.Graphics.UserInterface.Results;
@@ -57,6 +59,102 @@ public partial class TestScoreScreen : TestYuukiScreenStack
 
     [Test]
     public void TestEmptyRun() => showResult("empty run", new GameplayResult(), r => r.TotalNotes == 0);
+
+    /// <summary>
+    /// A run that ran out of health: FAILED in place of a rank, how far it got under its accuracy, no badge, and Retry as
+    /// the way on. Never compared with the best; Yuuki has only her one line for it.
+    /// </summary>
+    [Test]
+    public void TestFailedRun()
+    {
+        AddSliderStep("how far it got", 0.05f, 0.99f, 0.72f, reached =>
+        {
+            if (screenStack.CurrentScreen is ScoreScreen previous)
+                previous.Exit();
+
+            screenStack.Push(shown = new ScoreScreen(failed(build(critical: 150, breaks: 60, hits: 40, misses: 70, seed: 6), reached), onRetry: () => { })
+            {
+                Anchor = Anchor.Centre,
+                Origin = Anchor.Centre,
+                RelativeSizeAxes = Axes.Both
+            });
+        });
+
+        showResult("failed at 72%", failed(build(critical: 150, breaks: 60, hits: 40, misses: 70, seed: 6), 0.72), r => r.Failed && r.Reached is > 0.71 and < 0.73,
+            onRetry: () => { });
+        AddAssert("nothing building up to it", () => shown!.Timeline.Failed && !shown.Timeline.RankLost && double.IsPositiveInfinity(shown.Timeline.Best));
+        AddStep("skip to the end", () =>
+        {
+            shown!.Skip();
+            shown.Skip();
+        });
+        AddUntilStep("FAILED, in place of a rank", () => shown!.RankRevealed && letterOf(shown).Failed);
+        AddAssert("how far it got, in the ring", () => textsOf(shown!).Contains("reached 1:09 of 1:37"));
+        AddAssert("no badge", () => descendants(shown!).OfType<ResultsBadge>().Single().Children[0].Alpha == 0);
+        AddAssert("Retry is the way on", () => buttonOf(shown!, "Retry").BackgroundColor == DefaultYuukiColorProvider.GetDefaultPaletteForPart(YuukiScreenPart.Play).Accent);
+
+        showResult("failed at 86%", failed(build(critical: 150, breaks: 60, hits: 40, misses: 70, seed: 6), 0.86), r => r.Failed, onRetry: () => { });
+        AddStep("skip to the end", () =>
+        {
+            shown!.Skip();
+            shown.Skip();
+        });
+        AddUntilStep("her line for it", () => isSubtitle(shown!.ScreenHelperText.Value));
+        AddAssert("still no badge", () => descendants(shown!).OfType<ResultsBadge>().Single().Children[0].Alpha == 0);
+        AddAssert("only that line", () => ResultsVoice.Lines["react-fail"].Any(take => take.English == shown!.ScreenHelperText.Value));
+
+        // Saved with its replay, it offers to watch where it went.
+        AddStep("clear previous results", () => (screenStack.CurrentScreen as ScoreScreen)?.Exit());
+        AddStep("push it saved, with its replay", () => screenStack.Push(shown = new ScoreScreen(failed(build(critical: 150, breaks: 60, hits: 40, misses: 70, seed: 6), 0.72),
+            onRetry: () => { }, score: new ScoreInfo { Failed = true, Date = DateTimeOffset.Now },
+            replay: new ReplayData { Inputs = { new ReplayInput(1000, ReplayInputKind.LanePress, 0) } })
+        {
+            Anchor = Anchor.Centre,
+            Origin = Anchor.Centre,
+            RelativeSizeAxes = Axes.Both
+        }));
+        AddUntilStep("results is current", () => screenStack.CurrentScreen == shown && shown!.IsLoaded);
+        AddAssert("Watch the fall", () => shown!.CanWatchReplay && descendants(shown).OfType<MenuShearButton>().Any(b => b.Text == "Watch the fall"));
+    }
+
+    /// <summary>
+    /// A run that failed, as it would come from gameplay: its judgements up to where health ran out, and the counts of
+    /// those alone.
+    /// </summary>
+    private static GameplayResult failed(GameplayResult run, double reached)
+    {
+        double at = run.ChartLength * reached;
+        JudgementResult[] played = run.Judgements.Where(j => j.Note.StartTime <= at).ToArray();
+        int combo = 0, maxCombo = 0;
+
+        foreach (JudgementResult judgement in played)
+        {
+            combo = judgement.Result.IsHit() ? combo + 1 : 0;
+            maxCombo = Math.Max(maxCombo, combo);
+        }
+
+        return new GameplayResult
+        {
+            Score = (int)(run.Score * reached),
+            MaxCombo = maxCombo,
+            BloomCount = played.Count(j => j.Result == HitResult.Bloom),
+            CriticalCount = played.Count(j => j.Result == HitResult.Critical),
+            BreakCount = played.Count(j => j.Result == HitResult.Break),
+            HitCount = played.Count(j => j.Result == HitResult.Hit),
+            MissCount = played.Count(j => j.Result == HitResult.Miss),
+            Judgements = played,
+            HitWindows = run.HitWindows,
+            ChartLength = run.ChartLength,
+            Failed = true,
+            FailedAt = at
+        };
+    }
+
+    private static RankLetter letterOf(Drawable screen) => descendants(screen).OfType<RankLetter>().First();
+
+    private static MenuShearButton buttonOf(Drawable screen, string text) => descendants(screen).OfType<MenuShearButton>().First(b => b.Text == text);
+
+    private static IEnumerable<string> textsOf(Drawable drawable) => descendants(drawable).OfType<SpriteText>().Select(t => t.Text);
 
     /// <summary>
     /// A skip goes first to just before the first rank lands (an S that breaks, here), then to nearly the end; the rank
@@ -296,7 +394,7 @@ public partial class TestScoreScreen : TestYuukiScreenStack
         }
     }
 
-    private void showResult(string name, GameplayResult result, Func<GameplayResult, bool> expectation)
+    private void showResult(string name, GameplayResult result, Func<GameplayResult, bool> expectation, Action? onRetry = null)
     {
         AddAssert($"{name} result is as built", () => expectation(result));
         AddStep("clear previous results", () =>
@@ -304,7 +402,7 @@ public partial class TestScoreScreen : TestYuukiScreenStack
             if (screenStack.CurrentScreen is ScoreScreen previous)
                 previous.Exit();
         });
-        AddStep($"push {name}", () => screenStack.Push(shown = new ScoreScreen(result)
+        AddStep($"push {name}", () => screenStack.Push(shown = new ScoreScreen(result, onRetry: onRetry)
         {
             Anchor = Anchor.Centre,
             Origin = Anchor.Centre,

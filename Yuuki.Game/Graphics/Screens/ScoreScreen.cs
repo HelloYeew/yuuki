@@ -242,6 +242,7 @@ public partial class ScoreScreen : YuukiScreen, IHaveScreenAction
     private FullBloomCutIn cutIn = null!;
     private RankLetter letter = null!;
     private SpriteText ringAccuracy = null!;
+    private SpriteText ringReached = null!;
     private ResultsBadge badge = null!;
 
     private Container scorePanel = null!;
@@ -379,6 +380,7 @@ public partial class ScoreScreen : YuukiScreen, IHaveScreenAction
     {
         ScreenName.Value = "Results";
         helperText = savedScore != null && viewing ? $"Played {DateUtility.FormatPlayed(savedScore.Date)}"
+            : result.Failed ? FailedRun.Footer(result.Reached)
             : result.IsFullBloom ? "Full Bloom!"
             : result.IsAllPerfect ? "All Perfect!"
             : result.IsFullCombo ? "Full Combo!"
@@ -522,6 +524,10 @@ public partial class ScoreScreen : YuukiScreen, IHaveScreenAction
 
         badge.Shining = result.IsAllPerfect;
 
+        // A run that ran out of health: its colors go grey, and it says how far it got.
+        blossom.Greyed = result.Failed;
+        showReach();
+
         // Replay first, then Retry at the far right when there is one (the usual next step after a play).
         float x = 0;
 
@@ -532,7 +538,8 @@ public partial class ScoreScreen : YuukiScreen, IHaveScreenAction
             {
                 X = x,
                 ButtonSize = action_button_size,
-                Text = "Replay",
+                // A run that failed is watched from a little before it ran out.
+                Text = result.Failed && !viewing ? "Watch the fall" : "Replay",
                 Icon = canWatch ? IconUsage.PlayCircle : IconUsage.Lock,
                 Locked = !canWatch,
                 Action = WatchReplay,
@@ -551,7 +558,8 @@ public partial class ScoreScreen : YuukiScreen, IHaveScreenAction
                 Text = "Retry",
                 Icon = IconUsage.Replay,
                 Action = retry,
-                BackgroundColor = palette.Surface,
+                // After a run that failed, the way on is another try.
+                BackgroundColor = result.Failed ? palette.Accent : palette.Surface,
                 FlashToBeat = false
             });
         }
@@ -640,12 +648,40 @@ public partial class ScoreScreen : YuukiScreen, IHaveScreenAction
             {
                 Anchor = Anchor.Centre,
                 Origin = Anchor.TopCentre,
-                Y = 70,
+                Y = result.Failed ? failed_accuracy_y : 70,
                 Font = YuukiFontUsage.GetFontUsage(Typeface.Nunito, 34, FontWeight.ExtraBold),
                 Color = palette.TextLight
+            },
+            // How far a run that failed got, under its accuracy.
+            ringReached = new SpriteText
+            {
+                Anchor = Anchor.Centre,
+                Origin = Anchor.TopCentre,
+                Y = failed_accuracy_y + 44,
+                Font = YuukiFontUsage.GetFontUsage(Typeface.Nunito, 16, FontWeight.Bold),
+                Color = palette.TextLight.WithAlpha(0.75f)
             }
         }
     };
+
+    /// <summary>
+    /// A run that failed has its accuracy set higher in the ring, FAILED being shorter than a rank, so how far it got fits
+    /// under it inside the fill.
+    /// </summary>
+    private const float failed_accuracy_y = 20;
+
+    /// <summary>
+    /// For a run that failed: how far it got, under its accuracy and in the footer, once that's known (a saved play's,
+    /// once its replay is judged again). No badge: there's nothing to award.
+    /// </summary>
+    private void showReach()
+    {
+        if (!result.Failed || result.Reached is not double reached || result.FailedAt is not double failedAt)
+            return;
+
+        ringReached.Text = FailedRun.Ring(failedAt, result.ChartLength);
+        helperText = viewing ? helperText : FailedRun.Footer(reached);
+    }
 
     /// <summary>
     /// Score, max combo and accuracy — the numbers that roll up with the ring — and, against the best on this difficulty,
@@ -758,6 +794,10 @@ public partial class ScoreScreen : YuukiScreen, IHaveScreenAction
     {
         if (savedScore == null || scoreStore == null || workingBeatmap?.Beatmap is not Beatmap beatmap || beatmap.ID != savedScore.BeatmapId)
             return null;
+
+        // A run that failed isn't ranked among them.
+        if (result.Failed)
+            return PlaysStrip.Failed(palette, savedScore, best, result.FailedAt, scoreStore.GetPlaysToday(beatmap));
 
         IReadOnlyList<ScoreInfo> ranking = scoreStore.GetRanking(beatmap);
         int place = ranking.ToList().IndexOf(savedScore) + 1;
@@ -1027,6 +1067,14 @@ public partial class ScoreScreen : YuukiScreen, IHaveScreenAction
     {
         RevealTimeline t = Timeline;
 
+        // A run that failed: FAILED comes in quietly. Nothing else.
+        if (t.Failed)
+        {
+            letter.LandFailed(at(t.Landing));
+            earnedRankShown = true;
+            return;
+        }
+
         if (t.RankLost)
         {
             letter.Land(ScoreRank.S, JudgementColors.For(ScoreRank.S), at(t.FirstLanding));
@@ -1098,7 +1146,8 @@ public partial class ScoreScreen : YuukiScreen, IHaveScreenAction
         foreach (double tick in t.Ticks.Where(between))
             sounds.PlayTick(t.FillProgress(tick));
 
-        for (int i = 0; i < t.Crossings.Count; i++)
+        // A run that failed: the ticks as it fills, and FAILED coming in; none of the rest.
+        for (int i = 0; i < t.Crossings.Count && !t.Failed; i++)
         {
             (ScoreRank rank, double time) = t.Crossings[i];
 
@@ -1110,7 +1159,7 @@ public partial class ScoreScreen : YuukiScreen, IHaveScreenAction
         }
 
         // A trail of petals shed from the fill's leading edge, thicker while it's quick.
-        for (double time = RevealTimeline.FILL_START + 30; time < t.FillEnd - 150; time += 36)
+        for (double time = RevealTimeline.FILL_START + 30; time < t.FillEnd - 150 && !t.Failed; time += 36)
         {
             if (!between(time))
                 continue;
@@ -1119,10 +1168,10 @@ public partial class ScoreScreen : YuukiScreen, IHaveScreenAction
             petals.Burst(headInPetals(out float outward), PetalBurst.Trail(revealRandom, outward, progress < 0.45f ? 2 : 1), at(time));
         }
 
-        if (between(t.ChargeStart))
+        if (between(t.ChargeStart) && !t.Failed)
             sounds.PlayCharge();
 
-        if (between(t.FillEnd) && result.MissCount > 0)
+        if (between(t.FillEnd) && result.MissCount > 0 && !t.Failed)
             sounds.PlayMiss();
 
         if (t.RankLost)
@@ -1148,7 +1197,7 @@ public partial class ScoreScreen : YuukiScreen, IHaveScreenAction
         if (between(t.Landing))
             land();
 
-        if (between(t.Landing + 120) && (result.IsAllPerfect || result.Rank >= ScoreRank.A))
+        if (between(t.Landing + 120) && !t.Failed && (result.IsAllPerfect || result.Rank >= ScoreRank.A))
             sounds.PlayPetals();
 
         if (result.IsFullCombo && between(t.Badge))
@@ -1204,6 +1253,13 @@ public partial class ScoreScreen : YuukiScreen, IHaveScreenAction
     /// </summary>
     private void land()
     {
+        // FAILED: no hit, nothing thrown.
+        if (Timeline.Failed)
+        {
+            sounds.PlayFail();
+            return;
+        }
+
         sounds.PlayLanding(result.Rank);
 
         Vector2 middle = ringMiddleInPetals();
@@ -1218,6 +1274,9 @@ public partial class ScoreScreen : YuukiScreen, IHaveScreenAction
     /// </summary>
     private void startFalling()
     {
+        if (result.Failed)
+            return;
+
         petals.Fall.Rate = result.IsAllPerfect ? 22 : result.Rank switch
         {
             ScoreRank.SS or ScoreRank.S => 14,
@@ -1254,6 +1313,10 @@ public partial class ScoreScreen : YuukiScreen, IHaveScreenAction
 
         Color color = rankColorAt(now, shown);
 
+        // A run that failed fills in its ranks' colors, dulled.
+        if (t.Failed)
+            color = color.Blend(wilted, 0.65f);
+
         // A Full Bloom: how far the ring has gathered itself (0–1), and how long since everything bloomed (−1 before).
         // Gathering drains the colors to white; the bloom brings them all back at once, the heroes' in turn.
         float gather = t.GatherAt(now);
@@ -1271,7 +1334,7 @@ public partial class ScoreScreen : YuukiScreen, IHaveScreenAction
         float pulse = 0;
         foreach ((_, double time) in t.Crossings)
         {
-            if (now >= time)
+            if (now >= time && !t.Failed)
                 pulse = Math.Max(pulse, MathF.Exp((float)(-(now - time) / 130)));
         }
 
@@ -1287,6 +1350,11 @@ public partial class ScoreScreen : YuukiScreen, IHaveScreenAction
             glow = Math.Max(glow, 0.95f * gather);
         if (sinceBloom >= 0)
             glow = Math.Max(glow, 0.95f * MathF.Exp((float)(-sinceBloom / 500)));
+
+        // FAILED brings only a faint, slow glow.
+        if (t.Failed)
+            glow = sinceLanding >= 0 ? 0.18f * MathF.Exp((float)(-sinceLanding / 220)) : 0;
+
         blossom.Glow = glow;
 
         // The bands: an all perfect's pulse with Yuuna's pink; a broken S's greying.
@@ -1310,9 +1378,10 @@ public partial class ScoreScreen : YuukiScreen, IHaveScreenAction
         // The ring swells as it charges, and gives as a rank hits.
         float scale = 1;
         double sinceHit = t.RankLost && now < t.Landing ? sinceFirst : sinceLanding;
-        if (sinceHit < 0 && sinceFirst < 0)
+        // (A run that failed has nothing charging or hitting it.)
+        if (!t.Failed && sinceHit < 0 && sinceFirst < 0)
             scale = 1 + 0.03f * charge;
-        else if (sinceHit >= 0)
+        else if (!t.Failed && sinceHit >= 0)
             scale = 1 + 0.03f * Math.Max(0, 1 - (float)(sinceHit / 70)) - 0.045f * MathF.Sin(clamp01(sinceHit / 220) * MathF.PI);
 
         // Gathering, it draws in on itself, trembling; blooming, it bursts out and rings.
@@ -1341,9 +1410,13 @@ public partial class ScoreScreen : YuukiScreen, IHaveScreenAction
             waves.Land(JudgementColors.For(result.Rank), at(t.Landing));
         }
 
-        Color landingColor = JudgementColors.For(t.RankLost && now < t.Landing - RankLetter.FALL ? ScoreRank.S : result.Rank);
+        Color landingColor = t.Failed ? wilted : JudgementColors.For(t.RankLost && now < t.Landing - RankLetter.FALL ? ScoreRank.S : result.Rank);
 
-        renderLight(now, color, landingColor, charge, sinceCrack, gather, sinceBloom);
+        if (t.Failed)
+            renderFailedLight(now);
+        else
+            renderLight(now, color, landingColor, charge, sinceCrack, gather, sinceBloom);
+
         renderNumbers(now, roll, shown);
         renderVoice(now);
     }
@@ -1492,6 +1565,20 @@ public partial class ScoreScreen : YuukiScreen, IHaveScreenAction
     }
 
     /// <summary>
+    /// A run that failed has no light: no rays, no glow at the edges, no flash, no dimming and no shake. Only a little of
+    /// the screen's color goes as FAILED comes in.
+    /// </summary>
+    private void renderFailedLight(double now)
+    {
+        rays.Peak = 0;
+        edgeGlow.Intensity = 0;
+        tint.Alpha = 0;
+        focusDimmer.Alpha = 0;
+        colorDrain.GrayscaleStrength = 0.35f * clamp01((now - Timeline.Landing) / 600);
+        world.Position = Vector2.Zero;
+    }
+
+    /// <summary>
     /// The numbers rolling up with the fill, the score's pop and glint as the rank lands, and the comparison with the best.
     /// </summary>
     private void renderNumbers(double now, float roll, float shown)
@@ -1504,7 +1591,7 @@ public partial class ScoreScreen : YuukiScreen, IHaveScreenAction
         accuracyText.Text = ringAccuracy.Text = $"{shown * 100:0.00}%";
 
         double sinceLanding = now - t.Landing;
-        scoreBlock.Scale = new Vector2(sinceLanding >= 0 ? 1 + 0.05f * MathF.Exp((float)(-sinceLanding / 130)) : 1);
+        scoreBlock.Scale = new Vector2(sinceLanding >= 0 && !t.Failed ? 1 + 0.05f * MathF.Exp((float)(-sinceLanding / 130)) : 1);
 
         // The comparison with the best comes in; a new best stamps on.
         double sinceBest = now - t.Best;
@@ -1778,9 +1865,21 @@ public partial class ScoreScreen : YuukiScreen, IHaveScreenAction
     }
 
     /// <summary>
-    /// Opens the play's replay (what the Replay button, and R on a saved score, do). Nothing without one.
+    /// Opens the play's replay (what the Replay button, and R on a saved score, do): from the start, or for a run that
+    /// just failed ("Watch the fall"), from <see cref="FALL_LEAD"/> before it ran out. Nothing without one.
     /// </summary>
-    public void WatchReplay() => WatchReplay(0);
+    public void WatchReplay()
+    {
+        if (canWatch)
+            replayButton?.Flash(Color.White);
+
+        WatchReplay(result.FailedAt is double failedAt && !viewing ? Math.Max(0, failedAt - FALL_LEAD) : 0);
+    }
+
+    /// <summary>
+    /// How long before a failed run ran out its replay starts, from the results ("Watch the fall"): enough to see it go.
+    /// </summary>
+    public const double FALL_LEAD = 8000;
 
     /// <summary>
     /// Opens the play's replay at <paramref name="from"/>, in ms of the song (More info's "watch from"). Nothing without one.
@@ -1789,9 +1888,6 @@ public partial class ScoreScreen : YuukiScreen, IHaveScreenAction
     {
         if (!canWatch || savedScore == null || replay == null || screenStack == null)
             return;
-
-        if (from <= 0)
-            replayButton?.Flash(Color.White);
 
         // The replay brings the song; the results music would play over it.
         audioManager?.EndResultsMusic();
@@ -1871,8 +1967,9 @@ public partial class ScoreScreen : YuukiScreen, IHaveScreenAction
                         return;
                     }
 
-                    result = result.WithJudgements(judging.Judgements, judging.HoldBreakTimes, chart.LaneCount, chart.LastNoteTime);
+                    result = result.WithJudgements(judging.Judgements, judging.HoldBreakTimes, chart.LaneCount, chart.LastNoteTime, judging.FailedAt);
                     showJudgements();
+                    showReach();
                 };
 
                 Add(judging);
