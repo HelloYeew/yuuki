@@ -37,7 +37,7 @@ public partial class TestReplay : YuukiManualInputManagerTestScene
         new BeatmapNote { Type = NoteType.Tap, Lane = NoteLane.Lane4, StartTime = 1300, EndTime = 1300 }
     }, laneCount: 4);
 
-    /// <summary>On time, 20 ms late, a hold held through to its end, then 60 ms late.</summary>
+    /// <summary>On time, 30 ms late, a hold held through to its end, then 60 ms late.</summary>
     private static ReplayData replay() => new ReplayData
     {
         ChartHash = ReplayData.ChartHashOf(chart()),
@@ -45,8 +45,8 @@ public partial class TestReplay : YuukiManualInputManagerTestScene
         {
             new ReplayInput(300, ReplayInputKind.LanePress, 0),
             new ReplayInput(340, ReplayInputKind.LaneRelease, 0),
-            new ReplayInput(520, ReplayInputKind.LanePress, 1),
-            new ReplayInput(560, ReplayInputKind.LaneRelease, 1),
+            new ReplayInput(530, ReplayInputKind.LanePress, 1),
+            new ReplayInput(570, ReplayInputKind.LaneRelease, 1),
             new ReplayInput(690, ReplayInputKind.LanePress, 2),
             new ReplayInput(1100, ReplayInputKind.LaneRelease, 2),
             new ReplayInput(1360, ReplayInputKind.LanePress, 3),
@@ -56,7 +56,7 @@ public partial class TestReplay : YuukiManualInputManagerTestScene
 
     private static readonly HitResult[] expected =
     {
-        HitResult.Critical, HitResult.Critical, HitResult.Critical, HitResult.Critical, HitResult.Break
+        HitResult.Bloom, HitResult.Critical, HitResult.Bloom, HitResult.Bloom, HitResult.Break
     };
 
     private void addReplay() => AddStep("add replay", () =>

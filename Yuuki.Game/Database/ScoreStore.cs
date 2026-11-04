@@ -6,6 +6,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
+using System.Threading.Tasks;
 using Sakura.Framework.Logging;
 using Sakura.Framework.Platform;
 using Yuuki.Game.Beatmaps;
@@ -35,6 +36,9 @@ public class ScoreStore
     /// Fired after a play is added, so screens showing counts or rankings can refresh.
     /// </summary>
     public event Action<ScoreInfo>? ScoreAdded;
+
+    // The last write off the update thread: each waits for the one before.
+    private Task writing = Task.CompletedTask;
 
     public ScoreStore(Storage? storage)
     {
@@ -127,12 +131,22 @@ public class ScoreStore
     public int GetPlayCount(BeatmapSet set) => scores.Count(s => s.BeatmapSetId == set.ID);
 
     /// <summary>
+    /// Plays of one difficulty on the day of <paramref name="now"/> (today if not given), by the local clock, failed ones
+    /// included: the tries a failed run counts itself among.
+    /// </summary>
+    public int GetPlaysToday(Beatmap beatmap, DateTimeOffset? now = null)
+    {
+        DateTime today = (now ?? DateTimeOffset.Now).LocalDateTime.Date;
+        return scores.Count(s => s.BeatmapId == beatmap.ID && s.Date.LocalDateTime.Date == today);
+    }
+
+    /// <summary>
     /// The highest-scoring play of a difficulty that wasn't a fail, if any.
     /// </summary>
     public ScoreInfo? GetPersonalBest(Beatmap beatmap) => GetRanking(beatmap, 1).FirstOrDefault();
 
     /// <summary>
-    /// The play that earned the best mark on a difficulty (all perfect, then rank, then full combo), if any.
+    /// The play that earned the best mark on a difficulty (full bloom, all perfect, then rank, then full combo), if any.
     /// </summary>
     public ScoreInfo? GetBestMark(Beatmap beatmap) => bestMark(scores.Where(s => s.BeatmapId == beatmap.ID));
 
@@ -143,7 +157,8 @@ public class ScoreStore
 
     private static ScoreInfo? bestMark(IEnumerable<ScoreInfo> plays) =>
         plays.Where(s => s.IsRanked)
-             .OrderByDescending(s => s.IsAllPerfect)
+             .OrderByDescending(s => s.IsFullBloom)
+             .ThenByDescending(s => s.IsAllPerfect)
              .ThenByDescending(s => s.Rank)
              .ThenByDescending(s => s.IsFullCombo)
              .ThenByDescending(s => s.Score)
@@ -159,6 +174,39 @@ public class ScoreStore
               .ThenBy(s => s.Date)
               .Take(count)
               .ToList();
+
+    /// <summary>
+    /// Saves the history after plays in it have been changed in place, on a thread from the pool, after any write still
+    /// going.
+    /// </summary>
+    /// <returns>When it's written.</returns>
+    public Task SaveChanges()
+    {
+        ScoreInfo[] snapshot = scores.ToArray();
+        return writing = writing.ContinueWith(_ => write(snapshot), TaskScheduler.Default);
+    }
+
+    /// <summary>
+    /// Copies the history aside as <paramref name="name"/>, beside it, on a thread from the pool, after any write still
+    /// going; a copy already there is kept, so it stays the one from before the first change.
+    /// </summary>
+    /// <returns>When it's copied.</returns>
+    public Task BackUp(string name) => writing = writing.ContinueWith(_ =>
+    {
+        if (storage == null || !storage.Exists(file_name) || storage.Exists(name))
+            return;
+
+        try
+        {
+            using Stream history = storage.GetStream(file_name);
+            using Stream copy = storage.CreateFileSafely(name);
+            history.CopyTo(copy);
+        }
+        catch (Exception e)
+        {
+            Logger.Error($"Failed to back up the score history to {name}.", e);
+        }
+    }, TaskScheduler.Default);
 
     private void load()
     {
@@ -188,6 +236,13 @@ public class ScoreStore
 
     private void save()
     {
+        // After any write still going: they're one at a time, and in order.
+        writing.Wait();
+        write(scores);
+    }
+
+    private void write(IReadOnlyList<ScoreInfo> plays)
+    {
         if (storage == null)
             return;
 
@@ -195,7 +250,7 @@ public class ScoreStore
         {
             // Written to a temporary file and moved into place, so a crash mid-write can't corrupt it.
             using Stream stream = storage.CreateFileSafely(file_name);
-            JsonSerializer.Serialize(stream, scores);
+            JsonSerializer.Serialize(stream, plays);
         }
         catch (Exception e)
         {

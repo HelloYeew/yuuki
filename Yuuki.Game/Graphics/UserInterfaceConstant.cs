@@ -29,6 +29,12 @@ public static class UserInterfaceConstant
     /// </summary>
     public static EasingFunction SoftBounce { get; } = new EasingFunction(new CubicBezierEasing(0.25, 1.3, 0.5, 1));
 
+    /// <summary>
+    /// A glint sweeping across something: quick to cross and slow to leave, so it lands and then lingers off the far
+    /// edge.
+    /// </summary>
+    public static EasingFunction GlintSweep { get; } = new EasingFunction(new CubicBezierEasing(0.2, 0.6, 0.2, 1));
+
     /// <summary>The red of an action that can't be taken back, like quitting the game.</summary>
     public static Color DangerColor { get; } = ColorExtensions.FromHex("#D9534F");
 }

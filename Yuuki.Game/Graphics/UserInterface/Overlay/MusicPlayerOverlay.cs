@@ -202,7 +202,7 @@ public partial class MusicPlayerOverlay : OverlayContainer
                         Size = new Vector2(1f, 20),
                         Text = "-",
                         ScrollSpeed = 45f,
-                        Font = YuukiFontUsage.GetFontUsage(Typeface.Nunito, 15, FontWeight.Bold),
+                        Font = YuukiFontUsage.GetFontUsage(Typeface.Quicksand, 15, FontWeight.Bold),
                         Color = Color.White.WithAlpha(0.85f)
                     }
                 }
@@ -584,7 +584,7 @@ public partial class MusicPlayerOverlay : OverlayContainer
                         Anchor = Anchor.CentreLeft,
                         Origin = Anchor.CentreLeft,
                         Text = BeatmapSetExtensions.GetDisplayTitle(Set, useUnicode),
-                        Font = YuukiFontUsage.GetFontUsage(Typeface.Nunito, 16, FontWeight.Bold),
+                        Font = YuukiFontUsage.GetFontUsage(Typeface.Quicksand, 16, FontWeight.Bold),
                         Color = Color.White
                     },
                     artist = new SpriteText
@@ -592,7 +592,7 @@ public partial class MusicPlayerOverlay : OverlayContainer
                         Anchor = Anchor.CentreLeft,
                         Origin = Anchor.CentreLeft,
                         Text = BeatmapSetExtensions.GetDisplayArtist(Set, useUnicode),
-                        Font = YuukiFontUsage.GetFontUsage(Typeface.Nunito, 13, FontWeight.Regular),
+                        Font = YuukiFontUsage.GetFontUsage(Typeface.Quicksand, 13, FontWeight.Regular),
                         Color = Color.White.WithAlpha(0.6f)
                     }
                 }

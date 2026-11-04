@@ -74,7 +74,7 @@ public partial class TestCrossLaneHold : TestScene
     {
         play(crossing(), press(300, 0), release(900, 0));
 
-        AddAssert("head and tail on time", () => results.SequenceEqual(new[] { HitResult.Critical, HitResult.Critical }));
+        AddAssert("head and tail on time", () => results.SequenceEqual(new[] { HitResult.Bloom, HitResult.Bloom }));
         AddAssert("never broken", () => gameplay.BuildResult().HoldBreakCount == 0);
     }
 
@@ -93,7 +93,7 @@ public partial class TestCrossLaneHold : TestScene
     {
         play(crossing(), press(300, 0), release(500, 0));
         AddAssert("a break, then the tail runs out", () =>
-            gameplay.BuildResult().HoldBreakCount == 1 && results.SequenceEqual(new[] { HitResult.Critical, HitResult.Miss }));
+            gameplay.BuildResult().HoldBreakCount == 1 && results.SequenceEqual(new[] { HitResult.Bloom, HitResult.Miss }));
     }
 
     /// <summary>
@@ -105,13 +105,13 @@ public partial class TestCrossLaneHold : TestScene
     {
         play(crossing(), press(300, 0), release(450, 0), press(600, 2), release(900, 2));
         AddAssert("a break, then the tail", () =>
-            gameplay.BuildResult().HoldBreakCount == 1 && results.SequenceEqual(new[] { HitResult.Critical, HitResult.Hit }));
+            gameplay.BuildResult().HoldBreakCount == 1 && results.SequenceEqual(new[] { HitResult.Bloom, HitResult.Hit }));
     }
 
     [Test]
     public void TestStraightHoldUnchanged()
     {
         play(straight(), press(300, 1), release(900, 1));
-        AddAssert("head and tail on time", () => results.SequenceEqual(new[] { HitResult.Critical, HitResult.Critical }));
+        AddAssert("head and tail on time", () => results.SequenceEqual(new[] { HitResult.Bloom, HitResult.Bloom }));
     }
 }

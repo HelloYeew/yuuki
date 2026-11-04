@@ -166,5 +166,15 @@ public enum YuukiSetting
     /// Whether the device's motor taps for each note hit during a song, firmer the better the hit, and buzzes for a
     /// full combo or a fail. Offered only where there's a motor (<c>IPlatformHaptics.IsSupported</c>).
     /// </summary>
-    Haptics
+    Haptics,
+
+    /// <summary>
+    /// Whether Yuuki speaks on the results screen once the reveal is over (<see cref="ResultsVoice"/>)
+    /// </summary>
+    ResultsVoice,
+
+    /// <summary>
+    /// Whether a Critical show EARLY or LATE during play since which way it missed a Bloom.
+    /// </summary>
+    ShowCriticalTiming
 }

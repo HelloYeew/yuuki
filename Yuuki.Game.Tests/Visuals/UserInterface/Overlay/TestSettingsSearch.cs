@@ -59,12 +59,79 @@ public partial class TestSettingsSearch : YuukiManualInputManagerTestScene
         AddAssert("just the offsets in Gameplay", () => overlay.ShownSettings.SequenceEqual(new[] { "Audio offset", "Visual offset", "How offsets work", "Calibrate offsets", "Offsets by device" }));
     }
 
+    /// <summary>
+    /// The foot of the settings (the game, its version and what it runs on) isn't a section: it's there, under a line,
+    /// whatever's searched for.
+    /// </summary>
+    [Test]
+    public void TestTheFooterStaysThroughASearch()
+    {
+        AddAssert("it's under a line", () =>
+        {
+            Drawable foot = footer();
+            return foot is FlowContainer flow && flow.Children[0] is Box { Height: 2 };
+        });
+        AddAssert("it's under everything", () => footer().Parent is FlowContainer page && page.Children[^1] == footer());
+        AddAssert("it shows", () => isShown(footer()));
+
+        AddStep("search for something in another section", () => overlay.SearchText = "volume");
+        AddAssert("About is hidden", () => !overlay.ShownSections.Contains("About"));
+        AddAssert("it still shows", () => isShown(footer()));
+
+        AddStep("search for the voice", () => overlay.SearchText = "voicevox");
+        AddAssert("the voice's row", () => overlay.ShownSettings.Contains("Voice"));
+        AddAssert("and it shows", () => isShown(footer()));
+
+        AddStep("search for nothing there is", () => overlay.SearchText = "zzzzzz");
+        AddAssert("no section", () => !overlay.ShownSections.Any());
+        AddAssert("and it shows", () => isShown(footer()));
+
+        // What says what it runs on, up to what holds the logos and the line.
+        Drawable footer()
+        {
+            Drawable drawable = all(overlay).OfType<SpriteText>().First(text => text.Text == "Powered by");
+
+            while (drawable is not FlowContainer { Direction: FlowDirection.Vertical, Children.Count: > 1 } flow || flow.Children[0] is not Box)
+                drawable = drawable.Parent!;
+
+            return drawable;
+        }
+
+        bool isShown(Drawable drawable)
+        {
+            for (Drawable? up = drawable; up != null && up != overlay; up = up.Parent)
+            {
+                if (up.Alpha <= 0)
+                    return false;
+            }
+
+            return true;
+        }
+    }
+
+    private static IEnumerable<Drawable> all(Drawable root)
+    {
+        yield return root;
+
+        if (root is Container container)
+        {
+            foreach (Drawable child in container.Children)
+            {
+                foreach (Drawable descendant in all(child))
+                    yield return descendant;
+            }
+        }
+    }
+
     [Test]
     public void TestKeywordsDescriptionsAndChoicesMatch()
     {
         AddStep("search a keyword: \"fps\"", () => overlay.SearchText = "fps");
         AddAssert("frame limiter and the performance overlay", () =>
             overlay.ShownSettings.SequenceEqual(new[] { "Frame limiter", "Performance overlay" }));
+
+        AddStep("search a keyword: \"bloom\"", () => overlay.SearchText = "bloom");
+        AddAssert("early or late on Critical", () => overlay.ShownSettings.SequenceEqual(new[] { "Early or late on Critical" }));
 
         AddStep("search a dropdown choice: \"vsync\"", () => overlay.SearchText = "vsync");
         AddAssert("the frame limiter", () => overlay.ShownSettings.Contains("Frame limiter"));
@@ -76,7 +143,7 @@ public partial class TestSettingsSearch : YuukiManualInputManagerTestScene
         AddAssert("nothing", () => !overlay.ShownSections.Any() && !overlay.ShownSettings.Any());
 
         AddStep("clear the search", () => overlay.SearchText = string.Empty);
-        AddAssert("everything back", () => overlay.ShownSections.Count() == 6);
+        AddAssert("everything back", () => overlay.ShownSections.Count() == 7);
     }
 
     [Test]

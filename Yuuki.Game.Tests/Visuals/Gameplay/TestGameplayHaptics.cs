@@ -60,7 +60,7 @@ public partial class TestGameplayHaptics : YuukiManualInputManagerTestScene
         AddStep("start", () => gameplay.Restart());
         AddStep("seek to it", () => gameplay.GameplayClock.Seek(1000));
         AddStep("hit it", () => PressKeyOnce(Key.D));
-        AddAssert("hit, not felt", () => gameplay.BuildResult().CriticalCount == 1 && motor.Taps.Count == 0);
+        AddAssert("hit, not felt", () => gameplay.BuildResult().BloomCount == 1 && motor.Taps.Count == 0);
     }
 
     [Test]
@@ -87,7 +87,7 @@ public partial class TestGameplayHaptics : YuukiManualInputManagerTestScene
         AddStep("start", () => gameplay.Restart());
         // Playback runs on a real-time stopwatch, which a headless step timeout outpaces.
         AddUntilStep("judged", () => gameplay.AllJudged, 60_000);
-        AddAssert("hit, not felt", () => gameplay.BuildResult().CriticalCount == 1 && motor.Taps.Count == 0);
+        AddAssert("hit, not felt", () => gameplay.BuildResult().BloomCount == 1 && motor.Taps.Count == 0);
     }
 
     private static BeatmapNote tap(double time) => new BeatmapNote { Type = NoteType.Tap, Lane = NoteLane.Lane1, StartTime = time, EndTime = time };

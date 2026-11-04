@@ -103,4 +103,72 @@ public partial class TestScoreProcessor : TestScene
         AddAssert("accuracy is the weighted mean", () => Math.Abs(score.Accuracy.Value - (1 + 2.0 / 3) / 2) < 1e-9);
         AddAssert("below max", () => score.Score.Value < ScoreProcessor.MAX_SCORE);
     }
+
+    /// <summary>
+    /// A perfect run all Blooms scores past the maximum by a point a Bloom; Blooms and Criticals mixed, by a point for
+    /// each Bloom. Accuracy is the same either way: a Bloom counts as a Critical.
+    /// </summary>
+    [Test]
+    public void TestEachBloomAddsAPoint()
+    {
+        var score = new ScoreProcessor();
+        var chart = new PlayableBeatmap(new[]
+        {
+            new BeatmapNote { Type = NoteType.Tap, StartTime = 0, EndTime = 0 },
+            new BeatmapNote { Type = NoteType.Hold, StartTime = 100, EndTime = 300 },
+            new BeatmapNote { Type = NoteType.Swipe, StartTime = 400, EndTime = 400 }
+        });
+        BeatmapNote[] judged = { chart.Notes[0], chart.Notes[1], chart.Notes[1], chart.Notes[2] };
+
+        AddStep("all four Blooms", () =>
+        {
+            score.Prepare(chart);
+            foreach (BeatmapNote note in judged)
+                score.Apply(new JudgementResult(note, HitResult.Bloom, 0));
+        });
+        AddAssert("max score and four", () => score.Score.Value == ScoreProcessor.MAX_SCORE + 4);
+        AddAssert("accuracy 100%", () => score.Accuracy.Value == 1);
+
+        AddStep("again: Blooms but one Critical", () =>
+        {
+            score.Reset();
+            for (int i = 0; i < judged.Length; i++)
+                score.Apply(new JudgementResult(judged[i], i == 2 ? HitResult.Critical : HitResult.Bloom, 0));
+        });
+        AddAssert("max score and three", () => score.Score.Value == ScoreProcessor.MAX_SCORE + 3);
+    }
+
+    /// <summary>
+    /// A Bloom is within half a Critical's window, either side; a release gets the same leniency the other windows do.
+    /// </summary>
+    [Test]
+    public void TestTheBloomWindow()
+    {
+        var windows = new HitWindows();
+
+        AddAssert("22 ms either way is a Bloom", () => windows.ResultFor(22) == HitResult.Bloom && windows.ResultFor(-22) == HitResult.Bloom);
+        AddAssert("23 ms is a Critical", () => windows.ResultFor(23) == HitResult.Critical && windows.ResultFor(-23) == HitResult.Critical);
+        AddAssert("a release 33 ms off is a Bloom", () => windows.ResultForRelease(33) == HitResult.Bloom);
+        AddAssert("a release 34 ms off is a Critical", () => windows.ResultForRelease(34) == HitResult.Critical);
+    }
+
+    [Test]
+    public void TestABloomKeepsTheComboAndHealth()
+    {
+        var score = new ScoreProcessor();
+        var health = new HealthProcessor();
+
+        AddStep("a miss, then a Bloom", () =>
+        {
+            health.Apply(judgement(HitResult.Miss));
+            double afterMiss = health.Health.Value;
+            score.Apply(judgement(HitResult.Bloom));
+            health.Apply(judgement(HitResult.Bloom));
+            recovered = health.Health.Value > afterMiss;
+        });
+        AddAssert("combo 1", () => score.Combo.Value == 1);
+        AddAssert("health came back", () => recovered);
+    }
+
+    private bool recovered;
 }

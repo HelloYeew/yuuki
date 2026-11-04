@@ -147,7 +147,7 @@ public partial class SetupScreen : Container
         var about = new EditorPanel("Worked out by the game");
         about.AddRow(info = new SpriteText
         {
-            Font = YuukiFontUsage.GetFontUsage(Typeface.Nunito, 15, FontWeight.Bold),
+            Font = YuukiFontUsage.GetFontUsage(Typeface.Quicksand, 15, FontWeight.Bold),
             Color = Color.White
         });
         about.AddRow(note("Length comes from the song, tempo from the timing, the rating from the notes (saved with it)."));
@@ -258,7 +258,7 @@ public partial class SetupScreen : Container
         {
             X = label_width + previewSize.X + 14,
             Y = 8,
-            Font = YuukiFontUsage.GetFontUsage(Typeface.Nunito, 15, FontWeight.Bold),
+            Font = YuukiFontUsage.GetFontUsage(Typeface.Quicksand, 15, FontWeight.Bold),
             Color = Color.White
         };
 
@@ -271,7 +271,7 @@ public partial class SetupScreen : Container
                 {
                     Y = 8,
                     Text = text,
-                    Font = YuukiFontUsage.GetFontUsage(Typeface.Nunito, 14, FontWeight.Bold),
+                    Font = YuukiFontUsage.GetFontUsage(Typeface.Quicksand, 14, FontWeight.Bold),
                     Color = Color.White.WithAlpha(0.7f)
                 },
                 new Container
@@ -317,7 +317,7 @@ public partial class SetupScreen : Container
         Anchor = Anchor.CentreLeft,
         Origin = Anchor.CentreLeft,
         Text = text,
-        Font = YuukiFontUsage.GetFontUsage(Typeface.Nunito, 14, FontWeight.Bold),
+        Font = YuukiFontUsage.GetFontUsage(Typeface.Quicksand, 14, FontWeight.Bold),
         Color = Color.White.WithAlpha(0.7f)
     };
 

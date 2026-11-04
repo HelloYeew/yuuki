@@ -923,8 +923,11 @@ public partial class Playfield : Container
             {
                 case NoteType.Pass when time >= note.StartTime && CharacterLane == lane:
                 {
+                    // The earlier the character got there the better, a window a grade: waiting from the miss window
+                    // on is a Bloom.
                     double lead = note.StartTime - characterArrivalTime;
-                    HitResult result = lead >= hitWindows.Hit ? HitResult.Critical
+                    HitResult result = lead >= hitWindows.MissWindow ? HitResult.Bloom
+                        : lead >= hitWindows.Hit ? HitResult.Critical
                         : lead >= hitWindows.Critical ? HitResult.Break
                         : HitResult.Hit;
 
@@ -932,8 +935,9 @@ public partial class Playfield : Container
                     break;
                 }
 
+                // Held as it reaches the line, it's on time: the best there is.
                 case NoteType.Touch when time >= note.StartTime - hitWindows.Critical && lane < laneCount && (laneHeld[lane] || laneTapped[lane]):
-                    catchNote(index, kv.Value, HitResult.Critical, 0);
+                    catchNote(index, kv.Value, HitResult.Bloom, 0);
                     break;
             }
         }
@@ -1655,7 +1659,7 @@ public partial class Playfield : Container
             sounds?.StopSlide(slot);
         }
 
-        if (holdBroken[index] && result.IsHit() && result < HitResult.Hit)
+        if (holdBroken[index] && result.IsHit() && result.Grade() > HitResult.Hit.Grade())
             result = HitResult.Hit;
 
         judged[index] = true;
@@ -1708,14 +1712,14 @@ public partial class Playfield : Container
             if (judgement.Result.IsHit())
             {
                 Color color = JudgementColors.For(judgement.Result);
-                burstAt(lane, color, small: false, critical: judgement.Result == HitResult.Critical);
+                burstAt(lane, color, small: false, critical: judgement.Result.IsCritical());
 
                 // A column of light up the lane, tinted by the judgment.
                 if (lane < hitBeams.Length)
                 {
                     hitBeams[lane].ClearTransforms();
                     hitBeams[lane].Color = color;
-                    hitBeams[lane].Alpha = judgement.Result == HitResult.Critical ? 0.7f : 0.45f;
+                    hitBeams[lane].Alpha = judgement.Result.IsCritical() ? 0.7f : 0.45f;
                     hitBeams[lane].FadeOut(280, Easing.OutQuint);
                 }
             }

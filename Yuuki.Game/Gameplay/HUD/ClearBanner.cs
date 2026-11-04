@@ -8,7 +8,9 @@ using Sakura.Framework.Graphics.Primitives;
 using Sakura.Framework.Graphics.Transforms;
 using Sakura.Framework.Maths;
 using Yuuki.Game.Graphics;
+using Yuuki.Game.Graphics.Colors;
 using Yuuki.Game.Graphics.Text;
+using Yuuki.Game.Graphics.UserInterface;
 
 namespace Yuuki.Game.Gameplay.HUD;
 
@@ -24,6 +26,7 @@ public partial class ClearBanner : Container
 
     private readonly Container strip;
     private readonly Box background;
+    private readonly RainbowFill rainbow;
     private readonly SpriteText text;
 
     public ClearBanner()
@@ -41,9 +44,20 @@ public partial class ClearBanner : Container
                 Height = 150,
                 Masking = true,
                 Shear = UserInterfaceConstant.Shear,
-                Child = background = new Box
+                Children = new Drawable[]
                 {
-                    RelativeSizeAxes = Axes.Both
+                    background = new Box
+                    {
+                        RelativeSizeAxes = Axes.Both
+                    },
+                    // A Full Bloom's. Unseen until then and only ever shown by its alpha: kept present so it's drawn
+                    // properly once it is.
+                    rainbow = new RainbowFill
+                    {
+                        RelativeSizeAxes = Axes.Both,
+                        Alpha = 0,
+                        AlwaysPresent = true
+                    }
                 }
             },
             text = new SpriteText
@@ -56,10 +70,20 @@ public partial class ClearBanner : Container
         };
     }
 
-    public void Play(string label, Color color)
+    public void Play(string label, Color color) => play(label, color, false);
+
+    /// <summary>
+    /// A Full Bloom's: the heroes' rainbow moving along the strip, dark letters on it.
+    /// </summary>
+    public void PlayFullBloom() => play("Full Bloom", RainbowColors.INK_ON_PASTEL, true);
+
+    private void play(string label, Color color, bool rainbowStrip)
     {
         text.Text = label.ToUpperInvariant();
         background.Color = color;
+        background.Alpha = rainbowStrip ? 0 : 1;
+        rainbow.Alpha = rainbowStrip ? 1 : 0;
+        text.Color = rainbowStrip ? RainbowColors.INK_ON_PASTEL : Color.White;
 
         this.FadeIn(100);
 

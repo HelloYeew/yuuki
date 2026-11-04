@@ -98,7 +98,7 @@ public partial class IconStats : FlowContainer
                 {
                     Anchor = Anchor.CentreLeft,
                     Origin = Anchor.CentreLeft,
-                    Font = YuukiFontUsage.GetFontUsage(Typeface.Nunito, (int)textSize, FontWeight.Bold)
+                    Font = YuukiFontUsage.GetFontUsage(Typeface.Quicksand, (int)textSize, FontWeight.Bold)
                 }
             };
         }

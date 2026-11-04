@@ -69,7 +69,7 @@ public partial class TestTouchPlay : YuukiManualInputManagerTestScene
         at(2000);
         AddStep("lift the other", () => InputManager.TouchUp(TouchSource.Touch2));
         // A hold let go early is judged later on (it can be grabbed again); one let go on time is judged then.
-        AddAssert("head and tail, both on time", () => judgements.Count == 2 && judgements.All(j => j.Result == HitResult.Critical));
+        AddAssert("head and tail, both on time", () => judgements.Count == 2 && judgements.All(j => j.Result == HitResult.Bloom));
     }
 
     /// <summary>
@@ -90,7 +90,7 @@ public partial class TestTouchPlay : YuukiManualInputManagerTestScene
         at(2000);
         AddStep("lift", () => InputManager.TouchUp(TouchSource.Touch1));
         AddAssert("never broken", () => breaks == 0);
-        AddAssert("head and tail, both on time", () => judgements.Count == 2 && judgements.All(j => j.Result == HitResult.Critical));
+        AddAssert("head and tail, both on time", () => judgements.Count == 2 && judgements.All(j => j.Result == HitResult.Bloom));
     }
 
     /// <summary>
@@ -106,7 +106,7 @@ public partial class TestTouchPlay : YuukiManualInputManagerTestScene
         AddStep("touch the first lane", () => InputManager.TouchDown(TouchSource.Touch1, lane(0)));
         at(2000);
         AddStep("lift, still there", () => InputManager.TouchUp(TouchSource.Touch1));
-        AddAssert("the tail misses", () => judgements.Select(j => j.Result).SequenceEqual(new[] { HitResult.Critical, HitResult.Miss }));
+        AddAssert("the tail misses", () => judgements.Select(j => j.Result).SequenceEqual(new[] { HitResult.Bloom, HitResult.Miss }));
     }
 
     /// <summary>
@@ -150,7 +150,7 @@ public partial class TestTouchPlay : YuukiManualInputManagerTestScene
             InputManager.TouchUp(TouchSource.Touch2);
         });
         AddAssert("never broken", () => breaks == 0);
-        AddAssert("both heads and tails on time", () => judgements.Count == 4 && judgements.All(j => j.Result == HitResult.Critical));
+        AddAssert("both heads and tails on time", () => judgements.Count == 4 && judgements.All(j => j.Result == HitResult.Bloom));
     }
 
     /// <summary>
@@ -168,7 +168,7 @@ public partial class TestTouchPlay : YuukiManualInputManagerTestScene
         at(2000);
         AddStep("lift", () => InputManager.TouchUp(TouchSource.Touch1));
         AddAssert("never broken", () => breaks == 0);
-        AddAssert("head and tail, both on time", () => judgements.Count == 2 && judgements.All(j => j.Result == HitResult.Critical));
+        AddAssert("head and tail, both on time", () => judgements.Count == 2 && judgements.All(j => j.Result == HitResult.Bloom));
     }
 
     /// <summary>

@@ -54,7 +54,7 @@ public partial class OffsetStepper : FlowContainer
                 Anchor = Anchor.CentreLeft,
                 Origin = Anchor.CentreLeft,
                 Text = label,
-                Font = YuukiFontUsage.GetFontUsage(Typeface.Nunito, 20, FontWeight.Regular),
+                Font = YuukiFontUsage.GetFontUsage(Typeface.Quicksand, 20, FontWeight.Regular),
                 Color = text,
                 Margin = new MarginPadding { Right = 4 }
             });

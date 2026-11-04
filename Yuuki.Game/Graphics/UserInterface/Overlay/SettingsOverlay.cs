@@ -28,12 +28,12 @@ using Yuuki.Game.Audio;
 using Yuuki.Game.Configurations;
 using Yuuki.Game.Database;
 using Yuuki.Game.Gameplay;
-using Yuuki.Game.Graphics;
 using Yuuki.Game.Graphics.Colors;
 using Yuuki.Game.Graphics.Containers;
 using Yuuki.Game.Graphics.Text;
 using Yuuki.Game.Graphics.Screens;
 using Yuuki.Game.Graphics.ScreenStacks;
+using Yuuki.Game.Graphics.UserInterface.Results;
 using Vector2 = Sakura.Framework.Maths.Vector2;
 
 namespace Yuuki.Game.Graphics.UserInterface.Overlay;
@@ -125,6 +125,7 @@ public partial class SettingsOverlay : FocusedOverlayContainer
 
     private const string framework_url = "https://github.com/HelloYeew/sakura";
     private const string yuuki_url = "https://github.com/HelloYeew/yuuki";
+    private const string voicevox_url = "https://voicevox.hiroshiba.jp/";
 
     [BackgroundDependencyLoader]
     private void load(YuukiConfigManager configManager, FrameworkConfigManager frameworkConfigManager, [CanBeNull] IYuukiColorProvider? colorProvider)
@@ -284,12 +285,12 @@ public partial class SettingsOverlay : FocusedOverlayContainer
             settingRow("Hitsound volume", "The notes, holds and combo break during play, on top of effects volume.",
                 percentSlider(configManager.Get<double>(YuukiSetting.HitsoundVolume)),
                 "samples", "sfx", "keysound"),
+            settingRow("Yuuki's voice", $"On the results screen, Yuuki calls your rank and says how she felt about the run ({ResultsVoice.CREDIT}).",
+                toggle(configManager.Get<bool>(YuukiSetting.ResultsVoice)),
+                "speech", "character", "results", "tsumugi", "voicevox", "subtitles"),
             settingRow("Output device", "Where sound plays. The system default follows your system as its choice changes.",
                 outputDeviceDropdown(frameworkConfigManager.Get<string>(FrameworkSetting.AudioDevice)),
-                "device", "output", "speaker", "headphone", "bluetooth"),
-            phone ? null : settingRow("Audio driver", "The audio backend sound plays through.",
-                dropdown(frameworkConfigManager.Get<AudioBackend>(FrameworkSetting.AudioBackend), AudioBackends.GetSuitableBackends()),
-                "device", "output", "speaker", "headphone"));
+                "device", "output", "speaker", "headphone", "bluetooth"));
 
         // Everything the setup screen before a song offers, so it can be set up without picking one.
         addSection(content, IconUsage.SportsEsports, "Gameplay",
@@ -325,6 +326,9 @@ public partial class SettingsOverlay : FocusedOverlayContainer
             settingRow("Disable video during play", "Show only the background image while playing. Menus and song select keep the video.",
                 toggle(configManager.Get<bool>(YuukiSetting.DisableGameplayVideo)),
                 "no-video", "performance"),
+            settingRow("Early or late on Critical", "Show EARLY or LATE under a Critical too, so you can tell which way you missed a BLOOM.",
+                toggle(configManager.Get<bool>(YuukiSetting.ShowCriticalTiming)),
+                "fast", "slow", "timing", "judgement", "judgment", "bloom"),
             // Only where there's a motor to feel.
             haptics?.IsSupported == true
                 ? settingRow("Haptics", "Feel your hits: a tap for every note you hit, firmer the better the hit, and a buzz for a full combo or a fail.",
@@ -412,6 +416,9 @@ public partial class SettingsOverlay : FocusedOverlayContainer
                 dropdown(frameworkConfigManager.Get<int>(FrameworkSetting.AudioDeviceBufferFrames), new[] { 128, 256, 512, 1024, 2048 },
                     frames => $"{frames} frames"),
                 "delay", "stutter", "glitch"),
+            phone ? null : settingRow("Audio driver", "The audio backend sound plays through.",
+                dropdown(frameworkConfigManager.Get<AudioBackend>(FrameworkSetting.AudioBackend), AudioBackends.GetSuitableBackends()),
+                "device", "output", "speaker", "headphone"),
             phone ? null : settingRow("Relative mouse mode", "Lock and hide the cursor, reading raw mouse movement.",
                 toggle(frameworkConfigManager.Get<bool>(FrameworkSetting.RelativeMouseMode)),
                 "raw input", "cursor"),
@@ -419,9 +426,15 @@ public partial class SettingsOverlay : FocusedOverlayContainer
                 multiplierSlider(frameworkConfigManager.Get<double>(FrameworkSetting.CursorSensitivity), 0.1, 4),
                 "mouse", "speed", "velocity", "raw input"));
 
-        searchBox.Text.BindValueChanged(e => applySearch(e.NewValue));
+        addSection(content, IconUsage.Info, "About",
+            settingRow("Voice", $"Yuuki's voice on the results screen is 春日部つむぎ, made with VOICEVOX, a free text-to-speech engine. {ResultsVoice.CREDIT}",
+                links(("春日部つむぎ", ResultsVoice.CREDIT_URL), ("VOICEVOX", voicevox_url)),
+                "credits", "acknowledgements", "tsumugi", "kasukabe", "voicevox", "speech"));
 
+        // Under it all, whatever's searched for: not a section, so a search doesn't hide it.
         content.Add(createAbout());
+
+        searchBox.Text.BindValueChanged(e => applySearch(e.NewValue));
 
         if (gameLayout != null)
             BindValueChanged(gameLayout.Current, e => applyLayout(e.NewValue == DisplayLayout.Phone), true);
@@ -510,32 +523,29 @@ public partial class SettingsOverlay : FocusedOverlayContainer
             AutoSizeAxes = Axes.Y,
             Direction = FlowDirection.Vertical,
             Spacing = new Vector2(0, 22),
-            Children = new Drawable[]
+            Child = new FlowContainer
             {
-                new FlowContainer
+                AutoSizeAxes = Axes.Both,
+                Direction = FlowDirection.Horizontal,
+                Spacing = new Vector2(12, 0),
+                Children = new Drawable[]
                 {
-                    AutoSizeAxes = Axes.Both,
-                    Direction = FlowDirection.Horizontal,
-                    Spacing = new Vector2(12, 0),
-                    Children = new Drawable[]
+                    new IconSprite
                     {
-                        new IconSprite
-                        {
-                            Anchor = Anchor.CentreLeft,
-                            Origin = Anchor.CentreLeft,
-                            Icon = icon,
-                            IconSize = 30,
-                            Filled = true,
-                            Color = palette.Control
-                        },
-                        new SpriteText
-                        {
-                            Anchor = Anchor.CentreLeft,
-                            Origin = Anchor.CentreLeft,
-                            Text = title,
-                            Font = YuukiFontUsage.GetFontUsage(Typeface.Quicksand, 32, FontWeight.Bold),
-                            Color = palette.Control
-                        }
+                        Anchor = Anchor.CentreLeft,
+                        Origin = Anchor.CentreLeft,
+                        Icon = icon,
+                        IconSize = 30,
+                        Filled = true,
+                        Color = palette.Control
+                    },
+                    new SpriteText
+                    {
+                        Anchor = Anchor.CentreLeft,
+                        Origin = Anchor.CentreLeft,
+                        Text = title,
+                        Font = YuukiFontUsage.GetFontUsage(Typeface.Quicksand, 32, FontWeight.Bold),
+                        Color = palette.Control
                     }
                 }
             }
@@ -586,6 +596,14 @@ public partial class SettingsOverlay : FocusedOverlayContainer
         // What's left starts from the top; the old position could be past the end of it.
         scroll.ScrollToStart(false);
     }
+
+    private Drawable separator() => new Box
+    {
+        RelativeSizeAxes = Axes.X,
+        Height = 2,
+        Color = palette.Text,
+        Alpha = 0.15f
+    };
 
     private static bool matches(string term, string word) => term.Contains(word, StringComparison.OrdinalIgnoreCase);
 
@@ -1222,7 +1240,7 @@ public partial class SettingsOverlay : FocusedOverlayContainer
     };
 
     /// <summary>
-    /// The bottom of the settings: the game's logo, version and build, and the framework it runs on.
+    /// The foot of the settings, under a line: the game's logo, version and build, and the framework it runs on.
     /// </summary>
     private Drawable createAbout()
     {
@@ -1303,6 +1321,21 @@ public partial class SettingsOverlay : FocusedOverlayContainer
         };
     }
 
+    /// <summary>
+    /// A button for each link, side by side, each opening it in the browser.
+    /// </summary>
+    private Drawable links(params (string Text, string Url)[] links) => new FlowContainer
+    {
+        AutoSizeAxes = Axes.Both,
+        Direction = FlowDirection.Horizontal,
+        Spacing = new Vector2(12, 0),
+        Children = links.Select(link => (Drawable)new PillButton(palette.Control, Color.White)
+        {
+            Text = link.Text,
+            Action = () => host?.OpenUrlExternally(link.Url)
+        }).ToArray()
+    };
+
     private static string versionText(string version) => version == "development" ? "Development build" : $"Version {version}";
 
     private Drawable logo(string texture, Vector2 size, Anchor anchor = Anchor.CentreLeft) => new Sprite
@@ -1318,7 +1351,7 @@ public partial class SettingsOverlay : FocusedOverlayContainer
         Anchor = anchor,
         Origin = anchor,
         Text = text,
-        Font = YuukiFontUsage.GetFontUsage(bold ? Typeface.Quicksand : Typeface.Nunito, bold ? 18 : 15, bold ? FontWeight.Bold : FontWeight.Regular),
+        Font = YuukiFontUsage.GetFontUsage(Typeface.Quicksand, bold ? 18 : 15, bold ? FontWeight.Bold : FontWeight.Regular),
         Color = bold ? palette.Text : palette.TextMuted
     };
 
@@ -1468,8 +1501,8 @@ public partial class SettingsOverlay : FocusedOverlayContainer
             PlaceholderText = "type to search";
             ReleaseFocusOnCommit = false;
 
-            SpriteText.Font = YuukiFontUsage.GetFontUsage(Typeface.Quicksand, 22, FontWeight.Bold);
-            PlaceholderSprite.Font = YuukiFontUsage.GetFontUsage(Typeface.Quicksand, 22, FontWeight.Regular);
+            SpriteText.Font = YuukiFontUsage.GetFontUsage(Typeface.Nunito, 22, FontWeight.Bold);
+            PlaceholderSprite.Font = YuukiFontUsage.GetFontUsage(Typeface.Nunito, 22, FontWeight.Regular);
             PlaceholderSprite.Color = Color.White.WithAlpha(0.6f);
             ImeText.Font = SpriteText.Font;
 

@@ -6,7 +6,6 @@ using System.Collections.Generic;
 using System.Linq;
 using Sakura.Framework.Allocation;
 using Sakura.Framework.Audio;
-using Sakura.Framework.Graphics.Containers;
 using Sakura.Framework.Graphics.Drawables;
 using Sakura.Framework.Platform;
 using Sakura.Framework.Reactive;

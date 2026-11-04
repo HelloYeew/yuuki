@@ -47,6 +47,24 @@ public class BeatmapNoteStore
     }
 
     /// <summary>
+    /// The beatmap's notes without keeping them on it: read into an array of their own if they aren't loaded. Safe off the
+    /// update thread, as it never touches <see cref="Beatmap.Notes"/>, so it can't race a play loading or unloading them.
+    /// </summary>
+    /// <returns>The beatmap's notes, empty if it has none or could not be read.</returns>
+    public BeatmapNote[] Read(Beatmap beatmap)
+    {
+        if (beatmap.IsNull())
+            return Array.Empty<BeatmapNote>();
+
+        BeatmapNote[] loaded = beatmap.Notes;
+
+        if (loaded.Length > 0)
+            return loaded;
+
+        return string.IsNullOrEmpty(beatmap.NotesStoragePath) ? Array.Empty<BeatmapNote>() : read(beatmap.NotesStoragePath);
+    }
+
+    /// <summary>
     /// Drops the notes loaded by <see cref="Load"/>, leaving the beatmap's metadata intact.
     /// </summary>
     /// <remarks>

@@ -91,7 +91,7 @@ public partial class DockedSong : ClickableContainer
                     artist = new ScrollingText
                     {
                         RelativeSizeAxes = Axes.X,
-                        Font = YuukiFontUsage.GetFontUsage(Typeface.Nunito, 19, FontWeight.SemiBold)
+                        Font = YuukiFontUsage.GetFontUsage(Typeface.Quicksand, 19, FontWeight.SemiBold)
                     },
                     details = new IconStats(16)
                     {
@@ -152,7 +152,7 @@ public partial class DockedSong : ClickableContainer
         }
 
         title.Font = YuukiFontUsage.GetFontUsage(Typeface.Quicksand, phone ? 24 : 34, FontWeight.Bold);
-        artist.Font = YuukiFontUsage.GetFontUsage(Typeface.Nunito, phone ? 16 : 19, FontWeight.SemiBold);
+        artist.Font = YuukiFontUsage.GetFontUsage(Typeface.Quicksand, phone ? 16 : 19, FontWeight.SemiBold);
     }
 
     /// <summary>

@@ -114,6 +114,11 @@ public partial class YuukiGame : App
         FontStore.AddFontFamily(fontStore, "Quicksand");
         FontStore.AddFontFamily(fontStore, "Nunito", hasItalics: true);
         FontStore.AddFontFamily(fontStore, "MPLUSRounded1c", script: FontScript.Japanese);
+
+        // M PLUS Rounded 1c has no SemiBold, so Japanese in a SemiBold line (every song card's artist) fell back to its
+        // Regular, a weight lighter than the Latin beside it. Its Medium is the nearest: measured in ink, Nunito's
+        // SemiBold is 1.24 times its Regular, M PLUS's Medium 1.35 times its own (and Bold 1.63).
+        FontStore.AddFont(fontStore, "MPLUSRounded1c-Medium.ttf", alias: "MPLUSRounded1c-SemiBold");
         FontStore.AddFontFamily(fontStore, "Sarabun", script: FontScript.Thai);
 
         Cache(this);
@@ -133,7 +138,8 @@ public partial class YuukiGame : App
         workingBeatmap = new WorkingBeatmap();
         Cache(beatmapsCollection);
 
-        Cache(new ScoreStore(Host.Storage));
+        var scoreStore = new ScoreStore(Host.Storage);
+        Cache(scoreStore);
         Cache(workingBeatmap);
 
         offsetManager = new OffsetManager(new OffsetStore(Host.Storage));
@@ -220,6 +226,12 @@ public partial class YuukiGame : App
         // Once the notifications and the screens it tells of a new device and opens calibrating on are there to find,
         // and before what shows the offsets loads.
         mainContainer.Add(offsetManager);
+
+        // Saved plays brought up to today's judging, in the background, after an update that changed it.
+        if (beatmapNoteStore != null)
+        {
+            mainContainer.Add(new ScoreMigration(scoreStore, beatmapsCollection.GetBeatmapById, beatmapNoteStore));
+        }
 
         footer = new ScreenFooter()
         {

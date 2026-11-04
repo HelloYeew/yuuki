@@ -9,6 +9,7 @@ using Sakura.Framework.Audio;
 using Sakura.Framework.Extensions.ObjectExtensions;
 using Sakura.Framework.Graphics.Drawables;
 using Sakura.Framework.Graphics.Primitives;
+using Sakura.Framework.Input;
 using Sakura.Framework.Platform;
 using Sakura.Framework.Timing;
 using Yuuki.Game.Beatmaps;
@@ -63,14 +64,14 @@ public partial class GameplayContainer : Container
     /// <summary>
     /// The keys for each lane, left to right. Null keeps the default layout. Set before load.
     /// </summary>
-    public Sakura.Framework.Input.Key[]? LaneKeys { get; set; }
+    public Key[]? LaneKeys { get; set; }
 
     /// <summary>
     /// The left and right swipe keys. Null keeps the defaults. Set before load.
     /// </summary>
-    public Sakura.Framework.Input.Key? SwipeLeftKey { get; set; }
+    public Key? SwipeLeftKey { get; set; }
 
-    public Sakura.Framework.Input.Key? SwipeRightKey { get; set; }
+    public Key? SwipeRightKey { get; set; }
 
     /// <summary>
     /// What the HUD's pause button does (see <see cref="GameplayHud.PauseRequested"/>). Null, as in a replay,
@@ -244,12 +245,14 @@ public partial class GameplayContainer : Container
     /// </summary>
     public bool Seek(double time) => clockContainer.Seek(time);
 
+    private int bloomCount;
     private int criticalCount;
     private int breakCount;
     private int hitCount;
     private int missCount;
     private int holdBreakCount;
     private bool failed;
+    private double? failedAt;
 
     /// <summary>
     /// Fired once per run, the moment health runs out.
@@ -267,6 +270,12 @@ public partial class GameplayContainer : Container
     /// <see cref="BuildReplay"/>).
     /// </summary>
     public ReplayData? Replay { get; init; }
+
+    /// <summary>
+    /// For a replay of a play saved without Blooms: each one is judged the Critical it was then (see
+    /// <see cref="BloomlessJudgement"/>). Set before load.
+    /// </summary>
+    public bool CountsBloomAsCritical { get; init; }
 
     public bool IsReplay => Replay.IsNotNull();
 
@@ -320,8 +329,9 @@ public partial class GameplayContainer : Container
         }
     }
 
-    // Every judgement in order, kept for the score screen's detailed breakdown.
+    // Every judgement in order, kept for the score screen's detailed breakdown, and when each hold broke.
     private readonly List<JudgementResult> judgements = new List<JudgementResult>();
+    private readonly List<double> holdBreakTimes = new List<double>();
 
     /// <summary>
     /// Builds the final result tally for the score screen.
@@ -330,6 +340,7 @@ public partial class GameplayContainer : Container
     {
         Score = Score.Score.Value,
         MaxCombo = Score.MaxCombo.Value,
+        BloomCount = bloomCount,
         CriticalCount = criticalCount,
         BreakCount = breakCount,
         HitCount = hitCount,
@@ -337,7 +348,10 @@ public partial class GameplayContainer : Container
         HoldBreakCount = holdBreakCount,
         Accuracy = Score.Accuracy.Value,
         Failed = failed,
+        FailedAt = failedAt,
         Judgements = judgements.ToArray(),
+        HoldBreakTimes = holdBreakTimes.ToArray(),
+        LaneCount = chart.LaneCount,
         HitWindows = playfield.HitWindows,
         AudioOffset = audioOffset,
         VisualOffset = visualOffset,
@@ -346,8 +360,7 @@ public partial class GameplayContainer : Container
     };
 
     /// <summary>
-    /// The run so far as a replay: its inputs to watch it again, and its judgements for the results
-    /// screen's breakdown. Saved with the score.
+    /// The run so far as a replay: its inputs, to watch it again or judge it again. Saved with the score.
     /// </summary>
     public ReplayData BuildReplay() => new ReplayData
     {
@@ -357,8 +370,7 @@ public partial class GameplayContainer : Container
         OffsetChanges = offsetChanges.ToList(),
         ChartLength = chart.LastNoteTime,
         HitWindows = playfield.HitWindows,
-        Inputs = recordedInputs.ToList(),
-        Judgements = judgements.Select(RecordedJudgement.From).ToList()
+        Inputs = recordedInputs.ToList()
     };
 
     /// <param name="chart">The chart to play.</param>
@@ -423,7 +435,7 @@ public partial class GameplayContainer : Container
             playfield.SwipeRightKey = swipeRight;
 
         playfield.NewJudgement += onJudgement;
-        playfield.JudgementFilter = judgement => Skills.Filter(judgement, judgingTime);
+        playfield.JudgementFilter = judgement => BloomlessJudgement.Apply(Skills.Filter(judgement, judgingTime), CountsBloomAsCritical);
         playfield.HoldBroken += onHoldBroken;
         playfield.Beat += hud.PulseHeart;
         hud.ComboSpace = playfield;
@@ -443,6 +455,7 @@ public partial class GameplayContainer : Container
 
         Score.BreakCombo();
         holdBreakCount++;
+        holdBreakTimes.Add(judgingTime);
 
         if (comboBefore >= combo_break_threshold)
             hitSounds.PlayComboBreak();
@@ -466,6 +479,7 @@ public partial class GameplayContainer : Container
         if (Health.IsFailed && !failed)
         {
             failed = true;
+            failedAt = judgingTime;
             Failed?.Invoke();
         }
 
@@ -476,8 +490,8 @@ public partial class GameplayContainer : Container
     }
 
     /// <summary>
-    /// A hit felt by how good it was: a Critical firm and crisp, a Hit soft and dull. A miss, nothing, and nor a
-    /// Pass note, which nothing touched.
+    /// A hit felt by how good it was: a Bloom or a Critical firm and crisp, a Hit soft and dull. A miss, nothing, and nor
+    /// a Pass note, which nothing touched.
     /// </summary>
     private void feel(JudgementResult result)
     {
@@ -486,6 +500,7 @@ public partial class GameplayContainer : Container
 
         switch (result.Result)
         {
+            case HitResult.Bloom:
             case HitResult.Critical:
                 haptics?.PlayTap(0.75f, 0.85f);
                 break;
@@ -504,6 +519,7 @@ public partial class GameplayContainer : Container
     {
         switch (result)
         {
+            case HitResult.Bloom: bloomCount++; break;
             case HitResult.Critical: criticalCount++; break;
             case HitResult.Break: breakCount++; break;
             case HitResult.Hit: hitCount++; break;
@@ -538,10 +554,12 @@ public partial class GameplayContainer : Container
         Score.Reset();
         Health.Reset();
         Skills.Reset();
-        criticalCount = breakCount = hitCount = missCount = holdBreakCount = 0;
+        bloomCount = criticalCount = breakCount = hitCount = missCount = holdBreakCount = 0;
         failed = false;
+        failedAt = null;
         playfield.InputPaused = false;
         judgements.Clear();
+        holdBreakTimes.Clear();
         recordedInputs.Clear();
         offsetChanges.Clear();
         runAudioOffset = audioOffset;

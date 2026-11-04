@@ -158,6 +158,45 @@ public partial class TestScreenFooter : YuukiTestScene
     }
 
     [Test]
+    public void TestSettingsIsSetApart()
+    {
+        AddAssert("between the clock and Settings, centred", settingsSetApart);
+        AddStep("on a phone", () => gameLayout.Current.Value = DisplayLayout.Phone);
+        AddAssert("still", settingsSetApart);
+        AddStep("on desktop", () => gameLayout.Current.Value = DisplayLayout.Desktop);
+    }
+
+    private bool settingsSetApart()
+    {
+        FooterClock clock = descendants(footer).OfType<FooterClock>().Single();
+        var row = clock.Parent!;
+        int at = row.Children.ToList().IndexOf(clock);
+        Drawable line = row.Children[at + 1], settings = row.Children[at + 2];
+        Quad c = clock.ScreenSpaceDrawQuad, l = line.ScreenSpaceDrawQuad, s = settings.ScreenSpaceDrawQuad;
+        float scale = row.Scale.X;
+
+        return settings is FooterMusicButton
+               && l.TopLeft.X > c.TopRight.X + 4 * scale && l.TopRight.X < s.TopLeft.X - 4 * scale
+               && Math.Abs((l.TopLeft.Y + l.BottomLeft.Y) / 2 - (c.TopLeft.Y + c.BottomLeft.Y) / 2) < 0.5f
+               && Math.Abs(l.BottomLeft.Y - l.TopLeft.Y - 22 * scale) < 0.5f;
+    }
+
+    // TODO: This should available in DrawableExtensions
+    private static IEnumerable<Drawable> descendants(Drawable drawable)
+    {
+        yield return drawable;
+
+        if (drawable is Container container)
+        {
+            foreach (Drawable child in container.Children)
+            {
+                foreach (Drawable d in descendants(child))
+                    yield return d;
+            }
+        }
+    }
+
+    [Test]
     public void TestFooterTextChange()
     {
         AddStep("Change footer text", () =>

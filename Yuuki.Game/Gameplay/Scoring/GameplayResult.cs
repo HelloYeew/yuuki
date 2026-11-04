@@ -17,6 +17,7 @@ public class GameplayResult
     public int Score { get; init; }
     public int MaxCombo { get; init; }
 
+    public int BloomCount { get; init; }
     public int CriticalCount { get; init; }
     public int BreakCount { get; init; }
     public int HitCount { get; init; }
@@ -30,9 +31,19 @@ public class GameplayResult
 
     /// <summary>
     /// Every judgement of the run in order, for the detailed breakdown (early/late split, timing
-    /// distribution, timeline). May be empty for a result built from counts alone.
+    /// distribution, timeline). Empty for a result built from counts alone, as a saved play's is until its replay is
+    /// judged again (<see cref="WithJudgements"/>).
     /// </summary>
     public IReadOnlyList<JudgementResult> Judgements { get; init; } = Array.Empty<JudgementResult>();
+
+    /// <summary>
+    /// When each hold was let go of early (<see cref="HoldBreakCount"/>), in gameplay time, in order: where the combo broke
+    /// without a judgement. Empty where the judgements are.
+    /// </summary>
+    public IReadOnlyList<double> HoldBreakTimes { get; init; } = Array.Empty<double>();
+
+    /// <summary>The chart's lanes, for the breakdown by lane; 0 where it isn't known (a result built from counts alone).</summary>
+    public int LaneCount { get; init; }
 
     /// <summary>The timing windows the run was judged with, so the timing graph can draw its zones.</summary>
     public HitWindows HitWindows { get; init; } = new HitWindows();
@@ -55,13 +66,15 @@ public class GameplayResult
     public const int MINIMUM_OFFSET_SAMPLES = 20;
 
     /// <summary>
-    /// A saved play, for viewing it again: its totals, and — when a replay was saved with it — the
-    /// per-note judgements behind the timing breakdown. Without one the breakdown stays empty.
+    /// A saved play, for viewing it again: its totals, and what its replay says of how it was played (its windows,
+    /// offsets and length). Its judgements aren't saved: judging the replay again brings them (<see cref="ReplayJudge"/>,
+    /// <see cref="WithJudgements"/>).
     /// </summary>
     public static GameplayResult FromScore(ScoreInfo score, ReplayData? replay) => new GameplayResult
     {
         Score = (int)score.Score,
         MaxCombo = score.MaxCombo,
+        BloomCount = score.BloomCount,
         CriticalCount = score.CriticalCount,
         BreakCount = score.BreakCount,
         HitCount = score.HitCount,
@@ -69,17 +82,56 @@ public class GameplayResult
         HoldBreakCount = score.HoldBreakCount,
         Accuracy = score.Accuracy,
         Failed = score.Failed,
-        Judgements = replay?.Judgements.Select(j => j.ToJudgement()).ToArray() ?? Array.Empty<JudgementResult>(),
         HitWindows = replay?.HitWindows ?? new HitWindows(),
         ChartLength = replay?.ChartLength ?? 0,
         AudioOffset = replay?.AudioOffset ?? 0,
         SongOffset = replay?.SongOffset ?? 0
     };
 
+    /// <summary>
+    /// This run with its judgements filled in, as judging its replay again found them: its totals stay as they were
+    /// saved, so the score and the counts never change from what was played (a replay judged again can rarely differ).
+    /// </summary>
+    /// <remarks>Where health ran out (<paramref name="failedAt"/>) comes from the judging too, which a saved play doesn't keep.</remarks>
+    public GameplayResult WithJudgements(IReadOnlyList<JudgementResult> judgements, IReadOnlyList<double> holdBreakTimes, int laneCount, double chartLength,
+                                         double? failedAt = null) => new GameplayResult
+    {
+        Score = Score,
+        MaxCombo = MaxCombo,
+        BloomCount = BloomCount,
+        CriticalCount = CriticalCount,
+        BreakCount = BreakCount,
+        HitCount = HitCount,
+        MissCount = MissCount,
+        HoldBreakCount = HoldBreakCount,
+        Accuracy = Accuracy,
+        Failed = Failed,
+        FailedAt = failedAt ?? FailedAt,
+        Judgements = judgements,
+        HoldBreakTimes = holdBreakTimes,
+        LaneCount = laneCount,
+        HitWindows = HitWindows,
+        ChartLength = chartLength > 0 ? chartLength : ChartLength,
+        AudioOffset = AudioOffset,
+        VisualOffset = VisualOffset,
+        SongOffset = SongOffset
+    };
+
     /// <summary>The player ran out of health before the end.</summary>
     public bool Failed { get; init; }
 
-    public int TotalNotes => CriticalCount + BreakCount + HitCount + MissCount;
+    /// <summary>
+    /// Where health ran out, in ms of the song; null where it didn't, or where that isn't known (a saved play, until its
+    /// replay is judged again).
+    /// </summary>
+    public double? FailedAt { get; init; }
+
+    /// <summary>
+    /// How far through the chart the run got before health ran out, 0–1; null where that isn't known.
+    /// </summary>
+    public double? Reached => FailedAt is double at && ChartLength > 0 ? Math.Clamp(at / ChartLength, 0, 1) : null;
+
+    public int TotalNotes => BloomCount + CriticalCount + BreakCount + HitCount + MissCount;
 
     private readonly double? accuracy;
 
@@ -98,7 +150,8 @@ public class GameplayResult
             if (TotalNotes == 0)
                 return 1;
 
-            return (CriticalCount * HitResult.Critical.Value() + BreakCount * HitResult.Break.Value() + HitCount * HitResult.Hit.Value()) / TotalNotes;
+            return (BloomCount * HitResult.Bloom.Value() + CriticalCount * HitResult.Critical.Value() + BreakCount * HitResult.Break.Value()
+                    + HitCount * HitResult.Hit.Value()) / TotalNotes;
         }
         init => accuracy = value;
     }
@@ -114,19 +167,26 @@ public class GameplayResult
     public ScoreRank Rank => ScoreRankExtensions.ForRun(Accuracy, MissCount);
 
     /// <summary>
-    /// Accurate enough for a higher rank than it got, and held back by a miss (S -> A).
+    /// Accurate enough for a higher rank than it got, and held back by a miss (S -> A). Never for a run that failed: it
+    /// isn't ranked at all.
     /// </summary>
-    public bool RankLostToMiss => Rank < AccuracyRank;
+    public bool RankLostToMiss => !Failed && Rank < AccuracyRank;
 
     /// <summary>
-    /// The combo never broke — no misses and no hold breaks (FC).
+    /// The combo never broke — no misses and no hold breaks (FC). Never for a run that failed, whose notes after it ran out
+    /// went unplayed.
     /// </summary>
-    public bool IsFullCombo => TotalNotes > 0 && MissCount == 0 && HoldBreakCount == 0;
+    public bool IsFullCombo => !Failed && TotalNotes > 0 && MissCount == 0 && HoldBreakCount == 0;
 
     /// <summary>
-    /// Every judgement was a Critical (AP). Implies <see cref="IsFullCombo"/>.
+    /// Every judgement was a Critical or a Bloom (AP). Implies <see cref="IsFullCombo"/>.
     /// </summary>
-    public bool IsAllPerfect => IsFullCombo && CriticalCount == TotalNotes;
+    public bool IsAllPerfect => IsFullCombo && BloomCount + CriticalCount == TotalNotes;
+
+    /// <summary>
+    /// Every judgement was a Bloom: the theoretical best (理論値). Implies <see cref="IsAllPerfect"/>.
+    /// </summary>
+    public bool IsFullBloom => IsFullCombo && BloomCount == TotalNotes;
 
     /// <summary>
     /// How many judgements of <paramref name="result"/> were pressed early (negative error).

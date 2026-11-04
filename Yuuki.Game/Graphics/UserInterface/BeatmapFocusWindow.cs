@@ -45,8 +45,8 @@ public partial class BeatmapFocusWindow : CarouselFocusWindow<Beatmap>
         private readonly Container wide;
         private readonly Box wideTab;
         private readonly SpriteText wideLevel;
-        private readonly SpriteText wideName;
-        private readonly SpriteText wideSub;
+        private readonly ScrollingText wideName;
+        private readonly ScrollingText wideSub;
         private readonly FlowContainer wideText;
         private readonly FlowContainer wideExtras;
         private readonly LaneLabel wideLanes;
@@ -90,28 +90,29 @@ public partial class BeatmapFocusWindow : CarouselFocusWindow<Beatmap>
                                 Anchor = Anchor.Centre,
                                 Origin = Anchor.Centre,
                                 X = -16,
-                                Font = YuukiFontUsage.GetFontUsage(Typeface.Nunito, 42, FontWeight.ExtraBold)
+                                Font = YuukiFontUsage.GetFontUsage(Typeface.Quicksand, 42, FontWeight.Bold)
                             }
                         },
+                        // Its width is the room left of the extras, set every frame, so long names scroll within it.
                         wideText = new FlowContainer
                         {
                             Anchor = Anchor.CentreLeft,
                             Origin = Anchor.CentreLeft,
                             X = wide_tab_width + 26,
-                            AutoSizeAxes = Axes.Both,
+                            AutoSizeAxes = Axes.Y,
                             Direction = FlowDirection.Vertical,
                             Spacing = new Vector2(0, 2),
                             Children = new Drawable[]
                             {
-                                wideName = new SpriteText
+                                wideName = new ScrollingText
                                 {
-                                    Font = YuukiFontUsage.GetFontUsage(Typeface.Quicksand, 28, FontWeight.Bold),
-                                    Truncate = true
+                                    RelativeSizeAxes = Axes.X,
+                                    Font = YuukiFontUsage.GetFontUsage(Typeface.Quicksand, 28, FontWeight.Bold)
                                 },
-                                wideSub = new SpriteText
+                                wideSub = new ScrollingText
                                 {
-                                    Font = YuukiFontUsage.GetFontUsage(Typeface.Nunito, 18, FontWeight.SemiBold),
-                                    Truncate = true
+                                    RelativeSizeAxes = Axes.X,
+                                    Font = YuukiFontUsage.GetFontUsage(Typeface.Quicksand, 18, FontWeight.SemiBold)
                                 }
                             }
                         },
@@ -158,14 +159,14 @@ public partial class BeatmapFocusWindow : CarouselFocusWindow<Beatmap>
                                 heroTier = new SpriteText
                                 {
                                     Position = new Vector2(14, 12),
-                                    Font = YuukiFontUsage.GetFontUsage(Typeface.Nunito, 13, FontWeight.ExtraBold)
+                                    Font = YuukiFontUsage.GetFontUsage(Typeface.Quicksand, 13, FontWeight.Bold)
                                 },
                                 heroLevel = new SpriteText
                                 {
                                     Anchor = Anchor.Centre,
                                     Origin = Anchor.Centre,
                                     Y = 8,
-                                    Font = YuukiFontUsage.GetFontUsage(Typeface.Nunito, 84, FontWeight.ExtraBold)
+                                    Font = YuukiFontUsage.GetFontUsage(Typeface.Quicksand, 84, FontWeight.Bold)
                                 }
                             }
                         },
@@ -258,9 +259,7 @@ public partial class BeatmapFocusWindow : CarouselFocusWindow<Beatmap>
             if (Math.Abs(wideText.X - textX) > 0.5f)
                 wideText.X = textX;
 
-            float budget = Math.Max(0, DrawWidth - textX - wideExtras.DrawWidth - 36);
-            wideName.MaxWidth = budget;
-            wideSub.MaxWidth = budget;
+            wideText.Width = Math.Max(0, DrawWidth - textX - wideExtras.DrawWidth - 36);
         }
     }
 }

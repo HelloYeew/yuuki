@@ -66,8 +66,8 @@ public partial class BeatmapCard : CarouselCard<Beatmap>
     private readonly Box rowHover;
     private readonly Box rowTab;
     private readonly SpriteText rowLevel;
-    private readonly SpriteText rowName;
-    private readonly SpriteText rowSub;
+    private readonly ScrollingText rowName;
+    private readonly ScrollingText rowSub;
     private readonly FlowContainer rowText;
     private readonly FlowContainer rowExtras;
     private readonly LaneLabel rowLanes;
@@ -80,8 +80,8 @@ public partial class BeatmapCard : CarouselCard<Beatmap>
     private readonly Box tileFill;
     private readonly SpriteText tileTier;
     private readonly SpriteText tileLevel;
-    private readonly SpriteText tileName;
-    private readonly SpriteText tileSub;
+    private readonly ScrollingText tileName;
+    private readonly ScrollingText tileSub;
 
     private bool vertical;
 
@@ -126,28 +126,29 @@ public partial class BeatmapCard : CarouselCard<Beatmap>
                         Anchor = Anchor.Centre,
                         Origin = Anchor.Centre,
                         X = -14,
-                        Font = YuukiFontUsage.GetFontUsage(Typeface.Nunito, 34, FontWeight.ExtraBold)
+                        Font = YuukiFontUsage.GetFontUsage(Typeface.Quicksand, 34, FontWeight.Bold)
                     }
                 },
+                // Its width is the room left of the extras, set every frame, so long names scroll within it.
                 rowText = new FlowContainer
                 {
                     Anchor = Anchor.CentreLeft,
                     Origin = Anchor.CentreLeft,
                     X = row_tab_width + 22,
-                    AutoSizeAxes = Axes.Both,
+                    AutoSizeAxes = Axes.Y,
                     Direction = FlowDirection.Vertical,
                     Spacing = new Vector2(0, 2),
                     Children = new Drawable[]
                     {
-                        rowName = new SpriteText
+                        rowName = new ScrollingText
                         {
-                            Font = YuukiFontUsage.GetFontUsage(Typeface.Quicksand, 23, FontWeight.Bold),
-                            Truncate = true
+                            RelativeSizeAxes = Axes.X,
+                            Font = YuukiFontUsage.GetFontUsage(Typeface.Quicksand, 23, FontWeight.Bold)
                         },
-                        rowSub = new SpriteText
+                        rowSub = new ScrollingText
                         {
-                            Font = YuukiFontUsage.GetFontUsage(Typeface.Nunito, 15, FontWeight.SemiBold),
-                            Truncate = true
+                            RelativeSizeAxes = Axes.X,
+                            Font = YuukiFontUsage.GetFontUsage(Typeface.Quicksand, 15, FontWeight.SemiBold)
                         }
                     }
                 },
@@ -213,32 +214,30 @@ public partial class BeatmapCard : CarouselCard<Beatmap>
                         tileTier = new SpriteText
                         {
                             Position = new Vector2(10, 9),
-                            Font = YuukiFontUsage.GetFontUsage(Typeface.Nunito, 11, FontWeight.ExtraBold)
+                            Font = YuukiFontUsage.GetFontUsage(Typeface.Quicksand, 11, FontWeight.Bold)
                         },
                         tileLevel = new SpriteText
                         {
                             Anchor = Anchor.Centre,
                             Origin = Anchor.Centre,
                             Y = 6,
-                            Font = YuukiFontUsage.GetFontUsage(Typeface.Nunito, 44, FontWeight.ExtraBold)
+                            Font = YuukiFontUsage.GetFontUsage(Typeface.Quicksand, 44, FontWeight.Bold)
                         }
                     }
                 },
-                tileName = new SpriteText
+                tileName = new ScrollingText
                 {
                     X = 6,
                     Y = tile_square_size + 8,
-                    Font = YuukiFontUsage.GetFontUsage(Typeface.Quicksand, 15, FontWeight.Bold),
-                    Truncate = true,
-                    MaxWidth = tile_square_size + 10
+                    Width = tile_square_size + 10,
+                    Font = YuukiFontUsage.GetFontUsage(Typeface.Quicksand, 15, FontWeight.Bold)
                 },
-                tileSub = new SpriteText
+                tileSub = new ScrollingText
                 {
                     X = 6,
                     Y = tile_square_size + 28,
-                    Font = YuukiFontUsage.GetFontUsage(Typeface.Nunito, 12, FontWeight.SemiBold),
-                    Truncate = true,
-                    MaxWidth = tile_square_size + 10
+                    Width = tile_square_size + 10,
+                    Font = YuukiFontUsage.GetFontUsage(Typeface.Quicksand, 12, FontWeight.SemiBold)
                 }
             }
         });
@@ -323,9 +322,7 @@ public partial class BeatmapCard : CarouselCard<Beatmap>
                 rowRuleHolder.Padding = new MarginPadding { Left = textX - 10, Right = 12 };
             }
 
-            float budget = Math.Max(0, rowFace.DrawWidth - textX - rowExtras.DrawWidth - 32);
-            rowName.MaxWidth = budget;
-            rowSub.MaxWidth = budget;
+            rowText.Width = Math.Max(0, rowFace.DrawWidth - textX - rowExtras.DrawWidth - 32);
         }
     }
 

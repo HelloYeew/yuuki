@@ -56,11 +56,30 @@ public partial class TestHudAlignment : TestScene
             Add(popup = new JudgementPopup { Anchor = Anchor.Centre });
         });
         AddStep("show an early break", () => popup.Show(new JudgementResult(new BeatmapNote { Type = NoteType.Tap }, HitResult.Break, -30)));
+        AddStep("show a bloom", () => popup.Show(new JudgementResult(new BeatmapNote { Type = NoteType.Tap }, HitResult.Bloom, 5)));
+        AddStep("and the break again", () => popup.Show(new JudgementResult(new BeatmapNote { Type = NoteType.Tap }, HitResult.Break, -30)));
         AddWaitStep("let layout run", 100);
 
         AddAssert("BREAK and EARLY both centred", () =>
             find(popup, t => t.Text == "BREAK")?.Anchor == Anchor.TopCentre
             && find(popup, t => t.Text == "EARLY")?.Anchor == Anchor.TopCentre);
+    }
+
+    /// <summary>
+    /// This scene has no settings for it to go by, which is as if <see cref="Yuuki.Game.Configurations.YuukiSetting.ShowCriticalTiming"/> were on.
+    /// </summary>
+    [Test]
+    public void TestCriticalTimingWithNoSettings()
+    {
+        JudgementPopup popup = null!;
+
+        AddStep("add popup", () =>
+        {
+            Clear();
+            Add(popup = new JudgementPopup { Anchor = Anchor.Centre });
+        });
+        AddStep("show an early critical", () => popup.Show(new JudgementResult(new BeatmapNote { Type = NoteType.Tap }, HitResult.Critical, -30)));
+        AddAssert("it says EARLY", () => find(popup, t => t.Text == "EARLY") != null);
     }
 
     [Test]

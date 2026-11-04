@@ -3,7 +3,6 @@
 
 using System;
 using System.Collections.Generic;
-using System.Globalization;
 using Sakura.Framework.Allocation;
 using Sakura.Framework.Audio;
 using Sakura.Framework.Extensions.ColorExtensions;
@@ -27,6 +26,7 @@ using Yuuki.Game.Gameplay.Scoring;
 using Yuuki.Game.Graphics.Colors;
 using Yuuki.Game.Graphics.Text;
 using Yuuki.Game.Graphics.UserInterface;
+using Yuuki.Game.Utilities;
 
 namespace Yuuki.Game.Graphics.Screens;
 
@@ -114,6 +114,11 @@ public partial class ReplayScreen : YuukiScreen, IHaveScreenAction
     /// </summary>
     public double Speed => speeds[speedIndex];
 
+    /// <summary>
+    /// Where in the run it opens, in ms of the song: 0 (and before) from the start, lead-in and all.
+    /// </summary>
+    public double StartAt { get; init; }
+
     public ReplayScreen(ScoreInfo score, ReplayData replay)
     {
         this.score = score;
@@ -134,7 +139,7 @@ public partial class ReplayScreen : YuukiScreen, IHaveScreenAction
     private void load([CanBeNull] IYuukiColorProvider? colorProvider)
     {
         ScreenName.Value = "Replay";
-        ScreenHelperText.Value = string.Create(CultureInfo.InvariantCulture, $"Played {score.Date.LocalDateTime:d MMM yyyy, HH:mm}");
+        ScreenHelperText.Value = $"Played {DateUtility.FormatPlayed(score.Date)}";
 
         palette = Palette;
 
@@ -152,6 +157,13 @@ public partial class ReplayScreen : YuukiScreen, IHaveScreenAction
         borrowedChannel = audioManager?.InGameplay == true && audioManager.GameplayChannel != null;
 
         IAudioChannel? channel = borrowedChannel ? audioManager!.GameplayChannel : audioManager?.BeginGameplay();
+
+        // A run that ran out of health wound its song down to a near stop through the channel's frequency, and left
+        // it there. This screen's clock sets only the tempo, so the replay would crawl along at that speed: the song
+        // goes back to its own.
+        if (borrowedChannel)
+            channel!.Frequency.Value = 1;
+
         IAdjustableClock? source = channel != null ? new TrackClock(channel) : null;
 
         AddRange(new Drawable[]
@@ -162,6 +174,8 @@ public partial class ReplayScreen : YuukiScreen, IHaveScreenAction
                 Origin = Anchor.Centre,
                 RelativeSizeAxes = Axes.Both,
                 Replay = replay,
+                // A play saved before BLOOM is watched as it was judged then.
+                CountsBloomAsCritical = BloomlessJudgement.AppliesTo(score),
                 // Played back as it was played: the same offset lines the inputs up with the music.
                 AudioOffset = replay.AudioOffset,
                 SongOffset = replay.SongOffset,
@@ -246,14 +260,24 @@ public partial class ReplayScreen : YuukiScreen, IHaveScreenAction
                         new SpriteText
                         {
                             Text = $"{score.Score:N0}  ·  {score.Accuracy * 100:0.00}%  ·  {score.Rank}",
-                            Font = YuukiFontUsage.GetFontUsage(Typeface.Nunito, 18, FontWeight.Regular),
+                            Font = YuukiFontUsage.GetFontUsage(Typeface.Quicksand, 18, FontWeight.Regular),
                             Color = palette.TextLight
                         },
-                        pauseButton = new PillButton(palette.Control, palette.TextLight)
+                        new FlowContainer
                         {
                             Margin = new MarginPadding { Top = 4 },
-                            Text = pauseLabel,
-                            Action = togglePause
+                            AutoSizeAxes = Axes.Both,
+                            Direction = FlowDirection.Horizontal,
+                            Spacing = new Vector2(8, 0),
+                            Children = new Drawable[]
+                            {
+                                pauseButton = new PillButton(palette.Control, palette.TextLight)
+                                {
+                                    Text = pauseLabel,
+                                    Action = togglePause
+                                },
+                                exitButton()
+                            }
                         },
                         new SpriteText
                         {
@@ -293,11 +317,19 @@ public partial class ReplayScreen : YuukiScreen, IHaveScreenAction
             },
             new SpriteText
             {
-                Text = $"{body}  Press Escape to go back.",
+                Text = body,
                 Font = YuukiFontUsage.GetFontUsage(Typeface.Nunito, 20, FontWeight.Regular),
                 Color = palette.TextLight
-            }
+            },
+            exitButton(new MarginPadding { Top = 8 })
         }
+    };
+
+    private PillButton exitButton(MarginPadding margin = default) => new PillButton(palette.Control, palette.TextLight)
+    {
+        Margin = margin,
+        Text = "Exit  ·  Esc",
+        Action = Exit
     };
 
     #endregion
@@ -313,6 +345,9 @@ public partial class ReplayScreen : YuukiScreen, IHaveScreenAction
 
         gameplay.Restart();
         gameplay.ProgressBarSeek = onSeekRequested;
+
+        if (StartAt > 0)
+            SeekTo(StartAt);
     }
 
     public override void OnEntering(Screen? last)

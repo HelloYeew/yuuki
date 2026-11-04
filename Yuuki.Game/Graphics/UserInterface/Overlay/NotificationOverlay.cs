@@ -379,7 +379,7 @@ public partial class NotificationOverlay : FocusedOverlayContainer
                     Origin = Anchor.CentreLeft,
                     Position = new Vector2(8, label_height / 2),
                     Text = title.ToUpperInvariant(),
-                    Font = YuukiFontUsage.GetFontUsage(Typeface.Nunito, 13, FontWeight.Bold),
+                    Font = YuukiFontUsage.GetFontUsage(Typeface.Quicksand, 13, FontWeight.Bold),
                     Color = Color.White.WithAlpha(0.6f)
                 },
                 list = new Container

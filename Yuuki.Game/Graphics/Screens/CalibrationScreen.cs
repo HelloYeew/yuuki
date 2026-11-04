@@ -202,7 +202,7 @@ public partial class CalibrationScreen : YuukiScreen, IHaveScreenAction
                             },
                             instructionText = new SpriteText
                             {
-                                Font = YuukiFontUsage.GetFontUsage(Typeface.Quicksand, 26, FontWeight.Bold),
+                                Font = YuukiFontUsage.GetFontUsage(Typeface.Nunito, 26, FontWeight.Bold),
                                 Color = palette.Text
                             },
                             progressText = new SpriteText

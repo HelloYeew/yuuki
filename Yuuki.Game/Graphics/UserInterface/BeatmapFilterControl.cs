@@ -235,11 +235,11 @@ public partial class BeatmapFilterControl : Container
                                 {
                                     countNumber = new SpriteText
                                     {
-                                        Font = YuukiFontUsage.GetFontUsage(Typeface.Nunito, 18, FontWeight.ExtraBold)
+                                        Font = YuukiFontUsage.GetFontUsage(Typeface.Quicksand, 18, FontWeight.Bold)
                                     },
                                     countRest = new SpriteText
                                     {
-                                        Font = YuukiFontUsage.GetFontUsage(Typeface.Nunito, 18, FontWeight.Bold)
+                                        Font = YuukiFontUsage.GetFontUsage(Typeface.Quicksand, 18, FontWeight.Bold)
                                     }
                                 }
                             },
@@ -483,8 +483,8 @@ public partial class BeatmapFilterControl : Container
         filterToggle.Alpha = phone ? 1 : 0;
         randomButton.Alpha = phone && randomShown ? 1 : 0;
         searchBox.SetFontSize(phone ? 32 : 36);
-        countNumber.Font = YuukiFontUsage.GetFontUsage(Typeface.Nunito, phone ? 19 : 18, FontWeight.ExtraBold);
-        countRest.Font = YuukiFontUsage.GetFontUsage(Typeface.Nunito, phone ? 19 : 18, FontWeight.Bold);
+        countNumber.Font = YuukiFontUsage.GetFontUsage(Typeface.Quicksand, phone ? 19 : 18, FontWeight.Bold);
+        countRest.Font = YuukiFontUsage.GetFontUsage(Typeface.Quicksand, phone ? 19 : 18, FontWeight.Bold);
 
         // The filters move house: into the sheet on a phone, back into the header on the desktop.
         foreach (var drawable in new Drawable[] { levels, lanesGroup, sortWords })
@@ -741,11 +741,12 @@ public partial class BeatmapFilterControl : Container
 
         public void SetFontSize(int size)
         {
-            var font = YuukiFontUsage.GetFontUsage(Typeface.Quicksand, size, FontWeight.Bold);
+            // What's typed is text, in Nunito; "search." names the box, in Quicksand.
+            var typed = YuukiFontUsage.GetFontUsage(Typeface.Nunito, size, FontWeight.Bold);
 
-            SpriteText.Font = font;
-            PlaceholderSprite.Font = font;
-            ImeText.Font = font;
+            SpriteText.Font = typed;
+            PlaceholderSprite.Font = YuukiFontUsage.GetFontUsage(Typeface.Quicksand, size, FontWeight.Bold);
+            ImeText.Font = typed;
         }
 
         public void SetColors(Color ink, Color caret)
@@ -1263,7 +1264,7 @@ public partial class BeatmapFilterControl : Container
                     Origin = Anchor.Centre,
                     Y = 1.5f,
                     Text = name,
-                    Font = YuukiFontUsage.GetFontUsage(Typeface.Nunito, 12, FontWeight.ExtraBold)
+                    Font = YuukiFontUsage.GetFontUsage(Typeface.Quicksand, 12, FontWeight.Bold)
                 },
                 new HoverClickSounds()
             };
@@ -1285,7 +1286,7 @@ public partial class BeatmapFilterControl : Container
             updateState();
         }
 
-        public void SetFontSize(float size) => label.Font = YuukiFontUsage.GetFontUsage(Typeface.Nunito, (int)size, FontWeight.ExtraBold);
+        public void SetFontSize(float size) => label.Font = YuukiFontUsage.GetFontUsage(Typeface.Quicksand, (int)size, FontWeight.Bold);
 
         private bool hovered;
 
@@ -1368,7 +1369,7 @@ public partial class BeatmapFilterControl : Container
                     Origin = Anchor.CentreLeft,
                     Margin = new MarginPadding { Left = 8, Right = 8 },
                     Text = BeatmapUtility.FormatLanes(lanes),
-                    Font = YuukiFontUsage.GetFontUsage(Typeface.Nunito, 14, FontWeight.ExtraBold)
+                    Font = YuukiFontUsage.GetFontUsage(Typeface.Quicksand, 14, FontWeight.Bold)
                 },
                 new HoverClickSounds()
             };
@@ -1383,7 +1384,7 @@ public partial class BeatmapFilterControl : Container
             AutoSizeAxes = phone ? Axes.None : Axes.X;
             Height = phone ? 58 : 26;
             CornerRadius = phone ? 9 : 6;
-            label.Font = YuukiFontUsage.GetFontUsage(Typeface.Nunito, phone ? 20 : 14, FontWeight.ExtraBold);
+            label.Font = YuukiFontUsage.GetFontUsage(Typeface.Quicksand, phone ? 20 : 14, FontWeight.Bold);
             label.Anchor = label.Origin = phone ? Anchor.Centre : Anchor.CentreLeft;
         }
 

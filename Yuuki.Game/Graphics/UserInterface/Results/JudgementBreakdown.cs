@@ -19,19 +19,64 @@ namespace Yuuki.Game.Graphics.UserInterface.Results;
 /// </summary>
 public partial class JudgementBreakdown : FlowContainer
 {
-    private static readonly HitResult[] shown_results = { HitResult.Critical, HitResult.Break, HitResult.Hit, HitResult.Miss };
+    private static readonly HitResult[] shown_results = { HitResult.Bloom, HitResult.Critical, HitResult.Break, HitResult.Hit, HitResult.Miss };
+
+    /// <summary>
+    /// A row's height and the space between rows, and the same when <see cref="Compact"/>: still the height of the
+    /// tallest text in a row (the count's).
+    /// </summary>
+    public const float ROW_HEIGHT = 34;
+
+    public const float ROW_SPACING = 6;
+    public const float COMPACT_ROW_HEIGHT = 30;
+    public const float COMPACT_ROW_SPACING = 4;
 
     private readonly Row[] rows;
+    private bool compact;
 
     public JudgementBreakdown(GameplayResult result, YuukiColorPalette palette)
     {
         Direction = FlowDirection.Vertical;
-        Spacing = new Vector2(0, 6);
+        Spacing = new Vector2(0, ROW_SPACING);
         AutoSizeAxes = Axes.Y;
 
         rows = new Row[shown_results.Length];
         for (int i = 0; i < shown_results.Length; i++)
             Add(rows[i] = new Row(shown_results[i], result, palette));
+    }
+
+    /// <summary>
+    /// Rows a little shorter and closer together, for a column without the room for them as they are.
+    /// </summary>
+    public bool Compact
+    {
+        get => compact;
+        set
+        {
+            if (compact == value)
+                return;
+
+            compact = value;
+            Spacing = new Vector2(0, value ? COMPACT_ROW_SPACING : ROW_SPACING);
+
+            foreach (Row row in rows)
+                row.Height = value ? COMPACT_ROW_HEIGHT : ROW_HEIGHT;
+        }
+    }
+
+    /// <summary>
+    /// How tall it is when it isn't <see cref="Compact"/>, whether it is or not.
+    /// </summary>
+    public float FullHeight => rows.Length * ROW_HEIGHT + Math.Max(0, rows.Length - 1) * ROW_SPACING;
+
+    /// <summary>
+    /// Fills in how many of each were early or late, from <paramref name="result"/>'s judgements (a saved play's come in
+    /// once its replay is judged again).
+    /// </summary>
+    public void ShowTiming(GameplayResult result)
+    {
+        foreach (Row row in rows)
+            row.ShowTiming(result);
     }
 
     /// <summary>
@@ -52,36 +97,47 @@ public partial class JudgementBreakdown : FlowContainer
         private const float count_width = 90;
         private const float timing_width = 170;
 
+        private readonly HitResult hitResult;
         private readonly int count;
         private readonly float share;
 
         private readonly SpriteText countText;
-        private readonly Box bar;
+        private readonly SpriteText timingText;
+        private readonly Drawable bar;
 
         public Row(HitResult hitResult, GameplayResult result, YuukiColorPalette palette)
         {
             RelativeSizeAxes = Axes.X;
-            Height = 34;
+            Height = ROW_HEIGHT;
 
+            this.hitResult = hitResult;
             count = countOf(hitResult, result);
             share = result.TotalNotes == 0 ? 0 : (float)count / result.TotalNotes;
 
             Color color = JudgementColors.For(hitResult);
 
-            // A miss has no meaningful press timing (it was never pressed), so it skips the split.
-            string timing = hitResult == HitResult.Miss || result.Judgements.Count == 0
-                ? ""
-                : $"Early {result.EarlyCount(hitResult)}  ·  Late {result.LateCount(hitResult)}";
+            // A Bloom's dot and bar take the heroes' rainbow, moving.
+            bool rainbow = hitResult == HitResult.Bloom;
 
             Children = new Drawable[]
             {
-                new Circle
-                {
-                    Anchor = Anchor.CentreLeft,
-                    Origin = Anchor.CentreLeft,
-                    Size = new Vector2(14),
-                    Color = color
-                },
+                rainbow
+                    ? new Container
+                    {
+                        Anchor = Anchor.CentreLeft,
+                        Origin = Anchor.CentreLeft,
+                        Size = new Vector2(14),
+                        Masking = true,
+                        CornerRadius = 7,
+                        Child = new RainbowFill { RelativeSizeAxes = Axes.Both }
+                    }
+                    : new Circle
+                    {
+                        Anchor = Anchor.CentreLeft,
+                        Origin = Anchor.CentreLeft,
+                        Size = new Vector2(14),
+                        Color = color
+                    },
                 new SpriteText
                 {
                     Anchor = Anchor.CentreLeft,
@@ -100,14 +156,13 @@ public partial class JudgementBreakdown : FlowContainer
                     Font = YuukiFontUsage.GetFontUsage(Typeface.Quicksand, 24, FontWeight.Bold),
                     Color = color
                 },
-                new SpriteText
+                timingText = new SpriteText
                 {
                     Anchor = Anchor.CentreLeft,
                     Origin = Anchor.CentreLeft,
                     X = label_width + count_width + 20,
-                    Text = timing,
-                    Font = YuukiFontUsage.GetFontUsage(Typeface.Nunito, 16, FontWeight.Regular),
-                    Color = palette.TextMuted
+                    Font = YuukiFontUsage.GetFontUsage(Typeface.Quicksand, 16, FontWeight.Regular),
+                    Color = ResultsInk.Secondary(palette)
                 },
                 // Share-of-notes bar, filling the rest of the row.
                 new Container
@@ -130,17 +185,30 @@ public partial class JudgementBreakdown : FlowContainer
                                 Color = palette.Text,
                                 Alpha = 0.15f
                             },
-                            bar = new Box
-                            {
-                                RelativeSizeAxes = Axes.Both,
-                                Width = 0,
-                                Color = color
-                            }
+                            bar = rainbow
+                                ? new RainbowFill
+                                {
+                                    RelativeSizeAxes = Axes.Both,
+                                    Width = 0
+                                }
+                                : new Box
+                                {
+                                    RelativeSizeAxes = Axes.Both,
+                                    Width = 0,
+                                    Color = color
+                                }
                         }
                     }
                 }
             };
+
+            ShowTiming(result);
         }
+
+        // A miss has no meaningful press timing (it was never pressed), so it skips the split.
+        public void ShowTiming(GameplayResult result) => timingText.Text = hitResult == HitResult.Miss || result.Judgements.Count == 0
+            ? ""
+            : $"Early {result.EarlyCount(hitResult)}  ·  Late {result.LateCount(hitResult)}";
 
         public float Progress
         {
@@ -153,6 +221,7 @@ public partial class JudgementBreakdown : FlowContainer
 
         private static int countOf(HitResult hitResult, GameplayResult result) => hitResult switch
         {
+            HitResult.Bloom => result.BloomCount,
             HitResult.Critical => result.CriticalCount,
             HitResult.Break => result.BreakCount,
             HitResult.Hit => result.HitCount,

@@ -48,6 +48,10 @@ public class MainActivity : SakuraActivity
 
     protected override string AppName => "yuuki";
 
+    // The game's files (songs, scores, replays, settings, logs) where a computer reaches them over USB, as on a desktop:
+    // Android/data/dev.helloyeew.yuuki/files. What it kept in its private files before moves there at the first launch.
+    protected override bool SharesFiles => true;
+
     protected override App CreateApp()
     {
         lock (gameLock)

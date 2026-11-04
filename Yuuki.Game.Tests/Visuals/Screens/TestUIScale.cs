@@ -94,8 +94,9 @@ public partial class TestUIScale : TestScene
         AddWaitStep("settle", 1500);
         AddAssert("ring beside the stats, both above the buttons", () =>
         {
-            Drawable ring = descendants(results).OfType<AccuracyCircle>().Single().Parent!;
-            Drawable stats = descendants(results).OfType<YuukiScrollableContainer>().Single();
+            // The ring area: the blossom ring is in its block, in the area.
+            Drawable ring = descendants(results).OfType<BlossomRing>().Single().Parent!.Parent!;
+            Drawable stats = descendants(results).OfType<YuukiScrollableContainer>().Single(scroll => !descendants(scroll).Contains(results.MoreInfo));
             Drawable back = descendants(results).OfType<LeftBottomShearButton>().Single();
 
             var r = ring.DrawRectangle;
@@ -105,6 +106,13 @@ public partial class TestUIScale : TestScene
             return r.X + r.Width <= s.X + 1
                    && s.Y + s.Height <= b.Y + 1
                    && r.Y + r.Height <= b.Y + 1;
+        });
+        AddAssert("more info above the buttons too", () =>
+        {
+            Drawable moreInfo = descendants(results).OfType<YuukiScrollableContainer>().Single(scroll => descendants(scroll).Contains(results.MoreInfo));
+            Drawable back = descendants(results).OfType<LeftBottomShearButton>().Single();
+
+            return moreInfo.DrawRectangle.Y + moreInfo.DrawRectangle.Height <= back.DrawRectangle.Y + 1;
         });
     }
 

@@ -1543,7 +1543,7 @@ public abstract partial class Carousel<TModel, TCard> : Container
                 {
                     Origin = Anchor.Centre,
                     Text = label,
-                    Font = YuukiFontUsage.GetFontUsage(Typeface.Nunito, 10, FontWeight.ExtraBold)
+                    Font = YuukiFontUsage.GetFontUsage(Typeface.Quicksand, 10, FontWeight.Bold)
                 });
             }
         }

@@ -81,7 +81,7 @@ public partial class TimingScreen : Container
                 {
                     Position = new Vector2(16, 12),
                     Text = "TIMING POINTS",
-                    Font = YuukiFontUsage.GetFontUsage(Typeface.Nunito, 13, FontWeight.Bold),
+                    Font = YuukiFontUsage.GetFontUsage(Typeface.Quicksand, 13, FontWeight.Bold),
                     Color = Color.White.WithAlpha(0.6f)
                 },
                 new YuukiScrollableContainer
@@ -197,7 +197,7 @@ public partial class TimingScreen : Container
             Anchor = Anchor.CentreLeft,
             Origin = Anchor.CentreLeft,
             Text = label,
-            Font = YuukiFontUsage.GetFontUsage(Typeface.Nunito, 14, FontWeight.Bold),
+            Font = YuukiFontUsage.GetFontUsage(Typeface.Quicksand, 14, FontWeight.Bold),
             Color = Color.White.WithAlpha(0.7f)
         });
 
@@ -454,14 +454,14 @@ public partial class TimingScreen : Container
                     Anchor = Anchor.CentreLeft,
                     Origin = Anchor.CentreLeft,
                     X = 150,
-                    Font = YuukiFontUsage.GetFontUsage(Typeface.Nunito, 15, FontWeight.Bold)
+                    Font = YuukiFontUsage.GetFontUsage(Typeface.Quicksand, 15, FontWeight.Bold)
                 },
                 meter = new SpriteText
                 {
                     Anchor = Anchor.CentreLeft,
                     Origin = Anchor.CentreLeft,
                     X = 270,
-                    Font = YuukiFontUsage.GetFontUsage(Typeface.Nunito, 15, FontWeight.Bold),
+                    Font = YuukiFontUsage.GetFontUsage(Typeface.Quicksand, 15, FontWeight.Bold),
                     Color = Color.White.WithAlpha(0.6f)
                 }
             };

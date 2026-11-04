@@ -49,7 +49,7 @@ public partial class VideoPreview : Container
                 Anchor = Anchor.Centre,
                 Origin = Anchor.Centre,
                 Text = "No video",
-                Font = YuukiFontUsage.GetFontUsage(Typeface.Nunito, 13, FontWeight.Bold),
+                Font = YuukiFontUsage.GetFontUsage(Typeface.Quicksand, 13, FontWeight.Bold),
                 Color = Color.White.WithAlpha(0.5f)
             }
         };

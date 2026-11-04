@@ -171,7 +171,8 @@ public partial class TestPhoneCanvas : TestScene
         AddAssert("header and ring beside the stats, all above the buttons", () =>
         {
             var header = descendants(results).OfType<BeatmapInfoPanel>().Single().DrawRectangle;
-            var ring = descendants(results).OfType<AccuracyCircle>().Single().Parent!.DrawRectangle;
+            // The ring area: the blossom ring is in its block, in the area.
+            var ring = descendants(results).OfType<BlossomRing>().Single().Parent!.Parent!.DrawRectangle;
             var stats = descendants(results).OfType<YuukiScrollableContainer>().First().DrawRectangle;
             var back = descendants(results).OfType<LeftBottomShearButton>().Single().DrawRectangle;
 
@@ -210,6 +211,33 @@ public partial class TestPhoneCanvas : TestScene
                    && sidebar.X + sidebar.Width <= panel.X + 1;
         });
         AddStep("close", () => canvas.Remove(settings, true));
+    }
+
+    /// <summary>
+    /// The ring slides in at its own height, above the buttons, from its first frame: sliding along X holds the height
+    /// the ring area had when the slide started, so it was once sliding in low, over Back, then jumping up as it ended.
+    /// </summary>
+    [Test]
+    public void TestResultsRingSlidesInAboveTheButtons()
+    {
+        sizeCanvas(false);
+        ScoreScreen results = null!;
+
+        push(() => results = new ScoreScreen(new GameplayResult { CriticalCount = 300, BreakCount = 40, MissCount = 5 }));
+
+        // Through the slide (600 ms), by its draw, as the transform sets the height inside the frame.
+        for (int i = 0; i < 6; i++)
+        {
+            AddAssert("the ring above the buttons", () =>
+            {
+                Drawable area = descendants(results).OfType<BlossomRing>().Single().Parent!.Parent!;
+                var back = descendants(results).OfType<LeftBottomShearButton>().Single();
+                return area.ScreenSpaceDrawQuad.BottomRight.Y <= back.ScreenSpaceDrawQuad.TopLeft.Y + 1;
+            });
+            AddWaitStep("a little later", 120);
+        }
+
+        AddStep("exit", () => results.Exit());
     }
 
     private void push(System.Func<YuukiScreen> create) => AddStep("push", () =>

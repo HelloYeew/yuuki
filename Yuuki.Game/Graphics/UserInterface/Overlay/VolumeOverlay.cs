@@ -381,7 +381,7 @@ public partial class VolumeOverlay : VisibilityContainer
                     Origin = Anchor.TopCentre,
                     Y = size + 6,
                     Text = Label.ToUpperInvariant(),
-                    Font = YuukiFontUsage.GetFontUsage(Typeface.Nunito, 13, FontWeight.Bold),
+                    Font = YuukiFontUsage.GetFontUsage(Typeface.Quicksand, 13, FontWeight.Bold),
                     Color = palette.TextLight.WithAlpha(0.8f)
                 }
             };

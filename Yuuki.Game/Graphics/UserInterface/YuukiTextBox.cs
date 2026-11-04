@@ -45,11 +45,11 @@ public partial class YuukiTextBox : TextBox
         Size = new Vector2(360, 38);
         CornerRadius = 8;
 
-        SpriteText.Font = YuukiFontUsage.GetFontUsage(Typeface.Quicksand, 18, FontWeight.Bold);
+        SpriteText.Font = YuukiFontUsage.GetFontUsage(Typeface.Nunito, 18, FontWeight.Bold);
         SpriteText.Color = Color.White;
         SpriteText.Margin = new MarginPadding { Left = text_inset, Right = text_inset };
 
-        PlaceholderSprite.Font = YuukiFontUsage.GetFontUsage(Typeface.Quicksand, 18, FontWeight.Regular);
+        PlaceholderSprite.Font = YuukiFontUsage.GetFontUsage(Typeface.Nunito, 18, FontWeight.Regular);
         PlaceholderSprite.Color = Color.White;
         PlaceholderSprite.Margin = new MarginPadding { Left = text_inset, Right = text_inset };
 

@@ -1380,7 +1380,7 @@ public partial class EditorScreen : YuukiScreen
                     Anchor = Anchor.Centre,
                     Origin = Anchor.Centre,
                     Text = "Saved",
-                    Font = YuukiFontUsage.GetFontUsage(Typeface.Nunito, 15, FontWeight.Bold),
+                    Font = YuukiFontUsage.GetFontUsage(Typeface.Quicksand, 15, FontWeight.Bold),
                     Color = Color.White,
                     Margin = new MarginPadding { Left = 18, Right = 18 }
                 }

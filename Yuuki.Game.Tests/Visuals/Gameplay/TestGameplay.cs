@@ -187,7 +187,7 @@ public partial class TestGameplay : YuukiManualInputManagerTestScene
         AddStep("release", () => InputManager.ReleaseKey(Key.D));
 
         AddAssert("two combo", () => gameplay.Score.Combo.Value == 2);
-        AddAssert("tail is a critical", () => gameplay.BuildResult().CriticalCount == 2);
+        AddAssert("head and tail on time: Blooms", () => gameplay.BuildResult().BloomCount == 2);
     }
 
     [Test]
@@ -202,7 +202,7 @@ public partial class TestGameplay : YuukiManualInputManagerTestScene
         AddUntilStep("tail missed", () => gameplay.BuildResult().MissCount == 1);
         AddStep("release late", () => InputManager.ReleaseKey(Key.D));
 
-        AddAssert("head still hit", () => gameplay.BuildResult().CriticalCount == 1);
+        AddAssert("head still hit", () => gameplay.BuildResult().BloomCount == 1);
         AddAssert("combo broken", () => gameplay.Score.Combo.Value == 0);
     }
 
@@ -238,7 +238,7 @@ public partial class TestGameplay : YuukiManualInputManagerTestScene
         AddStep("seek to the end", () => gameplay.GameplayClock.Seek(1490));
         AddStep("release on time", () => InputManager.ReleaseKey(Key.D));
 
-        AddAssert("head critical", () => gameplay.BuildResult().CriticalCount == 1);
+        AddAssert("head on time", () => gameplay.BuildResult().BloomCount == 1);
         AddAssert("tail capped at hit", () => gameplay.BuildResult().HitCount == 1);
         AddAssert("no miss", () => gameplay.BuildResult().MissCount == 0);
         AddAssert("not a full combo", () => !gameplay.BuildResult().IsFullCombo);
@@ -406,7 +406,7 @@ public partial class TestGameplay : YuukiManualInputManagerTestScene
         AddStep("hold the lane", () => InputManager.PressKey(Key.D));
         AddAssert("nothing yet", () => gameplay.BuildResult().TotalNotes == 0);
         AddStep("let it arrive", () => gameplay.GameplayClock.Seek(1000));
-        AddUntilStep("caught", () => gameplay.BuildResult().CriticalCount == 1);
+        AddUntilStep("caught, on time", () => gameplay.BuildResult().BloomCount == 1);
         AddStep("release", () => InputManager.ReleaseKey(Key.D));
     }
 
@@ -428,7 +428,7 @@ public partial class TestGameplay : YuukiManualInputManagerTestScene
         AddStep("step into lane 3", () => PressKeyOnce(Key.J));
         AddAssert("character moved", () => gameplay.CharacterLane == 2);
         AddStep("let it arrive", () => gameplay.GameplayClock.Seek(1000));
-        AddUntilStep("caught, early enough for critical", () => gameplay.BuildResult().CriticalCount == 1);
+        AddUntilStep("caught, there early enough for a Bloom", () => gameplay.BuildResult().BloomCount == 1);
     }
 
     [Test]
@@ -464,7 +464,7 @@ public partial class TestGameplay : YuukiManualInputManagerTestScene
         // 70 ms late would be a Break; with the skill running it counts as a Critical.
         AddStep("seek 70 ms past the tap", () => gameplay.GameplayClock.Seek(2070));
         AddStep("hit the tap", () => PressKeyOnce(Key.D));
-        AddAssert("both critical", () => gameplay.BuildResult().CriticalCount == 2);
+        AddAssert("the skill on time, the tap a Critical", () => gameplay.BuildResult().BloomCount == 1 && gameplay.BuildResult().CriticalCount == 1);
         AddAssert("no break", () => gameplay.BuildResult().BreakCount == 0);
     }
 

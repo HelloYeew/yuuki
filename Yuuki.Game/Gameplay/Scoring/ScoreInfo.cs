@@ -12,12 +12,35 @@ namespace Yuuki.Game.Gameplay.Scoring;
 /// </summary>
 public class ScoreInfo
 {
+    /// <summary>
+    /// The judging rules plays are saved under now. Raise it when judging changes (windows, judgements, scoring), and the
+    /// next launch brings every play it can up to date from its replay (<see cref="Database.ScoreMigration"/>).
+    /// </summary>
+    /// <remarks>1: BLOOM, SS and the Pass notes' grades.</remarks>
+    public const int CURRENT_RULES = 1;
+
+    /// <summary>
+    /// The judging rules its totals are from; 0 for plays saved before this was kept, as they were played.
+    /// </summary>
+    public int RulesVersion { get; set; }
+
+    /// <summary>
+    /// The rules a re-judge last ended differently from this play under: it stays as played, and isn't tried again until
+    /// the rules change.
+    /// </summary>
+    public int RulesTried { get; set; }
+
     public int BeatmapId { get; set; }
     public int BeatmapSetId { get; set; }
 
     public long Score { get; set; }
     public double Accuracy { get; set; }
     public int MaxCombo { get; set; }
+
+    /// <summary>
+    /// Blooms; 0 for plays saved before there were any.
+    /// </summary>
+    public int BloomCount { get; set; }
 
     public int CriticalCount { get; set; }
     public int BreakCount { get; set; }
@@ -28,6 +51,11 @@ public class ScoreInfo
     public ScoreRank Rank { get; set; }
     public bool IsFullCombo { get; set; }
     public bool IsAllPerfect { get; set; }
+
+    /// <summary>
+    /// Every judgement a Bloom (<see cref="GameplayResult.IsFullBloom"/>).
+    /// </summary>
+    public bool IsFullBloom { get; set; }
 
     /// <summary>The player ran out of health. Counts as a play, never as a ranking entry.</summary>
     public bool Failed { get; set; }
@@ -72,26 +100,43 @@ public class ScoreInfo
     [JsonIgnore]
     public bool HasReplay => ReplayId != null;
 
-    public static ScoreInfo From(GameplayResult result, int beatmapId, int beatmapSetId) => new ScoreInfo
+    public static ScoreInfo From(GameplayResult result, int beatmapId, int beatmapSetId)
     {
-        BeatmapId = beatmapId,
-        BeatmapSetId = beatmapSetId,
-        Score = result.Score,
-        Accuracy = result.Accuracy,
-        MaxCombo = result.MaxCombo,
-        CriticalCount = result.CriticalCount,
-        BreakCount = result.BreakCount,
-        HitCount = result.HitCount,
-        MissCount = result.MissCount,
-        HoldBreakCount = result.HoldBreakCount,
-        Rank = result.Rank,
-        IsFullCombo = result.IsFullCombo,
-        IsAllPerfect = result.IsAllPerfect,
-        Failed = result.Failed,
-        Date = DateTimeOffset.Now,
-        MeanError = result.TimingSamples >= GameplayResult.MINIMUM_OFFSET_SAMPLES ? result.MeanError : null,
-        AudioOffset = (int)Math.Round(result.AudioOffset),
-        VisualOffset = (int)Math.Round(result.VisualOffset),
-        SongOffset = (int)Math.Round(result.SongOffset)
-    };
+        var score = new ScoreInfo
+        {
+            BeatmapId = beatmapId,
+            BeatmapSetId = beatmapSetId,
+            Failed = result.Failed,
+            Date = DateTimeOffset.Now,
+            AudioOffset = (int)Math.Round(result.AudioOffset),
+            VisualOffset = (int)Math.Round(result.VisualOffset),
+            SongOffset = (int)Math.Round(result.SongOffset)
+        };
+
+        score.ApplyJudging(result);
+        return score;
+    }
+
+    /// <summary>
+    /// Takes its totals from <paramref name="result"/>, judged under the current rules: what the judging decides, not what
+    /// the play was (when, on what, whether it failed).
+    /// </summary>
+    public void ApplyJudging(GameplayResult result)
+    {
+        RulesVersion = CURRENT_RULES;
+        Score = result.Score;
+        Accuracy = result.Accuracy;
+        MaxCombo = result.MaxCombo;
+        BloomCount = result.BloomCount;
+        CriticalCount = result.CriticalCount;
+        BreakCount = result.BreakCount;
+        HitCount = result.HitCount;
+        MissCount = result.MissCount;
+        HoldBreakCount = result.HoldBreakCount;
+        Rank = result.Rank;
+        IsFullCombo = result.IsFullCombo;
+        IsAllPerfect = result.IsAllPerfect;
+        IsFullBloom = result.IsFullBloom;
+        MeanError = result.TimingSamples >= GameplayResult.MINIMUM_OFFSET_SAMPLES ? result.MeanError : null;
+    }
 }

@@ -53,9 +53,14 @@ public class PlayableBeatmap
     /// Builds a playable chart from a beatmap's stored notes since the file
     /// format encodes type only by timing
     /// </summary>
-    public static PlayableBeatmap FromBeatmap(Beatmap beatmap, int laneCount = 4)
+    public static PlayableBeatmap FromBeatmap(Beatmap beatmap, int laneCount = 4) => FromBeatmap(beatmap, beatmap.Notes, laneCount);
+
+    /// <summary>
+    /// As <see cref="FromBeatmap(Beatmap, int)"/>, from notes read apart from the beatmap (<see cref="BeatmapNoteStore.Read"/>).
+    /// </summary>
+    public static PlayableBeatmap FromBeatmap(Beatmap beatmap, BeatmapNote[] beatmapNotes, int laneCount)
     {
-        var notes = beatmap.Notes.Select(n => new BeatmapNote
+        var notes = beatmapNotes.Select(n => new BeatmapNote
         {
             Lane = n.Lane,
             StartTime = n.StartTime,

@@ -10,9 +10,12 @@ using Sakura.Framework.Graphics.Drawables;
 using Sakura.Framework.Graphics.Primitives;
 using Yuuki.Game.Beatmaps;
 using Yuuki.Game.Configurations;
+using Yuuki.Game.Gameplay.Replays;
 using Yuuki.Game.Gameplay.Scoring;
+using Yuuki.Game.Graphics.Colors;
 using Yuuki.Game.Graphics.Screens;
 using Yuuki.Game.Graphics.UserInterface;
+using Yuuki.Game.Graphics.UserInterface.Results;
 
 namespace Yuuki.Game.Tests.Visuals.Screens;
 
@@ -21,14 +24,55 @@ public partial class TestScoreScreen : TestYuukiScreenStack
     // A config so the "shift timing" suggestion shows (the built runs lean late).
     private readonly YuukiConfigManager config = new YuukiInMemoryConfigManager();
 
+    private static readonly BeatmapSet song = new BeatmapSet
+    {
+        ID = 73,
+        Title = "Dummy Song",
+        TitleUnicode = "ダミーソング",
+        Artist = "Dummy Artist",
+        ArtistUnicode = "ダミーアーティスト",
+        Source = "Dummy Source",
+        SourceUnicode = "ダミーソース",
+        TotalLength = 120000,
+        BPM = 180,
+        Creator = "Tester"
+    };
+
+    private readonly WorkingBeatmap workingBeatmap = new WorkingBeatmap
+    {
+        BeatmapSet = song,
+        Beatmap = new Beatmap
+        {
+            ID = 73,
+            BeatmapSet = song,
+            DifficultyName = "Expert",
+            Creator = "Tester",
+            DifficultyRating = 10.4,
+            LaneCount = 4
+        }
+    };
+
     [BackgroundDependencyLoader]
     private void load()
     {
         Cache(config);
+        Cache(workingBeatmap);
     }
 
     [Test]
-    public void TestAllPerfect() => showResult("all perfect", build(critical: 400, seed: 1), r => r.IsAllPerfect);
+    public void TestAllPerfect() => showResult("all perfect", build(critical: 400, seed: 1), r => r.IsAllPerfect && r.Rank == ScoreRank.SS && !r.IsFullBloom);
+
+    [Test]
+    public void TestFullBloom()
+    {
+        showResult("full bloom", build(bloom: 400, seed: 1), r => r.IsFullBloom && r.Rank == ScoreRank.SS);
+        AddStep("skip to the end", () =>
+        {
+            shown!.Skip();
+            shown.Skip();
+        });
+        AddUntilStep("landed", () => shown!.RankRevealed);
+    }
 
     [Test]
     public void TestFullCombo() => showResult("full combo", build(critical: 320, breaks: 60, hits: 20, seed: 2), r => r.IsFullCombo && !r.IsAllPerfect);
@@ -46,6 +90,167 @@ public partial class TestScoreScreen : TestYuukiScreenStack
     public void TestEmptyRun() => showResult("empty run", new GameplayResult(), r => r.TotalNotes == 0);
 
     /// <summary>
+    /// A run that ran out of health: FAILED in place of a rank, how far it got under its accuracy, no badge, and Retry as
+    /// the way on. Never compared with the best; Yuuki has only her one line for it.
+    /// </summary>
+    [Test]
+    public void TestFailedRun()
+    {
+        AddSliderStep("how far it got", 0.05f, 0.99f, 0.72f, reached =>
+        {
+            if (screenStack.CurrentScreen is ScoreScreen previous)
+                previous.Exit();
+
+            screenStack.Push(shown = new ScoreScreen(failed(build(critical: 150, breaks: 60, hits: 40, misses: 70, seed: 6), reached), onRetry: () => { })
+            {
+                Anchor = Anchor.Centre,
+                Origin = Anchor.Centre,
+                RelativeSizeAxes = Axes.Both
+            });
+        });
+
+        showResult("failed at 72%", failed(build(critical: 150, breaks: 60, hits: 40, misses: 70, seed: 6), 0.72), r => r.Failed && r.Reached is > 0.71 and < 0.73,
+            onRetry: () => { });
+        AddAssert("nothing building up to it", () => shown!.Timeline.Failed && !shown.Timeline.RankLost && double.IsPositiveInfinity(shown.Timeline.Best));
+        AddStep("skip to the end", () =>
+        {
+            shown!.Skip();
+            shown.Skip();
+        });
+        AddUntilStep("FAILED, in place of a rank", () => shown!.RankRevealed && letterOf(shown).Failed);
+        AddAssert("how far it got, in the ring", () => textsOf(shown!).Contains("reached 1:09 of 1:37"));
+        AddAssert("no badge", () => descendants(shown!).OfType<ResultsBadge>().Single().Children[0].Alpha == 0);
+        AddAssert("Retry is the way on", () => buttonOf(shown!, "Retry").BackgroundColor == DefaultYuukiColorProvider.GetDefaultPaletteForPart(YuukiScreenPart.Play).Accent);
+
+        showResult("failed at 86%", failed(build(critical: 150, breaks: 60, hits: 40, misses: 70, seed: 6), 0.86), r => r.Failed, onRetry: () => { });
+        AddStep("skip to the end", () =>
+        {
+            shown!.Skip();
+            shown.Skip();
+        });
+        AddUntilStep("her line for it", () => isSubtitle(shown!.ScreenHelperText.Value));
+        AddAssert("still no badge", () => descendants(shown!).OfType<ResultsBadge>().Single().Children[0].Alpha == 0);
+        AddAssert("only that line", () => ResultsVoice.Lines["react-fail"].Any(take => take.English == shown!.ScreenHelperText.Value));
+
+        // Saved with its replay, it offers to watch where it went.
+        AddStep("clear previous results", () => (screenStack.CurrentScreen as ScoreScreen)?.Exit());
+        AddStep("push it saved, with its replay", () => screenStack.Push(shown = new ScoreScreen(failed(build(critical: 150, breaks: 60, hits: 40, misses: 70, seed: 6), 0.72),
+            onRetry: () => { }, score: new ScoreInfo { Failed = true, Date = DateTimeOffset.Now },
+            replay: new ReplayData { Inputs = { new ReplayInput(1000, ReplayInputKind.LanePress, 0) } })
+        {
+            Anchor = Anchor.Centre,
+            Origin = Anchor.Centre,
+            RelativeSizeAxes = Axes.Both
+        }));
+        AddUntilStep("results is current", () => screenStack.CurrentScreen == shown && shown!.IsLoaded);
+        AddAssert("Replay", () => shown!.CanWatchReplay && descendants(shown).OfType<MenuShearButton>().Any(b => b.Text == "Replay"));
+    }
+
+    /// <summary>
+    /// A run that failed, as it would come from gameplay: its judgements up to where health ran out, and the counts of
+    /// those alone.
+    /// </summary>
+    private static GameplayResult failed(GameplayResult run, double reached)
+    {
+        double at = run.ChartLength * reached;
+        JudgementResult[] played = run.Judgements.Where(j => j.Note.StartTime <= at).ToArray();
+        int combo = 0, maxCombo = 0;
+
+        foreach (JudgementResult judgement in played)
+        {
+            combo = judgement.Result.IsHit() ? combo + 1 : 0;
+            maxCombo = Math.Max(maxCombo, combo);
+        }
+
+        return new GameplayResult
+        {
+            Score = (int)(run.Score * reached),
+            MaxCombo = maxCombo,
+            BloomCount = played.Count(j => j.Result == HitResult.Bloom),
+            CriticalCount = played.Count(j => j.Result == HitResult.Critical),
+            BreakCount = played.Count(j => j.Result == HitResult.Break),
+            HitCount = played.Count(j => j.Result == HitResult.Hit),
+            MissCount = played.Count(j => j.Result == HitResult.Miss),
+            Judgements = played,
+            HitWindows = run.HitWindows,
+            ChartLength = run.ChartLength,
+            Failed = true,
+            FailedAt = at
+        };
+    }
+
+    private static RankLetter letterOf(Drawable screen) => descendants(screen).OfType<RankLetter>().First();
+
+    private static MenuShearButton buttonOf(Drawable screen, string text) => descendants(screen).OfType<MenuShearButton>().First(b => b.Text == text);
+
+    private static IEnumerable<string> textsOf(Drawable drawable) => descendants(drawable).OfType<SpriteText>().Select(t => t.Text);
+
+    /// <summary>
+    /// A skip goes first to just before the first rank lands (an S that breaks, here), then to nearly the end; the rank
+    /// the run earned has landed by then, though the skip jumped it, and after that there's nothing left to skip.
+    /// </summary>
+    [Test]
+    public void TestSkipping()
+    {
+        showResult("S lost to a miss", build(critical: 380, breaks: 15, misses: 1, seed: 5), r => r.RankLostToMiss);
+
+        AddStep("skip", () => shown!.Skip());
+        AddAssert("just before the S lands", () => shown!.RevealTime >= shown.Timeline.FirstLanding - RevealTimeline.SKIP_LEAD && shown.RevealTime < shown.Timeline.FirstLanding);
+        AddAssert("no rank landed yet", () => !shown!.RankRevealed);
+
+        AddStep("skip again", () => shown!.Skip());
+        AddAssert("nearly the end", () => shown!.RevealTime >= shown.Timeline.End - RevealTimeline.SKIP_TAIL);
+        AddUntilStep("the rank it earned has landed", () => shown!.RankRevealed);
+        AddAssert("nothing left to skip", () => !shown!.Skip());
+    }
+
+    /// <summary>
+    /// Once the reveal is over Yuuki speaks, her words in the footer; with her voice turned off, she doesn't.
+    /// </summary>
+    [Test]
+    public void TestYuukiSpeaksOnceItsOver()
+    {
+        showResult("full combo", build(critical: 320, breaks: 60, hits: 20, seed: 2), r => r.IsFullCombo);
+        AddStep("skip to the end", () =>
+        {
+            shown!.Skip();
+            shown.Skip();
+        });
+        AddUntilStep("her words", () => isSubtitle(shown!.ScreenHelperText.Value));
+
+        AddStep("turn her voice off", () => config.Get<bool>(YuukiSetting.ResultsVoice).Value = false);
+        showResult("full combo again", build(critical: 320, breaks: 60, hits: 20, seed: 2), r => r.IsFullCombo);
+        AddStep("skip to the end", () =>
+        {
+            shown!.Skip();
+            shown.Skip();
+        });
+        AddWaitStep("past when she'd speak", 1000);
+        AddAssert("not a word", () => !isSubtitle(shown!.ScreenHelperText.Value));
+        AddStep("her voice back on", () => config.Get<bool>(YuukiSetting.ResultsVoice).Value = true);
+    }
+
+    /// <summary>
+    /// More info shows every graph of a play just finished, from its judgements in memory. Going there plays the reveal
+    /// out first, a click there is the graphs' rather than a skip, and Tab goes back and forth.
+    /// </summary>
+    [Test]
+    public void TestMoreInfo()
+    {
+        showResult("mixed run", build(critical: 210, breaks: 90, hits: 40, misses: 25, seed: 3), r => !r.IsFullCombo);
+        AddStep("more info", () => shown!.ShowPage(true));
+        AddAssert("the reveal played out", () => shown!.RankRevealed && !shown.Skip());
+        AddUntilStep("its graphs, from the judgements in memory", () => shown!.MoreInfo.Analysis is { Points.Count: 365 } && !shown.MoreInfo.Judging);
+        AddAssert("the hardest stretch has misses", () => shown!.MoreInfo.Analysis!.Hardest is { Misses: > 0 });
+        AddAssert("told the room it has", () => shown!.MoreInfo.ViewHeight > 0 && shown.MoreInfo.ViewHeight == shown.MoreInfo.Parent?.Parent?.DrawHeight);
+
+        AddStep("press Tab", () => shown!.OnKeyDown(new Sakura.Framework.Input.KeyEvent(Sakura.Framework.Input.Key.Tab, Sakura.Framework.Input.KeyModifiers.None, false)));
+        AddAssert("the summary again", () => !shown!.ShowingMoreInfo);
+        AddStep("press Tab", () => shown!.OnKeyDown(new Sakura.Framework.Input.KeyEvent(Sakura.Framework.Input.Key.Tab, Sakura.Framework.Input.KeyModifiers.None, false)));
+        AddAssert("more info again", () => shown!.ShowingMoreInfo);
+    }
+
+    /// <summary>
     /// The offer moves the judging alone: both offsets by the run's lean, the other way about.
     /// </summary>
     [Test]
@@ -53,6 +258,8 @@ public partial class TestScoreScreen : TestYuukiScreenStack
     {
         showResult("25 ms late, at -20 and +10", leaning(25, audio: -20, visual: 10), r => r.SuggestedOffsets == (-45, 35));
         AddAssert("no calibrating offered", () => pillOrNull("Calibrate") == null);
+
+        AddAssert("it has a strip of the page", () => shown!.MoreInfo.AdviceStrip != null);
 
         AddStep("shift", () => pill("Shift timing 25 ms later · every device").Action());
         AddAssert("audio -45, visual +35", () => config.Get<int>(YuukiSetting.AudioOffset).Value == -45 && config.Get<int>(YuukiSetting.VisualOffset).Value == 35);
@@ -67,6 +274,61 @@ public partial class TestScoreScreen : TestYuukiScreenStack
     {
         showResult("17 ms late", leaning(17), r => r.SuggestedOffsets != null);
         AddAssert("no shift offered", () => descendants(shown!).OfType<PillButton>().All(p => !p.Text.StartsWith("Shift timing", StringComparison.Ordinal)));
+    }
+
+    /// <summary>
+    /// The NEW BEST tag is slanted about its middle, so its shape is centered on its words, and what leans out past them
+    /// stays off the title beside it.
+    /// </summary>
+    [Test]
+    public void TestTheNewBestTagIsCenteredOnItsWords()
+    {
+        SpriteText words() => descendants(shown!).OfType<SpriteText>().Single(t => t.Text == "NEW BEST");
+        Container tag() => (Container)words().Parent!;
+        Drawable shape() => tag().Children[0];
+
+        AddStep("clear previous results", () =>
+        {
+            if (screenStack.CurrentScreen is ScoreScreen previous)
+                previous.Exit();
+        });
+        AddStep("push a new best", () => screenStack.Push(shown = new ScoreScreen(build(critical: 300, breaks: 20, seed: 6), isNewBest: true)
+        {
+            Anchor = Anchor.Centre,
+            Origin = Anchor.Centre,
+            RelativeSizeAxes = Axes.Both
+        }));
+        AddUntilStep("it's up", () => screenStack.CurrentScreen == shown && shown!.IsLoaded);
+        AddStep("skip to the end", () =>
+        {
+            shown!.Skip();
+            shown.Skip();
+        });
+        AddUntilStep("landed", () => shown!.RankRevealed);
+
+        AddAssert("the shape's on the words", () =>
+        {
+            Sakura.Framework.Maths.Vector2 middleOfShape = shape().ToScreenSpace(shape().DrawSize / 2);
+            Sakura.Framework.Maths.Vector2 middleOfWords = words().ToScreenSpace(words().DrawSize / 2);
+            return Math.Abs(middleOfShape.X - middleOfWords.X) < 1 && Math.Abs(middleOfShape.Y - middleOfWords.Y) < 2;
+        });
+        AddAssert("it's slanted", () => shape().Shear.X != 0);
+        AddAssert("its margins hold what leans out", () =>
+        {
+            float leaning = Math.Abs(shape().Shear.X) * shape().DrawHeight / 2;
+            return tag().Margin.Left >= leaning && tag().Margin.Right >= leaning;
+        });
+    }
+
+    /// <summary>
+    /// Nothing to do isn't worth a strip of the page: the timing card says so.
+    /// </summary>
+    [Test]
+    public void TestCenteredTimingSaysSoInItsCard()
+    {
+        showResult("on time", leaning(0.2), r => r.MeanError != null);
+        AddAssert("no strip", () => shown!.MoreInfo.AdviceStrip == null);
+        AddAssert("its card says", () => descendants(shown!).OfType<ResultsCard>().Any(c => c.Question == "Your timing is centered."));
     }
 
     /// <summary>
@@ -140,6 +402,9 @@ public partial class TestScoreScreen : TestYuukiScreenStack
 
     private ScoreScreen? shown;
 
+    // Whether the footer says one of Yuuki's lines.
+    private static bool isSubtitle(string text) => ResultsVoice.Lines.Values.SelectMany(takes => takes).Any(take => take.English == text);
+
     private PillButton pill(string text) => pillOrNull(text)!;
 
     private PillButton? pillOrNull(string text) => shown == null ? null : descendants(shown).OfType<PillButton>().FirstOrDefault(p => p.Text == text);
@@ -158,7 +423,7 @@ public partial class TestScoreScreen : TestYuukiScreenStack
         }
     }
 
-    private void showResult(string name, GameplayResult result, Func<GameplayResult, bool> expectation)
+    private void showResult(string name, GameplayResult result, Func<GameplayResult, bool> expectation, Action? onRetry = null)
     {
         AddAssert($"{name} result is as built", () => expectation(result));
         AddStep("clear previous results", () =>
@@ -166,7 +431,7 @@ public partial class TestScoreScreen : TestYuukiScreenStack
             if (screenStack.CurrentScreen is ScoreScreen previous)
                 previous.Exit();
         });
-        AddStep($"push {name}", () => screenStack.Push(shown = new ScoreScreen(result)
+        AddStep($"push {name}", () => screenStack.Push(shown = new ScoreScreen(result, onRetry: onRetry)
         {
             Anchor = Anchor.Centre,
             Origin = Anchor.Centre,
@@ -179,12 +444,13 @@ public partial class TestScoreScreen : TestYuukiScreenStack
     /// A plausible run: notes spread over the chart in a shuffled order, each judgement's timing error
     /// drawn from inside its window with a slight late lean, and a mix of note types.
     /// </summary>
-    private static GameplayResult build(int critical = 0, int breaks = 0, int hits = 0, int misses = 0, int seed = 0)
+    private static GameplayResult build(int critical = 0, int breaks = 0, int hits = 0, int misses = 0, int seed = 0, int bloom = 0)
     {
         var random = new Random(seed);
         var windows = new HitWindows();
         var results = new List<HitResult>();
 
+        results.AddRange(repeat(HitResult.Bloom, bloom));
         results.AddRange(repeat(HitResult.Critical, critical));
         results.AddRange(repeat(HitResult.Break, breaks));
         results.AddRange(repeat(HitResult.Hit, hits));
@@ -209,7 +475,8 @@ public partial class TestScoreScreen : TestYuukiScreenStack
 
             double error = result switch
             {
-                HitResult.Critical => between(random, 0, windows.Critical),
+                HitResult.Bloom => between(random, 0, windows.Bloom),
+                HitResult.Critical => between(random, windows.Bloom, windows.Critical),
                 HitResult.Break => between(random, windows.Critical, windows.Break),
                 HitResult.Hit => between(random, windows.Break, windows.Hit),
                 _ => windows.MissWindow + 1
@@ -230,8 +497,9 @@ public partial class TestScoreScreen : TestYuukiScreenStack
         return new GameplayResult
         {
             // Roughly what the normalised scorer would give: mostly accuracy, a little combo.
-            Score = (int)(ScoreProcessor.MAX_SCORE * (0.9 * valueTotal / Math.Max(1, results.Count) + 0.1 * maxCombo / Math.Max(1.0, results.Count))),
+            Score = (int)(ScoreProcessor.MAX_SCORE * (0.9 * valueTotal / Math.Max(1, results.Count) + 0.1 * maxCombo / Math.Max(1.0, results.Count))) + bloom,
             MaxCombo = maxCombo,
+            BloomCount = bloom,
             CriticalCount = critical,
             BreakCount = breaks,
             HitCount = hits,

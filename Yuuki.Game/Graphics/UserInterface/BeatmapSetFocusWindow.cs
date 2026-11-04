@@ -68,9 +68,13 @@ public partial class BeatmapSetFocusWindow : CarouselFocusWindow<BeatmapSet>
         private const float wide_text_x = wide_cover_size + 32;
         private const float hero_cover_size = 220;
 
-        // Skimming, the rail's window is short: a small cover, the title and artist, nothing else.
+        // Skimming, the rail's window is short: a small cover, the title and artist, and the best mark.
         private const float skim_wide_cover_size = 56;
         private const float skim_text_scale = 0.8f;
+        private const float extras_gap = 12;
+
+        // On the hero's cover while it skims, as a tile has it: in from its corner.
+        private const float hero_best_inset = 8;
 
         // The hero shows the title and artist under its cover instead of the skyline and best mark.
         private const float hero_text_scale = 0.72f;
@@ -155,7 +159,7 @@ public partial class BeatmapSetFocusWindow : CarouselFocusWindow<BeatmapSet>
                         artist = new ScrollingText
                         {
                             RelativeSizeAxes = Axes.X,
-                            Font = YuukiFontUsage.GetFontUsage(Typeface.Nunito, 18, FontWeight.SemiBold)
+                            Font = YuukiFontUsage.GetFontUsage(Typeface.Quicksand, 18, FontWeight.SemiBold)
                         },
                         details = new IconStats(15)
                         {
@@ -167,14 +171,15 @@ public partial class BeatmapSetFocusWindow : CarouselFocusWindow<BeatmapSet>
                 {
                     AutoSizeAxes = Axes.Both,
                     Direction = FlowDirection.Horizontal,
-                    Spacing = new Vector2(12, 0),
+                    Spacing = new Vector2(extras_gap, 0),
                     Children = new Drawable[]
                     {
-                        best = new BestMark(13) { Anchor = Anchor.CentreLeft, Origin = Anchor.CentreLeft },
                         skyline = new LevelSkyline(30, 7) { Anchor = Anchor.CentreLeft, Origin = Anchor.CentreLeft },
                         lanes = new LaneLabel(15) { Anchor = Anchor.CentreLeft, Origin = Anchor.CentreLeft }
                     }
-                }
+                },
+                // Apart from the extras, as it stays when they step aside for a skim.
+                best = new BestMark(13)
             };
         }
 
@@ -202,11 +207,12 @@ public partial class BeatmapSetFocusWindow : CarouselFocusWindow<BeatmapSet>
             phone = value;
 
             title.Font = YuukiFontUsage.GetFontUsage(Typeface.Quicksand, phone ? 31 : 30, FontWeight.Bold);
-            artist.Font = YuukiFontUsage.GetFontUsage(Typeface.Nunito, phone ? 19 : 18, FontWeight.SemiBold);
+            artist.Font = YuukiFontUsage.GetFontUsage(Typeface.Quicksand, phone ? 19 : 18, FontWeight.SemiBold);
 
             // Sized when they were made, so scaled up as a whole: 16 for 15, as the phone's text is.
             details.Scale = new Vector2(phone ? 16 / 15f : 1);
             extras.Scale = new Vector2(phone ? 16 / 15f : 1);
+            best.Scale = extras.Scale;
 
             applyOrientation();
         }
@@ -221,6 +227,7 @@ public partial class BeatmapSetFocusWindow : CarouselFocusWindow<BeatmapSet>
                 text.Alpha = 1;
                 extras.Anchor = extras.Origin = Anchor.CentreRight;
                 extras.Position = new Vector2(-18, 0);
+                best.Anchor = best.Origin = Anchor.CentreRight;
             }
             else
             {
@@ -232,6 +239,8 @@ public partial class BeatmapSetFocusWindow : CarouselFocusWindow<BeatmapSet>
                 extras.Anchor = Anchor.TopCentre;
                 extras.Origin = Anchor.Centre;
                 extras.Position = new Vector2(0, 14 + heroCoverSize + 26);
+                best.Anchor = Anchor.TopLeft;
+                best.Origin = Anchor.CentreLeft;
             }
 
             layOutForSkim();
@@ -298,8 +307,8 @@ public partial class BeatmapSetFocusWindow : CarouselFocusWindow<BeatmapSet>
         }
 
         /// <summary>
-        /// While the list skims the title and artist stay and the rest steps aside: in the rail the cover
-        /// shrinks with the window, and the hero swaps its skyline and best mark for the title and artist.
+        /// While the list skims the title, artist and best mark stay and the rest steps aside: in the rail the
+        /// cover shrinks with the window, and the hero swaps its skyline and lanes for the title and artist.
         /// </summary>
         private void layOutForSkim()
         {
@@ -331,14 +340,29 @@ public partial class BeatmapSetFocusWindow : CarouselFocusWindow<BeatmapSet>
         {
             base.Update();
 
+            float gap = extras_gap * extras.Scale.X;
+            float bestWidth = best.Alpha > 0 ? (best.DrawWidth + best.Margin.Left + best.Margin.Right) * best.Scale.X : 0;
+
             if (!vertical)
             {
                 // Across the hero, under its cover.
                 text.Width = Math.Max(0, (DrawWidth - 28) / text.Scale.X);
+
+                // Beside the skyline and lanes, the three centered on the hero. Skimming, the text takes their
+                // place, and it moves up onto the foot of the cover.
+                float besideExtras = bestWidth > 0 ? bestWidth + gap : 0;
+                float across = extras.DrawWidth * extras.Scale.X + besideExtras;
+                float restY = extras.Y;
+                float skimY = 14 + heroCoverSize - hero_best_inset - best.DrawHeight / 2;
+
+                extras.X = besideExtras / 2;
+                best.X = (DrawWidth - across) / 2 + (14 + hero_best_inset - (DrawWidth - across) / 2) * skim;
+                best.Y = restY + (skimY - restY) * skim;
                 return;
             }
 
-            float extrasWidth = extras.DrawWidth * extras.Scale.X;
+            float besideBest = bestWidth > 0 && extras.DrawWidth > 0 ? extras.DrawWidth * extras.Scale.X + gap : extras.DrawWidth * extras.Scale.X;
+            float extrasWidth = besideBest + bestWidth;
             float fullRoom = DrawWidth - text.X - 18;
 
             // On a phone the extras go beside the details line when both fit there, centred on it (the last
@@ -346,7 +370,11 @@ public partial class BeatmapSetFocusWindow : CarouselFocusWindow<BeatmapSet>
             bool onDetailsLine = phone && details.DrawWidth * details.Scale.X * text.Scale.X + 16 + extrasWidth <= fullRoom;
             extras.Y = onDetailsLine ? (text.DrawHeight - details.DrawHeight * details.Scale.Y) / 2 * text.Scale.Y : 0;
 
-            float room = onDetailsLine ? fullRoom : fullRoom - extrasWidth * (1 - skim) - 18;
+            // Over at the edge the extras leave as they step aside, and back in the middle of the window.
+            best.X = extras.X - besideBest * (1 - skim);
+            best.Y = extras.Y * (1 - skim);
+
+            float room = onDetailsLine ? fullRoom - bestWidth * skim : fullRoom - besideBest * (1 - skim) - bestWidth - 18;
 
             // The text column runs up to the extras (or across the window), and long names scroll within it.
             text.Width = Math.Max(0, room / text.Scale.X);

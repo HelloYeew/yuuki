@@ -1,6 +1,7 @@
 // This code is part of yuuki. project. Licensed under the MIT License.
 // See the LICENSE file for full license text.
 
+using Sakura.Framework.Extensions.ColorExtensions;
 using Sakura.Framework.Graphics.Colors;
 using Sakura.Framework.Graphics.Containers;
 using Sakura.Framework.Graphics.Drawables;
@@ -46,20 +47,32 @@ public partial class BestMark : FlowContainer
     }
 
     /// <summary>
-    /// One blade of the chip: its label, and the fill and ink it's printed in.
+    /// One blade of the chip: its label, and the fill and ink it's printed in. A rainbow one (a Full Bloom's) has the
+    /// heroes' rainbow moving along it in place of its fill.
     /// </summary>
-    public readonly record struct Piece(string Label, Color Fill, Color Ink);
+    public readonly record struct Piece(string Label, Color Fill, Color Ink, bool Rainbow = false);
 
     /// <summary>
-    /// The chip for <paramref name="best"/>: its rank, and its medal when it has one (an all perfect over a
-    /// full combo). Null when there's no best to show.
+    /// How a play that ran out of health is marked, in place of a rank: a pale chip with dark ink, no rank's color.
+    /// </summary>
+    public static readonly Piece FAILED = new Piece("FAILED", ColorExtensions.FromHex("#D9D4E2"), ColorExtensions.FromHex("#4A4458"));
+
+    /// <summary>
+    /// The chip for <paramref name="best"/>: its rank, and its medal when it has one (a full bloom over an all perfect
+    /// over a full combo); <see cref="FAILED"/> alone for a play that failed. Null when there's no best to show.
     /// </summary>
     public static (Piece Rank, Piece? Medal)? PiecesFor(ScoreInfo? best)
     {
         if (best == null)
             return null;
 
+        if (best.Failed)
+            return (FAILED, null);
+
         var rank = piece(best.Rank.ToString(), JudgementColors.For(best.Rank));
+
+        if (best.IsFullBloom)
+            return (rank, new Piece("FB", RainbowColors.PASTEL[0], RainbowColors.INK_ON_PASTEL, Rainbow: true));
 
         if (best.IsAllPerfect)
             return (rank, piece("AP", JudgementColors.ALL_PERFECT));
@@ -95,8 +108,12 @@ public partial class BestMark : FlowContainer
     /// </summary>
     public partial class Blade : Container
     {
+        private readonly Container face;
         private readonly Box fill;
         private readonly SpriteText label;
+
+        // Made the first time a rainbow piece is shown: most blades never need one.
+        private RainbowFill? rainbow;
 
         public Blade(float textSize)
         {
@@ -106,7 +123,7 @@ public partial class BestMark : FlowContainer
 
             Children = new Drawable[]
             {
-                new Container
+                face = new Container
                 {
                     Anchor = Anchor.Centre,
                     Origin = Anchor.Centre,
@@ -123,7 +140,7 @@ public partial class BestMark : FlowContainer
                 {
                     // Wide enough that the letters clear the slanted ends.
                     Margin = new MarginPadding { Left = textSize * 0.55f, Right = textSize * 0.55f, Top = textSize * 0.2f, Bottom = textSize * 0.2f },
-                    Font = YuukiFontUsage.GetFontUsage(Typeface.Nunito, (int)textSize, FontWeight.ExtraBold)
+                    Font = YuukiFontUsage.GetFontUsage(Typeface.Quicksand, (int)textSize, FontWeight.Bold)
                 }
             };
         }
@@ -138,6 +155,12 @@ public partial class BestMark : FlowContainer
             label.Text = piece.Label;
             label.Color = piece.Ink;
             fill.Color = piece.Fill;
+
+            if (piece.Rainbow && rainbow == null)
+                face.Add(rainbow = new RainbowFill { RelativeSizeAxes = Axes.Both });
+
+            if (rainbow != null)
+                rainbow.Alpha = piece.Rainbow ? 1 : 0;
         }
     }
 }

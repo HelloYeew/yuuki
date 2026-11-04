@@ -1,0 +1,648 @@
+{
+ "credit": "VOICEVOX:春日部つむぎ",
+ "lines": {
+  "rank-s": [
+   {
+    "file": "rank-s-1.mp3",
+    "text": "エスランクっ！",
+    "english": "S rank!"
+   },
+   {
+    "file": "rank-s-2.mp3",
+    "text": "エスランク、きたっ！",
+    "english": "S rank, here it is!"
+   },
+   {
+    "file": "rank-s-3.mp3",
+    "text": "わぁっ、エスランク！",
+    "english": "Wow, S rank!"
+   },
+   {
+    "file": "rank-s-4.mp3",
+    "text": "見事なエスランクっ！",
+    "english": "A splendid S rank!"
+   },
+   {
+    "file": "rank-s-5.mp3",
+    "text": "でたっ、エスランク！",
+    "english": "There it is, S rank!"
+   },
+   {
+    "file": "rank-s-6.mp3",
+    "text": "エスランク、ばっちり！",
+    "english": "S rank, spot on!"
+   }
+  ],
+  "rank-a": [
+   {
+    "file": "rank-a-1.mp3",
+    "text": "エーランクっ！",
+    "english": "A rank!"
+   },
+   {
+    "file": "rank-a-2.mp3",
+    "text": "エーランク！ 上出来っ！",
+    "english": "A rank! Well done!"
+   },
+   {
+    "file": "rank-a-3.mp3",
+    "text": "エーランクだよっ！",
+    "english": "It's an A rank!"
+   },
+   {
+    "file": "rank-a-4.mp3",
+    "text": "エーランク、いただきっ！",
+    "english": "A rank, got it!"
+   },
+   {
+    "file": "rank-a-5.mp3",
+    "text": "いいね、エーランク！",
+    "english": "Nice, an A rank!"
+   },
+   {
+    "file": "rank-a-6.mp3",
+    "text": "エーランク、かっこいいっ！",
+    "english": "A rank, so cool!"
+   }
+  ],
+  "rank-b": [
+   {
+    "file": "rank-b-1.mp3",
+    "text": "ビーランク！",
+    "english": "B rank!"
+   },
+   {
+    "file": "rank-b-2.mp3",
+    "text": "ビーランクだよ！",
+    "english": "It's a B rank!"
+   },
+   {
+    "file": "rank-b-3.mp3",
+    "text": "ビーランク、まずまずっ！",
+    "english": "B rank, not bad!"
+   },
+   {
+    "file": "rank-b-4.mp3",
+    "text": "ビーランク、とれたね！",
+    "english": "B rank, you got it!"
+   },
+   {
+    "file": "rank-b-5.mp3",
+    "text": "ビーランク、ナイスっ！",
+    "english": "B rank, nice!"
+   }
+  ],
+  "rank-c": [
+   {
+    "file": "rank-c-1.mp3",
+    "text": "シーランク！",
+    "english": "C rank!"
+   },
+   {
+    "file": "rank-c-2.mp3",
+    "text": "シーランク、だね！",
+    "english": "C rank, huh!"
+   },
+   {
+    "file": "rank-c-3.mp3",
+    "text": "シーランクだよっ！",
+    "english": "It's a C rank!"
+   },
+   {
+    "file": "rank-c-4.mp3",
+    "text": "シーランク、ここからだよ！",
+    "english": "C rank, it starts here!"
+   }
+  ],
+  "rank-d": [
+   {
+    "file": "rank-d-1.mp3",
+    "text": "ディーランク……",
+    "english": "D rank…"
+   },
+   {
+    "file": "rank-d-2.mp3",
+    "text": "ディーランク、かぁ……",
+    "english": "D rank, huh…"
+   },
+   {
+    "file": "rank-d-3.mp3",
+    "text": "ディーランク、だね……",
+    "english": "It's a D rank…"
+   },
+   {
+    "file": "rank-d-4.mp3",
+    "text": "ディーランク……でも、ここから！",
+    "english": "D rank… but it starts here!"
+   }
+  ],
+  "fc": [
+   {
+    "file": "fc-1.mp3",
+    "text": "フルコンボだよっ！",
+    "english": "It's a full combo!"
+   },
+   {
+    "file": "fc-2.mp3",
+    "text": "フルコンボ！ ぜんぶつながったね！",
+    "english": "Full combo! You linked every note!"
+   },
+   {
+    "file": "fc-3.mp3",
+    "text": "ノーミスでフルコンボっ！",
+    "english": "No misses, full combo!"
+   },
+   {
+    "file": "fc-4.mp3",
+    "text": "フルコンボ、達成っ！",
+    "english": "Full combo, done!"
+   },
+   {
+    "file": "fc-5.mp3",
+    "text": "つながった！ フルコンボっ！",
+    "english": "All linked up! Full combo!"
+   },
+   {
+    "file": "fc-6.mp3",
+    "text": "フルコンボ、おめでとうっ！",
+    "english": "Full combo, congratulations!"
+   }
+  ],
+  "ap": [
+   {
+    "file": "ap-1.mp3",
+    "text": "オールパーフェクトっ！",
+    "english": "All perfect!"
+   },
+   {
+    "file": "ap-2.mp3",
+    "text": "オールパーフェクト！ 信じられないっ！",
+    "english": "All perfect! I can't believe it!"
+   },
+   {
+    "file": "ap-3.mp3",
+    "text": "ぜんぶパーフェクトっ！",
+    "english": "Every note perfect!"
+   },
+   {
+    "file": "ap-4.mp3",
+    "text": "パーフェクト、決まったっ！",
+    "english": "Perfect, nailed it!"
+   },
+   {
+    "file": "ap-5.mp3",
+    "text": "完全無欠のオールパーフェクト！",
+    "english": "A flawless all perfect!"
+   }
+  ],
+  "best": [
+   {
+    "file": "best-1.mp3",
+    "text": "ニューレコードっ！",
+    "english": "New record!"
+   },
+   {
+    "file": "best-2.mp3",
+    "text": "自己ベスト更新っ！",
+    "english": "New personal best!"
+   },
+   {
+    "file": "best-3.mp3",
+    "text": "ベスト、ぬりかえたね！",
+    "english": "You rewrote your best!"
+   },
+   {
+    "file": "best-4.mp3",
+    "text": "記録、のびたよっ！",
+    "english": "Your record went up!"
+   },
+   {
+    "file": "best-5.mp3",
+    "text": "新記録だよっ！",
+    "english": "It's a new record!"
+   }
+  ],
+  "lost": [
+   {
+    "file": "lost-1.mp3",
+    "text": "あっ……！ エス、とどかなかった……",
+    "english": "Ah…! The S, just out of reach…"
+   },
+   {
+    "file": "lost-2.mp3",
+    "text": "うぅ……ミスひとつで、エスが……",
+    "english": "Ugh… one miss, and the S…"
+   },
+   {
+    "file": "lost-3.mp3",
+    "text": "あぁっ……！ おしいっ……",
+    "english": "Ahh…! So close…"
+   },
+   {
+    "file": "lost-4.mp3",
+    "text": "そんな……エスが、こぼれちゃった……",
+    "english": "No… the S slipped away…"
+   },
+   {
+    "file": "lost-5.mp3",
+    "text": "ミスが、ひとつだけ……っ",
+    "english": "Just one miss…"
+   }
+  ],
+  "react-ap": [
+   {
+    "file": "react-ap-1.mp3",
+    "text": "うそっ、ひとつもズレてない！？ 満開だよっ！",
+    "english": "No way, not one note off!? Every blossom is open!"
+   },
+   {
+    "file": "react-ap-2.mp3",
+    "text": "桜、満開だね！ ほんとにきれいっ！",
+    "english": "The sakura are all open! So pretty!"
+   },
+   {
+    "file": "react-ap-3.mp3",
+    "text": "すごすぎ！ ひとつもミスなしなんて！",
+    "english": "Incredible! Not a single miss!"
+   },
+   {
+    "file": "react-ap-4.mp3",
+    "text": "見てるだけで、しあわせになっちゃった！",
+    "english": "Just watching made me so happy!"
+   },
+   {
+    "file": "react-ap-5.mp3",
+    "text": "完璧すぎて、言葉が出ないよっ！",
+    "english": "So perfect I'm speechless!"
+   },
+   {
+    "file": "react-ap-6.mp3",
+    "text": "指先まで、音楽そのものだったね！",
+    "english": "You were the music, right to your fingertips!"
+   }
+  ],
+  "react-s": [
+   {
+    "file": "react-s-1.mp3",
+    "text": "やったぁ！ すごいすごいっ！ 最高の一曲だったよ！",
+    "english": "Yay! Amazing, amazing! That was the best song!"
+   },
+   {
+    "file": "react-s-2.mp3",
+    "text": "きゃー、かっこいい！ ほんとに最高っ！",
+    "english": "Kyaa, so cool! Truly the best!"
+   },
+   {
+    "file": "react-s-3.mp3",
+    "text": "すっごい！ 見てて鳥肌たったよ！",
+    "english": "Amazing! I got goosebumps watching!"
+   },
+   {
+    "file": "react-s-4.mp3",
+    "text": "桜みたいに、きらきらしてたよ！",
+    "english": "You were sparkling like the sakura!"
+   },
+   {
+    "file": "react-s-5.mp3",
+    "text": "胸がどきどきしちゃった！ ありがとうっ！",
+    "english": "My heart was pounding! Thank you!"
+   },
+   {
+    "file": "react-s-6.mp3",
+    "text": "もう、プロみたいだったよ！",
+    "english": "You were like a pro!"
+   },
+   {
+    "file": "react-s-7.mp3",
+    "text": "その指、魔法みたいっ！",
+    "english": "Those fingers are like magic!"
+   }
+  ],
+  "react-a": [
+   {
+    "file": "react-a-1.mp3",
+    "text": "いい感じいい感じっ！ この調子でいこうっ！",
+    "english": "Nice, nice! Keep it up!"
+   },
+   {
+    "file": "react-a-2.mp3",
+    "text": "ナイスっ！ エスまであと少しだよ！",
+    "english": "Nice! S is so close!"
+   },
+   {
+    "file": "react-a-3.mp3",
+    "text": "うんうん、上手になってるよ！",
+    "english": "Yeah, you're getting better!"
+   },
+   {
+    "file": "react-a-4.mp3",
+    "text": "一歩ずつ、ちゃんと進んでるよ！",
+    "english": "Step by step, you're really getting there!"
+   },
+   {
+    "file": "react-a-5.mp3",
+    "text": "聴いてて、たのしかったよっ！",
+    "english": "That was fun to listen to!"
+   },
+   {
+    "file": "react-a-6.mp3",
+    "text": "リズム、ばっちりつかんでたね！",
+    "english": "You really caught the rhythm!"
+   },
+   {
+    "file": "react-a-7.mp3",
+    "text": "エスも、もう目の前だよ！",
+    "english": "S is right in front of you!"
+   }
+  ],
+  "react-b": [
+   {
+    "file": "react-b-1.mp3",
+    "text": "うんうん、悪くないよ！ 次はもっといけるっ！",
+    "english": "Yeah, not bad! You can go further next time!"
+   },
+   {
+    "file": "react-b-2.mp3",
+    "text": "いいね！ だんだん慣れてきたかも！",
+    "english": "Nice! You're getting the hang of it!"
+   },
+   {
+    "file": "react-b-3.mp3",
+    "text": "その調子！ 次はエーをねらおっ！",
+    "english": "Keep it up! Aim for A next!"
+   },
+   {
+    "file": "react-b-4.mp3",
+    "text": "楽しんでくれたなら、それがいちばん！",
+    "english": "If you had fun, that's what matters most!"
+   },
+   {
+    "file": "react-b-5.mp3",
+    "text": "少しずつ、つかめてきたね！",
+    "english": "You're getting a feel for it, bit by bit!"
+   },
+   {
+    "file": "react-b-6.mp3",
+    "text": "伸びしろ、たっぷりだね！",
+    "english": "Plenty of room to grow!"
+   }
+  ],
+  "react-low": [
+   {
+    "file": "react-low-1.mp3",
+    "text": "だいじょうぶっ！ もう一回、いっしょにがんばろっ！",
+    "english": "It's okay! Let's try once more, together!"
+   },
+   {
+    "file": "react-low-2.mp3",
+    "text": "勇気を出して、もう一回いってみよっ！",
+    "english": "Take heart, let's try once more!"
+   },
+   {
+    "file": "react-low-3.mp3",
+    "text": "ちょっと休憩する？ おやつ食べたら、またいこっ！",
+    "english": "Want a little break? Have a snack, then let's go again!"
+   },
+   {
+    "file": "react-low-4.mp3",
+    "text": "最後までやりきったの、えらいよ！",
+    "english": "You saw it through to the end, well done!"
+   },
+   {
+    "file": "react-low-5.mp3",
+    "text": "どんな花も、最初はつぼみだよ！",
+    "english": "Every flower starts as a bud!"
+   },
+   {
+    "file": "react-low-6.mp3",
+    "text": "ゆっくりでいいよ、わたしがついてるから！",
+    "english": "Take it slow, I'm right here with you!"
+   },
+   {
+    "file": "react-low-7.mp3",
+    "text": "できなかったところ、次はできるかも！",
+    "english": "The parts you missed, maybe next time you will get them!"
+   }
+  ],
+  "react-lost": [
+   {
+    "file": "react-lost-1.mp3",
+    "text": "くやしいっ！ でも、次はぜったいいけるよ！",
+    "english": "So frustrating! But next time you've totally got it!"
+   },
+   {
+    "file": "react-lost-2.mp3",
+    "text": "あとちょっとだったのに……！ 次こそ、いけるよ！",
+    "english": "So close…! Next time you'll make it!"
+   },
+   {
+    "file": "react-lost-3.mp3",
+    "text": "くぅ〜っ！ よし、もう一回いこっ！",
+    "english": "Argh! Okay, let's go again!"
+   },
+   {
+    "file": "react-lost-4.mp3",
+    "text": "今のくやしさ、次の力にしよっ！",
+    "english": "Let's turn that into strength for next time!"
+   },
+   {
+    "file": "react-lost-5.mp3",
+    "text": "だいじょうぶ、また咲けるよ！",
+    "english": "It's okay, you'll bloom again!"
+   },
+   {
+    "file": "react-lost-6.mp3",
+    "text": "その悔しさが、強さになるよ！",
+    "english": "That frustration will make you stronger!"
+   }
+  ],
+  "react-fail": [
+   {
+    "file": "react-fail-1.mp3",
+    "text": "あきらめないでっ！ もう一回、いってみよう！",
+    "english": "Don't give up! Let's go one more time!"
+   },
+   {
+    "file": "react-fail-2.mp3",
+    "text": "だいじょうぶ、ここまで来れたじゃん！ もう一回っ！",
+    "english": "It's okay, you made it this far! Once more!"
+   },
+   {
+    "file": "react-fail-3.mp3",
+    "text": "あきらめなければ、きっと届くよ！ いっしょにいこっ！",
+    "english": "If you don't give up, you'll get there! Let's go together!"
+   },
+   {
+    "file": "react-fail-4.mp3",
+    "text": "転んでも、また立てばいいんだよ！",
+    "english": "If you fall, you just get back up!"
+   },
+   {
+    "file": "react-fail-5.mp3",
+    "text": "次は、もっと先まで行けるよ！",
+    "english": "Next time you'll get further!"
+   },
+   {
+    "file": "react-fail-6.mp3",
+    "text": "ここまでの道、ちゃんと見てたよ！",
+    "english": "I watched every step of the way!"
+   }
+  ],
+  "react-close": [
+   {
+    "file": "react-close-1.mp3",
+    "text": "おしいっ！ 次のランクまで、ほんの少しだったよ！",
+    "english": "So close! The next rank was just a hair away!"
+   },
+   {
+    "file": "react-close-2.mp3",
+    "text": "あとちょっぴりで、ランクアップだったね！",
+    "english": "Just a tiny bit more and you'd have ranked up!"
+   },
+   {
+    "file": "react-close-3.mp3",
+    "text": "もうひと押しだったよ！ 次はいけるっ！",
+    "english": "Just one more push! Next time you've got it!"
+   },
+   {
+    "file": "react-close-4.mp3",
+    "text": "紙一重！ くぅ〜、おしかったね！",
+    "english": "By a hair! Argh, so close!"
+   }
+  ],
+  "react-first": [
+   {
+    "file": "react-first-1.mp3",
+    "text": "はじめてでこれ！？ すごいねっ！",
+    "english": "Your first time, and this!? Amazing!"
+   },
+   {
+    "file": "react-first-2.mp3",
+    "text": "初見でこの出来、さすがだよ！",
+    "english": "This good on your first try, as expected!"
+   },
+   {
+    "file": "react-first-3.mp3",
+    "text": "はじめての曲なのに、もう仲良しだね！",
+    "english": "A brand-new song, and you're already friends!"
+   },
+   {
+    "file": "react-first-4.mp3",
+    "text": "この曲とも、いい出会いになったね！",
+    "english": "You and this song got off to a great start!"
+   }
+  ],
+  "react-retry": [
+   {
+    "file": "react-retry-1.mp3",
+    "text": "何回でも、つきあうよっ！",
+    "english": "However many times, I'm with you!"
+   },
+   {
+    "file": "react-retry-2.mp3",
+    "text": "あきらめないの、すてきだよ！",
+    "english": "Not giving up, that is wonderful!"
+   },
+   {
+    "file": "react-retry-3.mp3",
+    "text": "くり返すたびに、うまくなってるよ！",
+    "english": "You get better every time!"
+   },
+   {
+    "file": "react-retry-4.mp3",
+    "text": "その根性、尊敬しちゃう！",
+    "english": "That grit, I really respect it!"
+   }
+  ],
+  "react-late": [
+   {
+    "file": "react-late-1.mp3",
+    "text": "夜ふかしさんだね！ 無理しないでね！",
+    "english": "A night owl, huh! Don't overdo it!"
+   },
+   {
+    "file": "react-late-2.mp3",
+    "text": "もうこんな時間！ 続きは明日にする？",
+    "english": "Look at the time! Continue tomorrow?"
+   },
+   {
+    "file": "react-late-3.mp3",
+    "text": "夜の音楽って、なんだか特別だね！",
+    "english": "Music at night feels kind of special!"
+   },
+   {
+    "file": "react-late-4.mp3",
+    "text": "おつかれさま！ そろそろ、おやすみしよっか！",
+    "english": "Good work! Maybe it is time for bed?"
+   }
+  ],
+  "react-morning": [
+   {
+    "file": "react-morning-1.mp3",
+    "text": "朝から絶好調だね！ 今日もいい日になりそう！",
+    "english": "On fire first thing in the morning! Today's going to be a good day!"
+   },
+   {
+    "file": "react-morning-2.mp3",
+    "text": "おはようっ！ いい目覚めの一曲だね！",
+    "english": "Good morning! What a song to wake up to!"
+   },
+   {
+    "file": "react-morning-3.mp3",
+    "text": "朝の音楽、気持ちいいねっ！",
+    "english": "Morning music feels so good!"
+   }
+  ],
+  "rank-ss": [
+   {
+    "file": "rank-ss-1.mp3",
+    "text": "ダブルエスランクっ！",
+    "english": "SS rank!"
+   },
+   {
+    "file": "rank-ss-2.mp3",
+    "text": "ダブルエス！ 百点満点っ！",
+    "english": "SS! Full marks!"
+   },
+   {
+    "file": "rank-ss-3.mp3",
+    "text": "ダブルエス、おみごとっ！",
+    "english": "SS, splendid!"
+   }
+  ],
+  "fullbloom": [
+   {
+    "file": "fullbloom-1.mp3",
+    "text": "フルブルームっ！",
+    "english": "Full bloom!"
+   },
+   {
+    "file": "fullbloom-2.mp3",
+    "text": "フルブルーム、きたーっ！",
+    "english": "Full bloom, here it is!"
+   },
+   {
+    "file": "fullbloom-3.mp3",
+    "text": "ぜんぶ咲いた！ フルブルームっ！",
+    "english": "Everything bloomed! Full bloom!"
+   }
+  ],
+  "react-fullbloom": [
+   {
+    "file": "react-fullbloom-1.mp3",
+    "text": "理論値だよ！？ すごすぎるっ！",
+    "english": "The theoretical max!? That's too amazing!"
+   },
+   {
+    "file": "react-fullbloom-2.mp3",
+    "text": "うそ……満開の、そのまた先だよっ！",
+    "english": "No way… even past every blossom open!"
+   },
+   {
+    "file": "react-fullbloom-3.mp3",
+    "text": "これ以上はない、最高の桜吹雪だよっ！",
+    "english": "There's nothing beyond this, the best cherry-blossom storm!"
+   }
+  ]
+ }
+}

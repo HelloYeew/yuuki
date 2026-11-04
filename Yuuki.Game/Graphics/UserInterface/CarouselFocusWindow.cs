@@ -140,11 +140,6 @@ public abstract partial class CarouselFocusWindow<TModel> : Container
     private const float sweep_peak = 0.5f;
     private const double sweep_duration = 420;
 
-    /// <summary>
-    /// Quick to cross and slow to leave, so the streak lands on the item and then lingers off its far edge.
-    /// </summary>
-    private static readonly EasingFunction sweep_easing = new EasingFunction(new CubicBezierEasing(0.2, 0.6, 0.2, 1));
-
     // The visible card. The window itself carries the entrance and exit transforms, so the per-frame
     // work below never touches its alpha.
     private readonly Container body;
@@ -515,7 +510,7 @@ public abstract partial class CarouselFocusWindow<TModel> : Container
         sweep.ClearTransforms();
         sweep.X = -reach;
         sweep.Alpha = 0;
-        sweep.MoveToX(DrawWidth + reach, sweep_duration, sweep_easing);
+        sweep.MoveToX(DrawWidth + reach, sweep_duration, UserInterfaceConstant.GlintSweep);
         sweep.FadeTo(1, sweep_duration * 0.2).Then().FadeOut(sweep_duration * 0.8);
     }
 

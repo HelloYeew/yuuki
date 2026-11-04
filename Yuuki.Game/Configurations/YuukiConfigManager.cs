@@ -66,6 +66,8 @@ public class YuukiConfigManager : ConfigManager<YuukiSetting>
         Get(YuukiSetting.UIScale, 1.0);
         Get(YuukiSetting.TouchEffects, true);
         Get(YuukiSetting.Haptics, true);
+        Get(YuukiSetting.ResultsVoice, true);
+        Get(YuukiSetting.ShowCriticalTiming, true);
         Get(YuukiSetting.HitsoundVolume, 1.0);
         Get(YuukiSetting.InactiveVolume, 0.25);
         Get(YuukiSetting.PlayfieldSize, MAX_PLAYFIELD_SIZE);

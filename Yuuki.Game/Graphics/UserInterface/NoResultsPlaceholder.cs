@@ -103,7 +103,7 @@ public partial class NoResultsPlaceholder : Container
                 description = new SpriteText
                 {
                     Anchor = Anchor.Centre,
-                    Font = YuukiFontUsage.GetFontUsage(Typeface.Quicksand, 19, FontWeight.Regular),
+                    Font = YuukiFontUsage.GetFontUsage(Typeface.Nunito, 19, FontWeight.Regular),
                     Alpha = 0.85f
                 },
                 suggestions = new Container
@@ -333,7 +333,7 @@ public partial class NoResultsPlaceholder : Container
             AutoSizeAxes = Axes.Both;
             Direction = FlowDirection.Horizontal;
 
-            var font = YuukiFontUsage.GetFontUsage(Typeface.Quicksand, 18, FontWeight.Regular);
+            var font = YuukiFontUsage.GetFontUsage(Typeface.Nunito, 18, FontWeight.Regular);
 
             Children = new Drawable[]
             {
@@ -349,7 +349,7 @@ public partial class NoResultsPlaceholder : Container
                     }
                 },
                 before = new SpriteText { Text = beforeText, Font = font },
-                link = new Link(linkText, YuukiFontUsage.GetFontUsage(Typeface.Quicksand, 18, FontWeight.Bold)) { Action = action },
+                link = new Link(linkText, YuukiFontUsage.GetFontUsage(Typeface.Nunito, 18, FontWeight.Bold)) { Action = action },
                 after = new SpriteText { Text = afterText, Font = font }
             };
         }

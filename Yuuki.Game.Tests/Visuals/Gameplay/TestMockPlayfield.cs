@@ -82,7 +82,7 @@ public partial class TestMockPlayfield : YuukiTestScene
             holdAt(2000);
             field.Playfield.PressLane(0, 2000);
         });
-        AddAssert("Right on it", () => judged?.Result == HitResult.Critical);
+        AddAssert("Right on it", () => judged?.Result == HitResult.Bloom);
     }
 
     private void holdAt(double time)
