@@ -75,9 +75,7 @@ public partial class GameplayScreen : YuukiScreen, IHaveScreenAction
 
     // The metronome. The plain tick has its own sample, so retuning the hold ticks doesn't change the
     // count-in.
-    // TODO: the accent still borrows the tap hitsound; give it its own sample too and
-    // schedule both against the audio clock rather than from Update, which can land a tick up to a
-    // frame late.
+    // TODO: the accent still borrows the tap hitsound; give it its own sample too.
     private const string tick_accent_sample = "normal-hitnormal.wav";
     private const string tick_sample = "count-in-tick.wav";
 
@@ -129,6 +127,9 @@ public partial class GameplayScreen : YuukiScreen, IHaveScreenAction
     [Resolved(canBeNull: true)]
     private IPlatformHaptics? haptics { get; set; }
 
+    [Resolved(canBeNull: true)]
+    private AppHost? host { get; set; }
+
     // Whether the song is felt: its hits, and a full combo or a fail (the Haptics setting, where there's a motor).
     private bool feltHere => haptics?.IsSupported == true && config?.Get<bool>(YuukiSetting.Haptics).Value != false;
 
@@ -167,7 +168,19 @@ public partial class GameplayScreen : YuukiScreen, IHaveScreenAction
     private SkipOverlay skipOverlay = null!;
     private Box retryProgress = null!;
 
-    private PlayState state = PlayState.Playing;
+    private PlayState playState = PlayState.Playing;
+
+    // Each change also tells Sakura what the game is doing, for the frame threads' priority and the power they draw.
+    private PlayState state
+    {
+        get => playState;
+        set
+        {
+            playState = value;
+            applyGameState();
+        }
+    }
+
     private double endTime;
 
     // Real time (screen clock) the fail slow-down started.
@@ -218,6 +231,9 @@ public partial class GameplayScreen : YuukiScreen, IHaveScreenAction
     [BackgroundDependencyLoader]
     private void load([CanBeNull] IYuukiColorProvider? colorProvider)
     {
+        // Loading the song: Sakura can give the load what play would have, and Android raises the CPU for it.
+        host?.SetGameState(GameState.None, loading: true);
+
         ScreenName.Value = "Gameplay";
         ScreenHelperText.Value = "Hit the notes!";
 
@@ -427,6 +443,8 @@ public partial class GameplayScreen : YuukiScreen, IHaveScreenAction
         base.OnEntering(last);
         this.FadeIn(300);
 
+        applyGameState();
+
         // Finish as soon as the track ends. With no track (silent fallback) there's no channel to
         // hook — Update()'s endTime check still ends the run. The channel may fire this off the
         // update thread, so hop back onto it.
@@ -486,6 +504,9 @@ public partial class GameplayScreen : YuukiScreen, IHaveScreenAction
         gameplay.Stop();
         audioManager?.EndGameplay();
         this.FadeOut(300);
+
+        // Back to the menus.
+        host?.SetGameState(GameState.None);
 
         // The chart has been copied into the PlayableBeatmap this screen owns, so the beatmap's own
         // copy can go. Keeping it would mean the library slowly accumulates every chart ever played.
@@ -604,6 +625,9 @@ public partial class GameplayScreen : YuukiScreen, IHaveScreenAction
         double beatLength = beatLengthAt(time);
         double step = beatLength > 0 ? beatLength * Math.Max(1, Math.Ceiling(300 / beatLength)) : countdown_step;
 
+        // A delay runs out at the first frame past it, so each comes half a frame early: at the frame nearest its moment.
+        double halfFrame = Clock.ElapsedFrameTime / 2;
+
         for (int i = 0; i < 3; i++)
         {
             int number = 3 - i;
@@ -616,7 +640,7 @@ public partial class GameplayScreen : YuukiScreen, IHaveScreenAction
 
                 showCountdown(number, step);
                 playSample(accent ? tick_accent_sample : tick_sample);
-            }, i * step);
+            }, Math.Max(0, i * step - halfFrame));
         }
 
         // How far past its last beat the song is paused; resuming (beat − that) before the fourth
@@ -629,6 +653,7 @@ public partial class GameplayScreen : YuukiScreen, IHaveScreenAction
         }
 
         resumeAt += audioManager?.GameplayChannel?.OutputLatency ?? 0;
+        resumeAt = Math.Max(0, resumeAt - halfFrame);
 
         Scheduler.AddDelayed(() =>
         {
@@ -640,6 +665,21 @@ public partial class GameplayScreen : YuukiScreen, IHaveScreenAction
             gameplay.Start();
             gameplay.InputPaused = false;
         }, resumeAt);
+    }
+
+    /// <summary>
+    /// Tells Sakura what the game is doing: playing while the song plays, counts in, or the run fails or clears on screen,
+    /// which gets the frame threads the most the system gives; nothing in particular while paused or done, which saves
+    /// power.
+    /// </summary>
+    private void applyGameState()
+    {
+        if (host == null || !IsLoaded)
+            return;
+
+        host.SetGameState(state is PlayState.Playing or PlayState.CountingDown or PlayState.Failing or PlayState.Clearing
+            ? GameState.Gameplay
+            : GameState.None);
     }
 
     private void showCountdown(int number, double step)
@@ -658,6 +698,12 @@ public partial class GameplayScreen : YuukiScreen, IHaveScreenAction
     /// Ticks the count-in: during the lead-in (before the song's time 0) a tick on every beat of the
     /// song's grid, the first beat of each bar accented.
     /// </summary>
+    /// <remarks>
+    /// The clock is what the player hears now, and a tick takes the output's delay to be heard. So the grid is read where
+    /// a tick started now would land: the output's delay ahead, and half a frame more, which starts each tick at the frame
+    /// nearest its moment. A tick is then within half a frame of its beat, rather than up to a frame late and the output's
+    /// delay on top.
+    /// </remarks>
     private void updateCountIn()
     {
         double time = gameplay.GameplayClock.CurrentTime;
@@ -665,12 +711,17 @@ public partial class GameplayScreen : YuukiScreen, IHaveScreenAction
         if (!chart.ControlPoints.HasTiming || time >= 0)
             return;
 
-        // Before the first timing point its grid runs backwards, so the count-in leads into its beat.
-        long beat = chart.ControlPoints.BeatIndexAt(time);
+        // In the song's time, as the clock runs at the song's rate.
+        double outputDelay = (audioManager?.GameplayChannel?.OutputLatency ?? 0) * gameplay.GameplayClock.Rate;
+        double heardAt = time + outputDelay + gameplay.GameplayClock.ElapsedFrameTime / 2;
 
-        // The first frame only places the grid; ticks come as each beat line is crossed.
-        if (lastCountInBeat != long.MinValue && beat != lastCountInBeat)
-            playSample(ControlPointInfo.IsDownbeat(chart.ControlPoints.TimingPointAt(time), beat) ? tick_accent_sample : tick_sample);
+        // Before the first timing point its grid runs backwards, so the count-in leads into its beat.
+        long beat = chart.ControlPoints.BeatIndexAt(heardAt);
+
+        // The first frame only places the grid; ticks come as each beat line is crossed, and none on the song's own
+        // first beat, which the music plays.
+        if (lastCountInBeat != long.MinValue && beat != lastCountInBeat && heardAt < 0)
+            playSample(ControlPointInfo.IsDownbeat(chart.ControlPoints.TimingPointAt(heardAt), beat) ? tick_accent_sample : tick_sample);
 
         lastCountInBeat = beat;
     }

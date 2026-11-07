@@ -419,6 +419,13 @@ public partial class SettingsOverlay : FocusedOverlayContainer
             phone ? null : settingRow("Audio driver", "The audio backend sound plays through.",
                 dropdown(frameworkConfigManager.Get<AudioBackend>(FrameworkSetting.AudioBackend), AudioBackends.GetSuitableBackends()),
                 "device", "output", "speaker", "headphone"),
+            RuntimeInfo.IsWindows
+                ? settingRow("Exclusive audio",
+                    "Plays to your audio device alone, for the lowest delay. Other apps go silent while yuuki. plays, voice chat too. "
+                    + "From the next time yuuki. starts.",
+                    toggle(frameworkConfigManager.Get<bool>(FrameworkSetting.AudioExclusiveMode)),
+                    "wasapi", "exclusive mode", "latency", "delay", "lag")
+                : null,
             phone ? null : settingRow("Relative mouse mode", "Lock and hide the cursor, reading raw mouse movement.",
                 toggle(frameworkConfigManager.Get<bool>(FrameworkSetting.RelativeMouseMode)),
                 "raw input", "cursor"),

@@ -16,6 +16,7 @@ using Sakura.Framework.Graphics.Transforms;
 using Sakura.Framework.Input;
 using Sakura.Framework.Input.Bindings;
 using Sakura.Framework.Maths;
+using Sakura.Framework.Platform;
 using Sakura.Framework.Timing;
 using Yuuki.Game.Audio;
 using Yuuki.Game.Beatmaps;
@@ -76,6 +77,9 @@ public partial class ReplayScreen : YuukiScreen, IHaveScreenAction
 
     [Resolved(canBeNull: true)]
     private BeatmapNoteStore? noteStore { get; set; }
+
+    [Resolved(canBeNull: true)]
+    private AppHost? host { get; set; }
 
     private readonly ScoreInfo score;
     private readonly ReplayData replay;
@@ -354,6 +358,8 @@ public partial class ReplayScreen : YuukiScreen, IHaveScreenAction
     {
         base.OnEntering(last);
         this.FadeInFromZero(300);
+
+        applyGameState();
     }
 
     public override void OnExiting(Screen? next)
@@ -372,12 +378,21 @@ public partial class ReplayScreen : YuukiScreen, IHaveScreenAction
 
         this.FadeOut(300);
 
+        // Back to the score, which is nothing in particular.
+        host?.SetGameState(GameState.None);
+
         if (loadedNotesFor != null)
         {
             noteStore?.Unload(loadedNotesFor);
             loadedNotesFor = null;
         }
     }
+
+    /// <summary>
+    /// Tells Sakura a replay is being watched while it plays: content, which keeps the frames smooth without what play
+    /// asks of the system. Nothing in particular while it's paused or over.
+    /// </summary>
+    private void applyGameState() => host?.SetGameState(IsPlaying ? GameState.Content : GameState.None);
 
     public override void Update()
     {
@@ -397,6 +412,7 @@ public partial class ReplayScreen : YuukiScreen, IHaveScreenAction
 
         ended = true;
         gameplay?.Stop();
+        applyGameState();
         Scheduler.AddDelayed(() =>
         {
             if (IsCurrentScreen)
@@ -421,6 +437,8 @@ public partial class ReplayScreen : YuukiScreen, IHaveScreenAction
             gameplay.Stop();
         else
             gameplay.Start();
+
+        applyGameState();
 
         pauseButton.Text = pauseLabel;
     }

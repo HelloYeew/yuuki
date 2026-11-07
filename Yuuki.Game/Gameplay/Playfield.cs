@@ -753,7 +753,7 @@ public partial class Playfield : Container
     private void advance(double time)
     {
         applyReplayInputs(time);
-        reconcileNotes(time + drawnAhead);
+        reconcileNotes(time + drawnAhead, time);
 
         if (!Silent)
             updateEffects(time);
@@ -953,23 +953,32 @@ public partial class Playfield : Container
     }
 
     /// <summary>
-    /// Shows/hides notes so the visible set matches the current time — any direction.
+    /// Shows/hides notes so the visible set matches the current time — any direction. <paramref name="time"/> is
+    /// what's drawn, <paramref name="judgingTime"/> the music's time taps are judged at.
     /// </summary>
-    private void reconcileNotes(double time)
+    /// <remarks>
+    /// Judging only looks at the notes in the set, so a note stays in it (or comes in) while it can still be judged
+    /// as well, wherever it's drawn. Drawn far ahead (a large visual offset, a slow screen), a note would leave before its
+    /// late window closed, neither hittable late nor ever missed. Drawn behind at a fast scroll, it'd come in after its
+    /// early window opened.
+    /// </remarks>
+    private void reconcileNotes(double time, double judgingTime)
     {
         double preempt = Preempt;
+        double early = hitWindows.MissWindow;
+        double late = Math.Max(hitWindows.MissWindow, hitWindows.ReleaseWindow);
 
-        // Candidate range by StartTime. hi: notes that have entered from the top. lo: extended back
-        // by the longest note so a hold whose head is behind us but whose tail is still in view is
-        // not dropped.
-        int hi = upperBound(startTimes, time + preempt);
-        int lo = lowerBound(startTimes, time - after_window - maxNoteDuration);
+        // Candidate range by StartTime. hi: notes that have entered from the top, or whose early window is open. lo:
+        // extended back by the longest note so a hold whose head is behind us but whose tail is still in view (or still
+        // judgeable) is not dropped.
+        int hi = upperBound(startTimes, Math.Max(time + preempt, judgingTime + early));
+        int lo = lowerBound(startTimes, Math.Min(time - after_window, judgingTime - late) - maxNoteDuration);
 
         // Remove notes that should no longer be shown.
         removeBuffer.Clear();
         foreach (KeyValuePair<int, DrawableNote> kv in visibleNotes)
         {
-            if (kv.Key < lo || kv.Key >= hi || !inView(kv.Key, time, preempt))
+            if (kv.Key < lo || kv.Key >= hi || !(inView(kv.Key, time, preempt) || judgeable(kv.Key, judgingTime, early, late)))
                 removeBuffer.Add(kv.Key);
         }
         foreach (int idx in removeBuffer)
@@ -982,7 +991,7 @@ public partial class Playfield : Container
         for (int i = lo; i < hi; i++)
         {
             // A hit note is gone for good (it only comes back by being un-judged, e.g. ResetJudgementsFrom).
-            if (visibleNotes.ContainsKey(i) || looks[i] == NoteLook.Hit || !inView(i, time, preempt))
+            if (visibleNotes.ContainsKey(i) || looks[i] == NoteLook.Hit || !(inView(i, time, preempt) || judgeable(i, judgingTime, early, late)))
                 continue;
 
             spawnNote(i);
@@ -993,6 +1002,19 @@ public partial class Playfield : Container
     {
         BeatmapNote note = chart.Notes[index];
         return time >= note.StartTime - preempt && time <= note.EndTime + after_window;
+    }
+
+    /// <summary>
+    /// Whether a note not yet fully judged can still be at <paramref name="time"/>, the music's: from its early window
+    /// opening to its tail's late window closing.
+    /// </summary>
+    private bool judgeable(int index, double time, double early, double late)
+    {
+        if (judged[index])
+            return false;
+
+        BeatmapNote note = chart.Notes[index];
+        return time >= note.StartTime - early && time <= note.EndTime + late;
     }
 
     private void spawnNote(int index)
