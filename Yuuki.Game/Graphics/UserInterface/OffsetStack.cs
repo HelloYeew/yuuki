@@ -8,8 +8,10 @@ using Sakura.Framework.Audio;
 using Sakura.Framework.Graphics.Containers;
 using Sakura.Framework.Graphics.Drawables;
 using Sakura.Framework.Graphics.Primitives;
+using Sakura.Framework.Graphics.Rendering;
 using Sakura.Framework.Maths;
 using Sakura.Framework.Platform;
+using Sakura.Framework.Timing;
 using Yuuki.Game.Configurations;
 using Yuuki.Game.Graphics.Colors;
 using Yuuki.Game.Graphics.Text;
@@ -19,7 +21,9 @@ namespace Yuuki.Game.Graphics.UserInterface;
 /// <summary>
 /// What the game plays with, one layer on another: what it measures itself, the audio device's audio offset and the
 /// display's visual offset, and a song's own offset; then where that leaves the judging and the notes. As rows, or as
-/// one line (<see cref="Compact"/>). Follows the devices and the offsets as they change.
+/// one line (<see cref="Compact"/>). As rows, what Sakura measures is shown part by part, with how each is known, and
+/// what it can't tell is shown too: that's what the offsets are there for. Follows the devices and the offsets as they
+/// change.
 /// </summary>
 public partial class OffsetStack : FlowContainer
 {
@@ -49,6 +53,14 @@ public partial class OffsetStack : FlowContainer
     public double? SoundDelay { get; set; }
 
     public double? PictureDelay { get; set; }
+
+    /// <summary>
+    /// The parts of the sound's and the picture's delays, as Sakura splits them. Set, they're taken as given instead
+    /// (tests); otherwise read from Sakura where the delay is, and none where it's given.
+    /// </summary>
+    public IReadOnlyList<AudioLatencyPart>? SoundParts { get; set; }
+
+    public IReadOnlyList<DisplayLatencyPart>? PictureParts { get; set; }
 
     /// <summary>
     /// What it says, a line a row (tests).
@@ -91,13 +103,99 @@ public partial class OffsetStack : FlowContainer
         nextRefresh = Clock.CurrentTime + refresh_interval;
 
         List<(string What, string Value, string For)> rows = layers();
-        string summary = string.Join("\n", rows.ConvertAll(r => $"{r.What} | {r.Value} | {r.For}"));
+        List<(string What, string Value, string For)> parts = measuredParts();
+
+        // The parts come under what they add up to.
+        var lines = new List<(string What, string Value, string For)> { rows[0] };
+        lines.AddRange(parts);
+        lines.AddRange(rows.GetRange(1, rows.Count - 1));
+
+        string summary = string.Join("\n", lines.ConvertAll(r => $"{r.What} | {r.Value} | {r.For}"));
 
         if (summary == Summary)
             return;
 
         Summary = summary;
-        show(rows);
+        show(rows, parts);
+    }
+
+    /// <summary>
+    /// What Sakura's two figures are made of, a row a part, in the order the sound and the picture go through them.
+    /// </summary>
+    private List<(string What, string Value, string For)> measuredParts()
+    {
+        var rows = new List<(string What, string Value, string For)>();
+
+        IReadOnlyList<AudioLatencyPart> sound = SoundParts ?? (SoundDelay == null ? audioManager?.GetOutputLatencyParts() : null) ?? Array.Empty<AudioLatencyPart>();
+        IReadOnlyList<DisplayLatencyPart> picture = PictureParts ?? (PictureDelay == null ? host?.GetDisplayLatencyParts() : null) ?? Array.Empty<DisplayLatencyPart>();
+
+        foreach (var part in sound)
+        {
+            if (part.Milliseconds is double ms && ms < 0.05)
+                continue;
+
+            rows.Add(part.Milliseconds is double figure
+                ? ($"   Sound: {SoundPartName(part.Kind)}", $"{figure:0.#} ms", HowKnown(part.Source))
+                : ($"   Sound: {SoundPartName(part.Kind)}", "not reported", "your audio offset"));
+        }
+
+        foreach (var part in picture)
+        {
+            if (part.Milliseconds is double ms && ms < 0.05)
+                continue;
+
+            rows.Add(part.Milliseconds is double figure
+                ? ($"   Picture: {PicturePartName(part.Kind)}", $"{figure:0.#} ms", HowKnown(part.Source))
+                : ($"   Picture: {PicturePartName(part.Kind)}", "not measurable", "your visual offset"));
+        }
+
+        return rows;
+    }
+
+    /// <summary>
+    /// Where a part of the sound's delay holds it, as a player would say it.
+    /// </summary>
+    public static string SoundPartName(AudioLatencyPartKind kind) => kind switch
+    {
+        AudioLatencyPartKind.Queue => "waiting to be played",
+        AudioLatencyPartKind.AppBuffer => "yuuki's audio buffer",
+        AudioLatencyPartKind.System => "your device and the system",
+        AudioLatencyPartKind.AfterDevice => "after your device",
+        _ => kind.ToString()
+    };
+
+    /// <summary>
+    /// Where a part of the picture's delay goes, as a player would say it.
+    /// </summary>
+    public static string PicturePartName(DisplayLatencyPartKind kind) => kind switch
+    {
+        DisplayLatencyPartKind.Update => "the game's update",
+        DisplayLatencyPartKind.WaitingForDraw => "waiting to be drawn",
+        DisplayLatencyPartKind.Draw => "drawing",
+        DisplayLatencyPartKind.Gpu => "the graphics card",
+        DisplayLatencyPartKind.Presenting => "reaching the screen",
+        DisplayLatencyPartKind.Panel => "your screen itself",
+        _ => kind.ToString()
+    };
+
+    /// <summary>
+    /// How Sakura knows a part, as a player would say it.
+    /// </summary>
+    public static string HowKnown(LatencySource source)
+    {
+        if (source.HasFlag(LatencySource.Measured))
+            return source.HasFlag(LatencySource.ReportedBySystem) ? "measured + reported" : "measured";
+
+        if (source.HasFlag(LatencySource.Counted))
+            return "counted";
+
+        if (source.HasFlag(LatencySource.FromBufferSizes))
+            return "from buffer sizes";
+
+        if (source.HasFlag(LatencySource.ReportedAtStart))
+            return "reported at start";
+
+        return source.HasFlag(LatencySource.ReportedBySystem) ? "reported by the system" : "not reported";
     }
 
     private List<(string What, string Value, string For)> layers()
@@ -133,7 +231,7 @@ public partial class OffsetStack : FlowContainer
         };
     }
 
-    private void show(IReadOnlyList<(string What, string Value, string For)> rows)
+    private void show(IReadOnlyList<(string What, string Value, string For)> rows, IReadOnlyList<(string What, string Value, string For)> parts)
     {
         Clear();
 
@@ -153,17 +251,17 @@ public partial class OffsetStack : FlowContainer
                 AutoSizeAxes = Axes.Y
             };
 
-            var parts = new List<string>();
+            var offsetsUsed = new List<string>();
 
             for (int i = 1; i < rows.Count - 1; i++)
             {
                 if (i == 3 && BeatmapId == null)
                     continue;
 
-                parts.Add($"{rows[i].Value} ({rows[i].What[2..]})");
+                offsetsUsed.Add($"{rows[i].Value} ({rows[i].What[2..]})");
             }
 
-            line.Text = "You play with " + string.Join(" · ", parts);
+            line.Text = "You play with " + string.Join(" · ", offsetsUsed);
             Add(line);
             return;
         }
@@ -172,36 +270,51 @@ public partial class OffsetStack : FlowContainer
         {
             bool total = i == rows.Count - 1;
 
-            var row = new FlowContainer
+            add(rows[i], total, phone, false);
+
+            // What Sakura's figures are made of, under them, quieter.
+            if (i == 0)
+            {
+                foreach (var part in parts)
+                    add(part, false, phone, true);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Adds a row: what, how much, for what. The total stands out; a part of what Sakura measures is quieter.
+    /// </summary>
+    private void add((string What, string Value, string For) line, bool total, bool phone, bool part)
+    {
+        var row = new FlowContainer
+        {
+            RelativeSizeAxes = Axes.X,
+            AutoSizeAxes = Axes.Y,
+            Direction = FlowDirection.Horizontal,
+            Margin = new MarginPadding { Top = total ? 6 : 0 }
+        };
+
+        string[] cells = { line.What, line.Value, line.For };
+
+        for (int c = 0; c < cells.Length; c++)
+        {
+            row.Add(new Container
             {
                 RelativeSizeAxes = Axes.X,
+                Width = columns[c],
                 AutoSizeAxes = Axes.Y,
-                Direction = FlowDirection.Horizontal,
-                Margin = new MarginPadding { Top = total ? 6 : 0 }
-            };
-
-            string[] cells = { rows[i].What, rows[i].Value, rows[i].For };
-
-            for (int c = 0; c < cells.Length; c++)
-            {
-                row.Add(new Container
+                Child = new SpriteText
                 {
-                    RelativeSizeAxes = Axes.X,
-                    Width = columns[c],
-                    AutoSizeAxes = Axes.Y,
-                    Child = new SpriteText
-                    {
-                        Text = cells[c],
-                        Font = YuukiFontUsage.GetFontUsage(Typeface.Quicksand, phone ? 18 : 15,
-                            c == 0 || total ? FontWeight.Bold : FontWeight.Regular),
-                        Color = total && c == 1 ? palette.Control : palette.Text,
-                        Alpha = c == 2 ? 0.7f : 1
-                    }
-                });
-            }
-
-            Add(row);
+                    Text = cells[c],
+                    Font = YuukiFontUsage.GetFontUsage(Typeface.Quicksand, (phone ? 18 : 15) - (part ? 2 : 0),
+                        (c == 0 && !part) || total ? FontWeight.Bold : FontWeight.Regular),
+                    Color = total && c == 1 ? palette.Control : palette.Text,
+                    Alpha = c == 2 || part ? 0.7f : 1
+                }
+            });
         }
+
+        Add(row);
     }
 
     /// <summary>

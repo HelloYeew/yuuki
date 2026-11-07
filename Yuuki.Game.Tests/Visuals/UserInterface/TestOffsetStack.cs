@@ -3,9 +3,12 @@
 
 using NUnit.Framework;
 using Sakura.Framework.Allocation;
+using Sakura.Framework.Audio;
 using Sakura.Framework.Graphics.Containers;
 using Sakura.Framework.Graphics.Drawables;
 using Sakura.Framework.Graphics.Primitives;
+using Sakura.Framework.Graphics.Rendering;
+using Sakura.Framework.Timing;
 using Yuuki.Game.Configurations;
 using Yuuki.Game.Database;
 using Yuuki.Game.Graphics.Colors;
@@ -83,6 +86,36 @@ public partial class TestOffsetStack : YuukiTestScene
 
         AddStep("nudged", () => offsets.SetSongOffset(5, 20));
         AddUntilStep("follows it", () => stack.Summary.Contains("song offset +20 ms") && stack.Summary.Contains("taps judged 10 ms later"));
+    }
+
+    [Test]
+    public void TestWhatSakuraMeasuresPartByPart()
+    {
+        show(null);
+        AddStep("with what the figures are made of", () =>
+        {
+            stack.SoundParts = new[]
+            {
+                new AudioLatencyPart(AudioLatencyPartKind.AppBuffer, 2.7, LatencySource.FromBufferSizes),
+                new AudioLatencyPart(AudioLatencyPartKind.System, 17.3, LatencySource.Measured),
+                AudioLatencyPart.NotReported(AudioLatencyPartKind.AfterDevice)
+            };
+
+            stack.PictureParts = new[]
+            {
+                new DisplayLatencyPart(DisplayLatencyPartKind.Draw, 0.3, LatencySource.Measured),
+                new DisplayLatencyPart(DisplayLatencyPartKind.Presenting, 9.7, LatencySource.Measured),
+                DisplayLatencyPart.NotReported(DisplayLatencyPartKind.Panel)
+            };
+        });
+
+        AddUntilStep("the sound's", () => stack.Summary.Contains("   Sound: your device and the system | 17.3 ms | measured"));
+        AddAssert("how it's known", () => stack.Summary.Contains("   Sound: yuuki's audio buffer | 2.7 ms | from buffer sizes"));
+        AddAssert("what nothing reports", () => stack.Summary.Contains("   Sound: after your device | not reported | your audio offset"));
+        AddAssert("the picture's", () => stack.Summary.Contains("   Picture: reaching the screen | 9.7 ms | measured"));
+        AddAssert("what nothing can measure", () => stack.Summary.Contains("   Picture: your screen itself | not measurable | your visual offset"));
+        AddAssert("under what they add up to",
+            () => stack.Summary.IndexOf("Measured by Sakura", System.StringComparison.Ordinal) < stack.Summary.IndexOf("   Sound:", System.StringComparison.Ordinal));
     }
 
     [Test]
