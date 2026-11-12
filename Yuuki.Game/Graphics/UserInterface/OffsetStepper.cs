@@ -20,7 +20,7 @@ namespace Yuuki.Game.Graphics.UserInterface;
 public partial class OffsetStepper : FlowContainer
 {
     /// <summary>How far one press moves it, in ms.</summary>
-    public const int STEP = 5;
+    public const int STEP = 1;
 
     /// <summary>
     /// The offset shown, in ms: set it to show another, and watch it for the player's steps.
