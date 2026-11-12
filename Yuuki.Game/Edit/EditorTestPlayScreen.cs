@@ -14,6 +14,7 @@ using Sakura.Framework.Graphics.Screens;
 using Sakura.Framework.Graphics.Transforms;
 using Sakura.Framework.Input;
 using Sakura.Framework.Maths;
+using Sakura.Framework.Platform;
 using Yuuki.Game.Beatmaps;
 using Yuuki.Game.Configurations;
 using Yuuki.Game.Gameplay;
@@ -43,6 +44,9 @@ public partial class EditorTestPlayScreen : YuukiScreen
 
     [Resolved(canBeNull: true)]
     private GameLayout? gameLayout { get; set; }
+
+    [Resolved(canBeNull: true)]
+    private AppHost? host { get; set; }
 
     private GameplayContainer gameplay = null!;
     private double endTime;
@@ -132,6 +136,9 @@ public partial class EditorTestPlayScreen : YuukiScreen
     {
         base.OnEntering(last);
         this.FadeInFromZero(300, Easing.OutQuint);
+
+        // A test play is play, for the frame threads' priority.
+        host?.SetGameState(GameState.Gameplay);
     }
 
     public override void OnExiting(Screen? next)
@@ -140,6 +147,9 @@ public partial class EditorTestPlayScreen : YuukiScreen
 
         gameplay.Stop();
         this.FadeOut(200, Easing.OutQuint);
+
+        // Back to the editor.
+        host?.SetGameState(GameState.None);
     }
 
     public override void Update()

@@ -17,8 +17,8 @@ Another rhythm game(?) create using [Sakura Framework](https://github.com/HelloY
 
 ## Requirements
 
-- .NET 10.0 SDK for the desktop game and the tests
-- .NET 11.0 SDK (RC 2 for now) for phones and tablets, with its workloads: `dotnet workload install android` and `dotnet workload install ios`
+- .NET 11.0 SDK for the desktop game and the tests
+- Mobile workloads: `dotnet workload install android` and `dotnet workload install ios`
 - Android: the Android SDK and JDK 21 (`brew install openjdk@21` on a Mac)
 - iOS and iPadOS: a Mac with Xcode 27, and an Apple Development certificate with a provisioning profile. A free Apple account works, but its profiles only last 7 days.
 - We recommend to use IDE like [Visual Studio](https://visualstudio.microsoft.com/vs/), [Rider](https://www.jetbrains.com/rider/) or [VS Code](https://code.visualstudio.com/) for development
