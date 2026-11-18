@@ -34,7 +34,13 @@ public class Program
                 return;
             }
 
-            using (AppHost host = new DesktopAppHost("yuuki", new HostOptions { FriendlyAppName = "yuuki." }))
+            var hostOptions = new HostOptions
+            {
+                FriendlyAppName = "yuuki.",
+                UseLateLatch = true
+            };
+
+            using (AppHost host = new DesktopAppHost("yuuki", hostOptions))
             using (YuukiGame game = new YuukiGame())
             {
                 if (files.Length > 0)
