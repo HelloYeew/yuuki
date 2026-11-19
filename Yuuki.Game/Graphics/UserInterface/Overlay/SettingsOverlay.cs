@@ -259,6 +259,9 @@ public partial class SettingsOverlay : FocusedOverlayContainer
             settingRow("Frame limiter", "How often frames are drawn. VSync avoids tearing; unlimited is the most responsive.",
                 dropdown(frameworkConfigManager.Get<FrameSync>(FrameworkSetting.FrameLimiter), Enum.GetValues<FrameSync>()),
                 "fps", "framerate", "refresh rate"),
+            phone ? null : settingRow("Low latency mode", "Starts each frame just in time for the graphics card, so what you press shows sooner. Uses NVIDIA Reflex or AMD Anti-Lag 2 where your card has them, and works on any card without them. Boost is for NVIDIA cards with Reflex: it also keeps the card at full speed between frames, which can take a little more off the delay but uses more power. On any other card Boost is the same as On.",
+                dropdown(frameworkConfigManager.Get<LowLatencyMode>(FrameworkSetting.LowLatencyMode), Enum.GetValues<LowLatencyMode>(), formatLowLatencyMode),
+                "reflex", "anti-lag", "nvidia", "amd", "boost", "input lag", "latency"),
             settingRow("Execution mode", "Whether drawing and updating run on their own threads.",
                 dropdown(frameworkConfigManager.Get<ExecutionMode>(FrameworkSetting.ExecutionMode), Enum.GetValues<ExecutionMode>()),
                 "threading", "multithreaded", "performance"),
@@ -887,6 +890,11 @@ public partial class SettingsOverlay : FocusedOverlayContainer
     /// </summary>
     // A phone's window always fills the screen: its modes are whether the system bars show.
     private static string formatPhoneWindowMode(WindowMode mode) => mode == WindowMode.Windowed ? "System bars shown" : "Full screen";
+
+    /// <summary>
+    /// Says on Boost itself that it does more than On only with NVIDIA Reflex.
+    /// </summary>
+    private static string formatLowLatencyMode(LowLatencyMode mode) => mode == LowLatencyMode.Boost ? "Boost (NVIDIA)" : mode.ToString();
 
     private Drawable calibrateButton() => new PillButton(palette.Control, Color.White)
     {
